@@ -1,3 +1,11 @@
+"""
+测试项与测试执行 API 路由模块
+
+提供测试项的 CRUD 操作、测试批次的启停管理、
+以及测试结果的提交和查询接口。
+所有接口返回统一的 JSON 格式：{code: 0, data: ..., message: ...}
+"""
+
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
@@ -5,11 +13,20 @@ from app import db
 from app.models import TestItem, TestResult, TestRun
 from app.services.test_executor import TestExecutor
 
+# 测试相关蓝图，URL 前缀为 /api/tests
 test_bp = Blueprint('tests', __name__)
 
 
+# ==================== 测试项管理 ====================
+
 @test_bp.route('/items', methods=['GET'])
 def list_test_items():
+    """
+    获取测试项列表。
+    查询参数:
+        category: 按分类筛选（可选）
+        active_only: 是否只返回启用项（默认 true）
+    """
     category = request.args.get('category')
     active_only = request.args.get('active_only', 'true').lower() == 'true'
 
@@ -29,6 +46,7 @@ def list_test_items():
 
 @test_bp.route('/items', methods=['POST'])
 def create_test_item():
+    """创建新的测试项"""
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({'code': 1, 'message': 'name is required'}), 400
@@ -50,6 +68,7 @@ def create_test_item():
 
 @test_bp.route('/items/<int:item_id>', methods=['PUT'])
 def update_test_item(item_id):
+    """更新测试项的属性（包括启用/禁用状态）"""
     item = TestItem.query.get_or_404(item_id)
     data = request.get_json()
     for field in ['name', 'description', 'unit', 'category']:
@@ -67,14 +86,24 @@ def update_test_item(item_id):
 
 @test_bp.route('/items/<int:item_id>', methods=['DELETE'])
 def delete_test_item(item_id):
+    """删除指定的测试项"""
     item = TestItem.query.get_or_404(item_id)
     db.session.delete(item)
     db.session.commit()
     return jsonify({'code': 0, 'message': 'deleted'})
 
 
+# ==================== 测试批次管理 ====================
+
 @test_bp.route('/runs', methods=['GET'])
 def list_test_runs():
+    """
+    获取测试批次列表，支持分页和状态筛选。
+    查询参数:
+        page: 页码（默认1）
+        per_page: 每页条数（默认20）
+        status: 按状态筛选（pending/running/completed/failed）
+    """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status')
@@ -95,6 +124,14 @@ def list_test_runs():
 
 @test_bp.route('/runs', methods=['POST'])
 def start_test_run():
+    """
+    启动一个新的测试批次。
+    请求体:
+        operator: 操作员（必填）
+        serial_number: 序列号（可选）
+        product_type: 产品型号（可选）
+        config_id: 配置方案 ID（可选）
+    """
     data = request.get_json() or {}
     operator = data.get('operator', 'default')
     serial_number = data.get('serial_number', '')
@@ -117,6 +154,14 @@ def start_test_run():
 
 @test_bp.route('/runs/<int:run_id>/results', methods=['POST'])
 def submit_result(run_id):
+    """
+    提交单个测试项的测试结果。
+    请求体:
+        test_item_id: 测试项 ID
+        actual_value: 实测值
+        duration_ms: 耗时（毫秒，可选）
+        remark: 备注（可选）
+    """
     run = TestRun.query.get_or_404(run_id)
     if run.status != 'running':
         return jsonify({'code': 1, 'message': 'Test run is not active'}), 400
@@ -132,6 +177,7 @@ def submit_result(run_id):
     if not item:
         return jsonify({'code': 1, 'message': 'Test item not found'}), 404
 
+    # 判定合格性
     passed = item.min_value <= float(actual_value) <= item.max_value
     deviation = float(actual_value) - item.expected_value
 
@@ -149,6 +195,7 @@ def submit_result(run_id):
     )
     db.session.add(result)
 
+    # 更新批次统计
     run.total_items += 1
     if passed:
         run.passed_items += 1
@@ -165,6 +212,10 @@ def submit_result(run_id):
 
 @test_bp.route('/runs/<run_id>', methods=['PUT'])
 def update_test_run(run_id):
+    """
+    更新测试批次状态（completed / failed）。
+    支持按批次号或自增 ID 查询。
+    """
     run = TestRun.query.filter(
         (TestRun.id == run_id) | (TestRun.batch_id == run_id)
     ).first_or_404()
@@ -186,6 +237,7 @@ def update_test_run(run_id):
 
 @test_bp.route('/runs/<run_id>/results', methods=['GET'])
 def get_run_results(run_id):
+    """获取指定批次的所有测试结果"""
     run = TestRun.query.filter(
         (TestRun.id == run_id) | (TestRun.batch_id == run_id)
     ).first_or_404()
@@ -200,6 +252,7 @@ def get_run_results(run_id):
 
 @test_bp.route('/categories', methods=['GET'])
 def list_categories():
+    """获取所有测试项分类（去重）"""
     categories = db.session.query(TestItem.category).distinct().all()
     return jsonify({
         'code': 0,

@@ -1,3 +1,13 @@
+"""
+数据模型模块
+
+定义测试平台的四个核心数据表：
+- TestItem:   测试项定义（名称、标准值、上下限、分类）
+- TestResult: 测试结果记录（实测值、合格判定、偏差）
+- TestConfig: 配置方案快照（版本管理、JSON 配置数据）
+- TestRun:    测试批次（状态跟踪、通过/失败统计）
+"""
+
 from .test_item import TestItem
 from .test_result import TestResult
 from .test_config import TestConfig

@@ -1,3 +1,10 @@
+"""
+日志和测试结果查询 API 路由模块
+
+提供测试日志的查询、导出、上传、下载功能，
+以及测试结果的按条件搜索和统计接口。
+"""
+
 import os
 from flask import Blueprint, request, jsonify, current_app, send_file
 
@@ -5,16 +12,25 @@ from app import db
 from app.models import TestResult, TestRun
 from app.services.log_service import LogService
 
+# 日志管理蓝图，URL 前缀为 /api/logs
 log_bp = Blueprint('logs', __name__)
 
 
-def get_log_service():
+def get_log_service() -> LogService:
+    """从应用配置中获取日志服务实例"""
     log_folder = current_app.config.get('LOG_FOLDER', 'logs')
     return LogService(log_folder)
 
 
 @log_bp.route('', methods=['GET'])
 def list_logs():
+    """
+    获取操作日志列表。
+    查询参数:
+        batch_id: 按批次号筛选（可选）
+        page: 页码（默认1）
+        per_page: 每页条数（默认50）
+    """
     batch_id = request.args.get('batch_id')
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
@@ -40,6 +56,18 @@ def list_logs():
 
 @log_bp.route('/results', methods=['GET'])
 def query_test_results():
+    """
+    查询测试结果，支持多条件组合筛选。
+    查询参数:
+        batch_id: 批次号
+        operator: 操作员
+        serial_number: 序列号
+        passed: PASS/FAIL（true/false）
+        start_date: 开始时间（ISO格式）
+        end_date: 结束时间（ISO格式）
+        page: 页码
+        per_page: 每页条数
+    """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
     batch_id = request.args.get('batch_id')
@@ -83,6 +111,12 @@ def query_test_results():
 
 @log_bp.route('/export', methods=['GET'])
 def export_logs():
+    """
+    导出测试结果为 CSV 文件。
+    查询参数:
+        batch_id: 批次号（可选）
+        format: 导出格式（默认 csv）
+    """
     from datetime import datetime
     import csv
     import io
@@ -139,6 +173,10 @@ def export_logs():
 
 @log_bp.route('/upload', methods=['POST'])
 def upload_log():
+    """
+    上传日志文件到服务器存储目录。
+    请求体: multipart/form-data, 字段名: file
+    """
     if 'file' not in request.files:
         return jsonify({'code': 1, 'message': 'No file provided'}), 400
 
@@ -159,6 +197,7 @@ def upload_log():
 
 @log_bp.route('/download/<batch_id>', methods=['GET'])
 def download_log(batch_id):
+    """下载指定批次的日志文件（JSON 格式）"""
     from datetime import datetime
     import json
 
@@ -177,6 +216,7 @@ def download_log(batch_id):
 
 @log_bp.route('/statistics', methods=['GET'])
 def log_statistics():
+    """获取日志存储统计信息（文件数、大小等）"""
     service = get_log_service()
     stats = service.get_log_statistics()
     return jsonify({'code': 0, 'data': stats})

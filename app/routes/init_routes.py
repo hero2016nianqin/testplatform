@@ -1,3 +1,10 @@
+"""
+系统初始化 API 路由模块
+
+提供系统状态查询、示例数据初始化、系统重置和默认配置导入功能。
+用于首次部署时的快速初始化，或需要清空数据重新开始时的操作。
+"""
+
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
@@ -5,11 +12,16 @@ from app import db
 from app.models import TestItem, TestConfig, TestResult, TestRun
 from config.config_manager import ConfigManager
 
+# 初始化管理蓝图，URL 前缀为 /api/init
 init_bp = Blueprint('init', __name__)
 
 
 @init_bp.route('/status', methods=['GET'])
 def init_status():
+    """
+    获取系统初始化状态。
+    返回各数据表的记录数，以及是否已初始化的标志。
+    """
     item_count = TestItem.query.count()
     config_count = TestConfig.query.count()
     run_count = TestRun.query.count()
@@ -29,6 +41,11 @@ def init_status():
 
 @init_bp.route('/sample', methods=['POST'])
 def init_sample_data():
+    """
+    创建一组示例测试项，方便快速开始使用。
+    如果系统已初始化（有测试项存在），则返回错误提示，
+    建议先重置再初始化。
+    """
     if TestItem.query.count() > 0:
         return jsonify({
             'code': 1,
@@ -36,6 +53,7 @@ def init_sample_data():
                        'Use reset if you want to re-initialize.'
         }), 400
 
+    # 预定义的示例测试项，覆盖电气、信号、热学、安全、声学等类别
     sample_items = [
         TestItem(name='Voltage Output', description='Output voltage test',
                  expected_value=5.0, min_value=4.8, max_value=5.2,
@@ -74,6 +92,10 @@ def init_sample_data():
 
 @init_bp.route('/reset', methods=['POST'])
 def reset_system():
+    """
+    重置系统，清空所有数据。
+    需要传入 ?confirm=true 确认操作，防止误触。
+    """
     confirm = request.args.get('confirm', 'false').lower() == 'true'
     if not confirm:
         return jsonify({
@@ -81,6 +103,7 @@ def reset_system():
             'message': 'Please confirm with ?confirm=true'
         }), 400
 
+    # 按依赖顺序删除：先删结果，再删批次，最后删基础数据
     TestResult.query.delete()
     TestRun.query.delete()
     TestItem.query.delete()
@@ -95,6 +118,11 @@ def reset_system():
 
 @init_bp.route('/import-defaults', methods=['POST'])
 def import_default_config():
+    """
+    通过上传配置文件来初始化系统。
+    文件格式支持: CSV, XLSX, JSON, XML
+    导入前会做数据校验，确保必填字段和数值正确。
+    """
     if 'file' not in request.files:
         return jsonify({'code': 1, 'message': 'No file'}), 400
 
