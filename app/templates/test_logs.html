@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}日志查询 - 测试平台{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <ul class="nav nav-tabs mb-3" id="logTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#query-tab">
+                    <i class="bi bi-search"></i> 日志查询
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#upload-tab">
+                    <i class="bi bi-upload"></i> 日志上传
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#stats-tab">
+                    <i class="bi bi-pie-chart"></i> 统计信息
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="query-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="query-form" class="row g-3 mb-3">
+                            <div class="col-md-3">
+                                <input type="text" class="form-control" id="q-batch" placeholder="批次号">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="q-operator" placeholder="操作员">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="q-serial" placeholder="序列号">
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select" id="q-passed">
+                                    <option value="">全部结果</option>
+                                    <option value="true">PASS</option>
+                                    <option value="false">FAIL</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-search"></i> 查询
+                                </button>
+                                <button type="button" class="btn btn-success" id="export-btn">
+                                    <i class="bi bi-download"></i> 导出CSV
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover" id="results-table">
+                                <thead>
+                                    <tr>
+                                        <th>批次号</th>
+                                        <th>测试项</th>
+                                        <th>操作员</th>
+                                        <th>序列号</th>
+                                        <th>标准值</th>
+                                        <th>实测值</th>
+                                        <th>偏差</th>
+                                        <th>结果</th>
+                                        <th>测试时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-body">
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted">请输入查询条件</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <nav>
+                            <ul class="pagination pagination-sm justify-content-center" id="pagination"></ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="upload-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="upload-form">
+                            <div class="mb-3">
+                                <label class="form-label">选择日志文件 (JSON)</label>
+                                <input type="file" class="form-control" id="log-file" accept=".json">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-upload"></i> 上传
+                            </button>
+                        </form>
+                        <div id="upload-result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="stats-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <div id="stats-content" class="text-center text-muted">
+                            加载中...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('query-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            currentPage = 1;
+            queryResults();
+        });
+
+        document.getElementById('export-btn').addEventListener('click', function() {
+            const params = getQueryParams();
+            window.location.href = '/api/logs/export?' + params + '&format=csv';
+        });
+
+        document.getElementById('upload-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            uploadLog();
+        });
+
+        loadStats();
+    });
+
+    function getQueryParams() {
+        const params = new URLSearchParams();
+        const batch = document.getElementById('q-batch').value.trim();
+        const operator = document.getElementById('q-operator').value.trim();
+        const serial = document.getElementById('q-serial').value.trim();
+        const passed = document.getElementById('q-passed').value;
+        if (batch) params.set('batch_id', batch);
+        if (operator) params.set('operator', operator);
+        if (serial) params.set('serial_number', serial);
+        if (passed) params.set('passed', passed);
+        return params.toString();
+    }
+
+    function queryResults(page) {
+        page = page || currentPage;
+        let params = getQueryParams();
+        params += `&page=${page}&per_page=20`;
+
+        fetch('/api/logs/results?' + params)
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    renderResults(res.data);
+                    renderPagination(res.total, res.page, res.per_page);
+                }
+            });
+    }
+
+    function renderResults(data) {
+        const tbody = document.getElementById('results-body');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">无结果</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(r => `
+            <tr class="${r.passed ? '' : 'table-danger'}">
+                <td><small>${r.test_run_id}</small></td>
+                <td>${r.item_name || '-'}</td>
+                <td>${r.operator}</td>
+                <td>${r.serial_number || '-'}</td>
+                <td>${r.expected_value || '-'}</td>
+                <td>${r.actual_value}</td>
+                <td>${r.deviation ? r.deviation.toFixed(3) : '0'}</td>
+                <td><span class="badge bg-${r.passed ? 'success' : 'danger'}">${r.passed ? 'PASS' : 'FAIL'}</span></td>
+                <td><small class="text-muted">${r.tested_at ? new Date(r.tested_at).toLocaleString() : '-'}</small></td>
+            </tr>
+        `).join('');
+    }
+
+    function renderPagination(total, page, perPage) {
+        const ul = document.getElementById('pagination');
+        const totalPages = Math.ceil(total / perPage);
+        if (totalPages <= 1) { ul.innerHTML = ''; return; }
+
+        let html = '';
+        html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">上一页</a></li>`;
+        for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+            html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+        }
+        html += `<li class="page-item ${page >= totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">下一页</a></li>`;
+        ul.innerHTML = html;
+
+        ul.querySelectorAll('a.page-link').forEach(a => {
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                currentPage = parseInt(this.dataset.page);
+                queryResults(currentPage);
+            });
+        });
+    }
+
+    function uploadLog() {
+        const fileInput = document.getElementById('log-file');
+        if (!fileInput.files.length) {
+            alert('请选择文件');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        fetch('/api/logs/upload', {method: 'POST', body: formData})
+            .then(r => r.json())
+            .then(res => {
+                const div = document.getElementById('upload-result');
+                if (res.code === 0) {
+                    div.innerHTML = `<div class="alert alert-success">上传成功: ${res.data.filename}</div>`;
+                } else {
+                    div.innerHTML = `<div class="alert alert-danger">上传失败: ${res.message}</div>`;
+                }
+            });
+    }
+
+    function loadStats() {
+        fetch('/api/logs/statistics')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    const d = res.data;
+                    document.getElementById('stats-content').innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <h3>${d.total_files}</h3>
+                                <small class="text-muted">日志文件数</small>
+                            </div>
+                            <div class="col-4">
+                                <h3>${d.total_size_mb} MB</h3>
+                                <small class="text-muted">总大小</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted">存储路径</small>
+                                <p class="small">${d.log_folder}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+    }
+</script>
+{% endblock %}

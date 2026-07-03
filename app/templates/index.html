@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}首页 - 测试平台{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-gear-wide-connected" style="font-size: 4rem; color: #0d6efd;"></i>
+                <h1 class="mt-3">生产测试平台</h1>
+                <p class="text-muted">面向生产操作人员的集成测试管理系统</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-3">
+        <a href="/test" class="text-decoration-none">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-play-circle" style="font-size: 2.5rem; color: #198754;"></i>
+                    <h5 class="mt-2">测试执行</h5>
+                    <p class="text-muted small">执行测试项目，查看实时结果</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/logs" class="text-decoration-none">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-journal-text" style="font-size: 2.5rem; color: #0d6efd;"></i>
+                    <h5 class="mt-2">日志查询</h5>
+                    <p class="text-muted small">查询、导出和上传测试日志</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/settings" class="text-decoration-none">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-gear" style="font-size: 2.5rem; color: #ffc107;"></i>
+                    <h5 class="mt-2">参数设置</h5>
+                    <p class="text-muted small">导入/导出测试配置参数</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/init" class="text-decoration-none">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-arrow-repeat" style="font-size: 2.5rem; color: #dc3545;"></i>
+                    <h5 class="mt-2">初始化</h5>
+                    <p class="text-muted small">系统初始化、重置及数据导入</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> 系统状态
+            </div>
+            <div class="card-body">
+                <div id="system-status">
+                    <p class="text-muted">正在获取系统状态...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('/api/init/status')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    const d = res.data;
+                    document.getElementById('system-status').innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <h3>${d.test_items}</h3>
+                                <small class="text-muted">测试项</small>
+                            </div>
+                            <div class="col-3">
+                                <h3>${d.configs}</h3>
+                                <small class="text-muted">配置方案</small>
+                            </div>
+                            <div class="col-3">
+                                <h3>${d.test_runs}</h3>
+                                <small class="text-muted">测试批次</small>
+                            </div>
+                            <div class="col-3">
+                                <h3>${d.test_results}</h3>
+                                <small class="text-muted">测试结果</small>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+    });
+</script>
+{% endblock %}

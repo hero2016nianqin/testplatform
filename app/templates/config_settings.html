@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% block title %}参数设置 - 测试平台{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#items-tab">
+                    <i class="bi bi-list"></i> 测试项管理
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#import-tab">
+                    <i class="bi bi-upload"></i> 导入配置
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#export-tab">
+                    <i class="bi bi-download"></i> 导出配置
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configs-tab">
+                    <i class="bi bi-file-earmark"></i> 配置方案
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="items-tab">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-list-check"></i> 测试项列表</span>
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#itemModal">
+                            <i class="bi bi-plus-lg"></i> 新增
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>描述</th>
+                                        <th>标准值</th>
+                                        <th>下限</th>
+                                        <th>上限</th>
+                                        <th>单位</th>
+                                        <th>分类</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="items-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="import-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="import-form">
+                            <div class="mb-3">
+                                <label class="form-label">选择配置文件 (CSV, XLSX, JSON, XML)</label>
+                                <input type="file" class="form-control" id="import-file"
+                                       accept=".csv,.xlsx,.json,.xml">
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="preview-only">
+                                <label class="form-check-label">仅预览（不保存）</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-upload"></i> 导入
+                            </button>
+                        </form>
+                        <div id="import-result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="export-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <form id="export-form" class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">导出格式</label>
+                                <select class="form-select" id="export-format">
+                                    <option value="json">JSON</option>
+                                    <option value="csv">CSV</option>
+                                    <option value="xlsx">Excel (XLSX)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">分类筛选（可选）</label>
+                                <select class="form-select" id="export-category">
+                                    <option value="">全部</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="bi bi-download"></i> 导出
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="configs-tab">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-file-earmark"></i> 配置方案
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>版本</th>
+                                        <th>描述</th>
+                                        <th>状态</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="configs-body"></tbody>
+                            </table>
+                        </div>
+                        <form id="create-config-form" class="row g-3 mt-3">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="config-name" placeholder="配置名称" required>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="text" class="form-control" id="config-version" placeholder="版本号" value="1.0">
+                            </div>
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="config-desc" placeholder="描述">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-save"></i> 保存当前配置
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑/新增 Modal -->
+<div class="modal fade" id="itemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="itemModalTitle">新增测试项</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-item-id">
+                <div class="mb-3">
+                    <label class="form-label">名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="item-name">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">描述</label>
+                    <textarea class="form-control" id="item-desc" rows="2"></textarea>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-4">
+                        <label class="form-label">标准值 <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="item-expected" step="any">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">下限 <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="item-min" step="any">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">上限 <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="item-max" step="any">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-5">
+                        <label class="form-label">单位</label>
+                        <input type="text" class="form-control" id="item-unit">
+                    </div>
+                    <div class="col-5">
+                        <label class="form-label">分类</label>
+                        <input type="text" class="form-control" id="item-category" value="general">
+                    </div>
+                    <div class="col-2 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="item-active" checked>
+                            <label class="form-check-label" for="item-active">启用</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="save-item-btn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadItems();
+        loadConfigs();
+        loadCategories();
+
+        document.getElementById('import-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            importConfig();
+        });
+        document.getElementById('export-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            exportConfig();
+        });
+        document.getElementById('save-item-btn').addEventListener('click', saveItem);
+        document.getElementById('create-config-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            createConfig();
+        });
+    });
+
+    function loadItems() {
+        fetch('/api/tests/items?active_only=false')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) renderItems(res.data);
+            });
+    }
+
+    function renderItems(items) {
+        const tbody = document.getElementById('items-table-body');
+        tbody.innerHTML = items.map(item => `
+            <tr class="${item.is_active ? '' : 'table-secondary'}">
+                <td>${item.id}</td>
+                <td>${item.name}</td>
+                <td>${item.description || '-'}</td>
+                <td>${item.expected_value}</td>
+                <td>${item.min_value}</td>
+                <td>${item.max_value}</td>
+                <td>${item.unit}</td>
+                <td><span class="badge bg-info">${item.category}</span></td>
+                <td>
+                    <div class="form-check form-switch d-flex justify-content-center m-0">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               ${item.is_active ? 'checked' : ''}
+                               onchange="toggleActive(${item.id}, this.checked)">
+                    </div>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editItem(${item.id})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteItem(${item.id})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function toggleActive(id, active) {
+        fetch(`/api/tests/items/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_active: active}),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.code !== 0) {
+                alert(res.message);
+                loadItems();
+            }
+        });
+    }
+
+    function editItem(id) {
+        fetch(`/api/tests/items?active_only=false`)
+            .then(r => r.json())
+            .then(res => {
+                const item = res.data.find(i => i.id === id);
+                if (!item) return;
+                document.getElementById('edit-item-id').value = item.id;
+                document.getElementById('item-name').value = item.name;
+                document.getElementById('item-desc').value = item.description || '';
+                document.getElementById('item-expected').value = item.expected_value;
+                document.getElementById('item-min').value = item.min_value;
+                document.getElementById('item-max').value = item.max_value;
+                document.getElementById('item-unit').value = item.unit;
+                document.getElementById('item-category').value = item.category;
+                document.getElementById('item-active').checked = item.is_active;
+                document.getElementById('itemModalTitle').textContent = '编辑测试项';
+                new bootstrap.Modal(document.getElementById('itemModal')).show();
+            });
+    }
+
+    function deleteItem(id) {
+        if (!confirm('确定删除此测试项？')) return;
+        fetch(`/api/tests/items/${id}`, {method: 'DELETE'})
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) loadItems();
+                else alert(res.message);
+            });
+    }
+
+    function saveItem() {
+        const id = document.getElementById('edit-item-id').value;
+        const data = {
+            name: document.getElementById('item-name').value.trim(),
+            description: document.getElementById('item-desc').value.trim(),
+            expected_value: parseFloat(document.getElementById('item-expected').value),
+            min_value: parseFloat(document.getElementById('item-min').value),
+            max_value: parseFloat(document.getElementById('item-max').value),
+            unit: document.getElementById('item-unit').value.trim(),
+            category: document.getElementById('item-category').value.trim() || 'general',
+            is_active: document.getElementById('item-active').checked,
+        };
+
+        if (!data.name || isNaN(data.expected_value)) {
+            alert('请填写名称和标准值');
+            return;
+        }
+
+        const url = id ? `/api/tests/items/${id}` : '/api/tests/items';
+        const method = id ? 'PUT' : 'POST';
+
+        fetch(url, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)})
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide();
+                    loadItems();
+                } else {
+                    alert(res.message);
+                }
+            });
+    }
+
+    function loadConfigs() {
+        fetch('/api/configs')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) renderConfigs(res.data);
+            });
+    }
+
+    function renderConfigs(configs) {
+        const tbody = document.getElementById('configs-body');
+        tbody.innerHTML = configs.map(c => `
+            <tr>
+                <td>${c.id}</td>
+                <td>${c.name}</td>
+                <td>v${c.version}</td>
+                <td>${c.description || '-'}</td>
+                <td>
+                    <span class="badge bg-${c.is_active ? 'success' : 'secondary'}">
+                        ${c.is_active ? '当前使用' : '未激活'}
+                    </span>
+                </td>
+                <td><small class="text-muted">${c.created_at ? new Date(c.created_at).toLocaleString() : '-'}</small></td>
+                <td>
+                    ${!c.is_active ? `<button class="btn btn-sm btn-outline-success" onclick="activateConfig(${c.id})">激活</button>` : ''}
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteConfig(${c.id})">删除</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function activateConfig(id) {
+        fetch(`/api/configs/${id}/activate`, {method: 'POST'})
+            .then(r => r.json())
+            .then(res => { if (res.code === 0) { loadConfigs(); loadItems(); }});
+    }
+
+    function deleteConfig(id) {
+        if (!confirm('确定删除此配置方案？')) return;
+        fetch(`/api/configs/${id}`, {method: 'DELETE'})
+            .then(r => r.json())
+            .then(res => { if (res.code === 0) loadConfigs(); });
+    }
+
+    function createConfig() {
+        const name = document.getElementById('config-name').value.trim();
+        const version = document.getElementById('config-version').value.trim();
+        const desc = document.getElementById('config-desc').value.trim();
+        if (!name) { alert('请输入配置名称'); return; }
+
+        fetch('/api/tests/items?active_only=false')
+            .then(r => r.json())
+            .then(res => {
+                const items = res.data.filter(i => i.is_active).map(i => ({
+                    name: i.name, description: i.description,
+                    expected_value: i.expected_value, min_value: i.min_value,
+                    max_value: i.max_value, unit: i.unit, category: i.category,
+                    sort_order: i.sort_order,
+                }));
+                return fetch('/api/configs', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, version, description: desc, config_data: {items}}),
+                });
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    loadConfigs();
+                    document.getElementById('config-name').value = '';
+                    document.getElementById('config-version').value = '1.0';
+                    document.getElementById('config-desc').value = '';
+                } else {
+                    alert(res.message);
+                }
+            });
+    }
+
+    function loadCategories() {
+        fetch('/api/tests/categories')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    const select = document.getElementById('export-category');
+                    res.data.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c;
+                        opt.textContent = c;
+                        select.appendChild(opt);
+                    });
+                }
+            });
+    }
+
+    function importConfig() {
+        const fileInput = document.getElementById('import-file');
+        if (!fileInput.files.length) { alert('请选择文件'); return; }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        if (document.getElementById('preview-only').checked) {
+            formData.append('preview_only', 'true');
+        }
+
+        document.getElementById('import-result').innerHTML =
+            '<p class="text-muted">正在处理...</p>';
+
+        fetch('/api/configs/import', {method: 'POST', body: formData})
+            .then(r => r.json())
+            .then(res => {
+                const div = document.getElementById('import-result');
+                if (res.code === 0) {
+                    const d = res.data;
+                    let html = `<div class="alert alert-success">${res.message}</div>`;
+                    if (d.validated && d.validated.length > 0) {
+                        html += '<h6>预览数据:</h6><div class="table-responsive"><table class="table table-sm"><tr>';
+                        Object.keys(d.validated[0]).forEach(k => html += `<th>${k}</th>`);
+                        html += '</tr>';
+                        d.validated.forEach(item => {
+                            html += '<tr>';
+                            Object.values(item).forEach(v => html += `<td>${v}</td>`);
+                            html += '</tr>';
+                        });
+                        html += '</table></div>';
+                    }
+                    if (d.errors && d.errors.length > 0) {
+                        html += `<div class="alert alert-warning"><strong>${d.errors.length} 个错误:</strong><ul>`;
+                        d.errors.forEach(e => html += `<li>${e}</li>`);
+                        html += '</ul></div>';
+                    }
+                    div.innerHTML = html;
+                    loadItems();
+                } else {
+                    div.innerHTML = `<div class="alert alert-danger">${res.message}</div>`;
+                }
+            });
+    }
+
+    function exportConfig() {
+        const format = document.getElementById('export-format').value;
+        const category = document.getElementById('export-category').value;
+        let url = `/api/configs/export?format=${format}`;
+        if (category) url += `&category=${category}`;
+
+        fetch(url)
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    alert(`导出成功: ${res.data.filename}`);
+                } else {
+                    alert(res.message);
+                }
+            });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}系统初始化 - 测试平台{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> 当前状态
+            </div>
+            <div class="card-body" id="status-card">
+                <p class="text-muted">加载中...</p>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-database-add"></i> 初始化示例数据
+            </div>
+            <div class="card-body">
+                <p class="text-muted">创建一组示例测试项，方便快速开始使用。</p>
+                <button class="btn btn-primary" id="init-sample-btn">
+                    <i class="bi bi-plus-circle"></i> 初始化示例数据
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-upload"></i> 从文件导入初始化
+            </div>
+            <div class="card-body">
+                <form id="init-import-form">
+                    <div class="mb-3">
+                        <label class="form-label">选择配置文件</label>
+                        <input type="file" class="form-control" id="init-import-file"
+                               accept=".csv,.xlsx,.json,.xml">
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-upload"></i> 导入并初始化
+                    </button>
+                </form>
+                <div id="init-import-result" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header text-danger">
+                <i class="bi bi-exclamation-triangle"></i> 危险操作
+            </div>
+            <div class="card-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-circle"></i>
+                    重置操作将清空所有测试数据、测试项和配置方案，且不可恢复！
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="confirm-reset">
+                        <label class="form-check-label text-danger">
+                            我已确认，清空所有数据
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn-danger w-100" id="reset-btn" disabled>
+                    <i class="bi bi-trash"></i> 重置系统
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadStatus();
+
+        document.getElementById('init-sample-btn').addEventListener('click', initSample);
+        document.getElementById('init-import-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            initImport();
+        });
+        document.getElementById('confirm-reset').addEventListener('change', function() {
+            document.getElementById('reset-btn').disabled = !this.checked;
+        });
+        document.getElementById('reset-btn').addEventListener('click', resetSystem);
+    });
+
+    function loadStatus() {
+        fetch('/api/init/status')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    const d = res.data;
+                    const card = document.getElementById('status-card');
+                    card.innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <h3 class="${d.initialized ? 'text-success' : 'text-warning'}">
+                                    ${d.initialized ? '已初始化' : '未初始化'}
+                                </h3>
+                            </div>
+                            <div class="col-3">
+                                <h4>${d.test_items}</h4>
+                                <small class="text-muted">测试项</small>
+                            </div>
+                            <div class="col-3">
+                                <h4>${d.test_runs}</h4>
+                                <small class="text-muted">测试批次</small>
+                            </div>
+                            <div class="col-3">
+                                <h4>${d.test_results}</h4>
+                                <small class="text-muted">测试结果</small>
+                            </div>
+                        </div>
+                    `;
+                    if (!d.initialized) {
+                        document.getElementById('init-sample-btn').disabled = false;
+                    }
+                }
+            });
+    }
+
+    function initSample() {
+        if (!confirm('确定要初始化示例数据吗？')) return;
+        fetch('/api/init/sample', {method: 'POST'})
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    alert('示例数据初始化成功！');
+                    loadStatus();
+                } else {
+                    alert(res.message);
+                }
+            });
+    }
+
+    function initImport() {
+        const fileInput = document.getElementById('init-import-file');
+        if (!fileInput.files.length) { alert('请选择文件'); return; }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        document.getElementById('init-import-result').innerHTML = '<p class="text-muted">导入中...</p>';
+
+        fetch('/api/init/import-defaults', {method: 'POST', body: formData})
+            .then(r => r.json())
+            .then(res => {
+                const div = document.getElementById('init-import-result');
+                if (res.code === 0) {
+                    div.innerHTML = `<div class="alert alert-success">${res.message}</div>`;
+                    loadStatus();
+                } else {
+                    div.innerHTML = `<div class="alert alert-danger">${res.message}</div>`;
+                }
+            });
+    }
+
+    function resetSystem() {
+        if (!confirm('最后确认：此操作将清空所有数据，确定继续？')) return;
+        fetch('/api/init/reset?confirm=true', {method: 'POST'})
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    alert('系统已重置');
+                    loadStatus();
+                    document.getElementById('confirm-reset').checked = false;
+                    document.getElementById('reset-btn').disabled = true;
+                } else {
+                    alert(res.message);
+                }
+            });
+    }
+</script>
+{% endblock %}

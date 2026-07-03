@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+{% block title %}测试执行 - 测试平台{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> 测试参数
+            </div>
+            <div class="card-body">
+                <form id="run-form">
+                    <div class="mb-3">
+                        <label class="form-label">操作员</label>
+                        <input type="text" class="form-control" id="operator" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">序列号</label>
+                        <input type="text" class="form-control" id="serial-number">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">产品型号</label>
+                        <input type="text" class="form-control" id="product-type">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">配置方案</label>
+                        <select class="form-select" id="config-select">
+                            <option value="">默认配置</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100" id="start-btn">
+                        <i class="bi bi-play-fill"></i> 开始测试
+                    </button>
+                    <button type="button" class="btn btn-danger w-100 mt-2 d-none" id="stop-btn">
+                        <i class="bi bi-stop-fill"></i> 停止测试
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-bar-chart"></i> 测试进度
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <small>批次号: <span id="batch-id">-</span></small>
+                </div>
+                <div class="progress mb-2" style="height: 25px;">
+                    <div class="progress-bar bg-success" id="progress-pass" style="width: 0%"></div>
+                    <div class="progress-bar bg-danger" id="progress-fail" style="width: 0%"></div>
+                </div>
+                <div class="d-flex justify-content-between small">
+                    <span>通过: <strong id="pass-count">0</strong></span>
+                    <span>失败: <strong id="fail-count">0</strong></span>
+                    <span>总计: <strong id="total-count">0</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> 测试项目
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="test-items-table">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>项目名称</th>
+                                <th>标准值</th>
+                                <th>下限</th>
+                                <th>上限</th>
+                                <th>单位</th>
+                                <th>实测值</th>
+                                <th>结果</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="test-items-body">
+                            <tr>
+                                <td colspan="9" class="text-center text-muted">
+                                    请先开始测试
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> 测试过程日志
+            </div>
+            <div class="card-body">
+                <div id="process-log" style="max-height: 200px; overflow-y: auto;">
+                    <p class="text-muted small">等待测试开始...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 输入实测值 Modal -->
+<div class="modal fade" id="valueModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">输入实测值</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modal-item-id">
+                <div class="mb-3">
+                    <label class="form-label" id="modal-item-name">项目名称</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="modal-value" step="any">
+                        <span class="input-group-text" id="modal-unit"></span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">备注</label>
+                    <textarea class="form-control" id="modal-remark" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="modal-submit">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+    let socket = null;
+    let currentRunId = null;
+    let currentBatchId = null;
+    let currentItemIndex = 0;
+    let testItems = [];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadConfigs();
+        setupSocket();
+
+        document.getElementById('run-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            startTestRun();
+        });
+
+        document.getElementById('stop-btn').addEventListener('click', function() {
+            stopTestRun();
+        });
+
+        document.getElementById('modal-submit').addEventListener('click', function() {
+            submitModalValue();
+        });
+
+        document.getElementById('modal-value').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') submitModalValue();
+        });
+    });
+
+    function loadConfigs() {
+        fetch('/api/configs')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0 && res.data.length > 0) {
+                    const select = document.getElementById('config-select');
+                    res.data.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c.id;
+                        opt.textContent = `${c.name} (v${c.version})`;
+                        if (c.is_active) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
+            });
+    }
+
+    function setupSocket() {
+        socket = io();
+        socket.on('run_started', function(data) {
+            currentBatchId = data.batch_id;
+            addLog(`测试开始 - 批次: ${data.batch_id}`, 'info');
+        });
+
+        socket.on('item_tested', function(data) {
+            updateProgress(data);
+            addLog(`${data.passed ? '✓' : '✗'} ${data.item_name}: ${data.actual_value} (标准: ${data.expected_value})`, data.passed ? 'pass' : 'fail');
+        });
+
+        socket.on('run_completed', function(data) {
+            addLog(`测试完成 - 通过: ${data.passed_items}, 失败: ${data.failed_items}`, 'success');
+            document.getElementById('start-btn').classList.remove('d-none');
+            document.getElementById('stop-btn').classList.add('d-none');
+            currentRunId = null;
+        });
+
+        socket.on('run_failed', function(data) {
+            addLog(`测试失败: ${data.error || '未知错误'}`, 'error');
+            document.getElementById('start-btn').classList.remove('d-none');
+            document.getElementById('stop-btn').classList.add('d-none');
+            currentRunId = null;
+        });
+    }
+
+    function startTestRun() {
+        const operator = document.getElementById('operator').value.trim();
+        if (!operator) {
+            alert('请输入操作员姓名');
+            return;
+        }
+
+        const data = {
+            operator: operator,
+            serial_number: document.getElementById('serial-number').value.trim(),
+            product_type: document.getElementById('product-type').value.trim(),
+            config_id: document.getElementById('config-select').value || null,
+        };
+
+        document.getElementById('start-btn').classList.add('d-none');
+        document.getElementById('stop-btn').classList.remove('d-none');
+        addLog('正在启动测试...', 'info');
+
+        fetch('/api/tests/runs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.code === 0) {
+                currentRunId = res.data.id;
+                currentBatchId = res.data.batch_id;
+                document.getElementById('batch-id').textContent = currentBatchId;
+                loadTestItems();
+            } else {
+                throw new Error(res.message);
+            }
+        })
+        .catch(err => {
+            addLog('启动失败: ' + err.message, 'error');
+            document.getElementById('start-btn').classList.remove('d-none');
+            document.getElementById('stop-btn').classList.add('d-none');
+        });
+    }
+
+    function stopTestRun() {
+        if (!currentBatchId) return;
+        fetch(`/api/tests/runs/${currentBatchId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: 'failed'}),
+        })
+        .then(r => r.json())
+        .then(res => {
+            addLog('测试已手动停止', 'warning');
+            document.getElementById('start-btn').classList.remove('d-none');
+            document.getElementById('stop-btn').classList.add('d-none');
+        });
+    }
+
+    function loadTestItems() {
+        fetch('/api/tests/items')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0) {
+                    testItems = res.data;
+                    currentItemIndex = 0;
+                    renderItems();
+                    if (testItems.length > 0) {
+                        promptForValue(0);
+                    }
+                }
+            });
+    }
+
+    function renderItems() {
+        const tbody = document.getElementById('test-items-body');
+        if (testItems.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无测试项</td></tr>';
+            return;
+        }
+        tbody.innerHTML = testItems.map((item, idx) => `
+            <tr id="item-row-${item.id}" class="${idx === currentItemIndex ? 'table-active' : ''}">
+                <td>${idx + 1}</td>
+                <td>${item.name}</td>
+                <td>${item.expected_value}</td>
+                <td>${item.min_value}</td>
+                <td>${item.max_value}</td>
+                <td>${item.unit}</td>
+                <td id="val-${item.id}">-</td>
+                <td id="result-${item.id}">
+                    <span class="badge bg-secondary">待测</span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="promptForValue(${idx})"
+                            ${idx !== currentItemIndex ? 'disabled' : ''}>
+                        输入
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function promptForValue(index) {
+        const item = testItems[index];
+        if (!item) return;
+        currentItemIndex = index;
+        document.getElementById('modal-item-id').value = item.id;
+        document.getElementById('modal-item-name').textContent = `${item.name} (${item.min_value} ~ ${item.max_value} ${item.unit})`;
+        document.getElementById('modal-unit').textContent = item.unit;
+        document.getElementById('modal-value').value = '';
+        document.getElementById('modal-remark').value = '';
+        new bootstrap.Modal(document.getElementById('valueModal')).show();
+        setTimeout(() => document.getElementById('modal-value').focus(), 500);
+    }
+
+    function submitModalValue() {
+        const itemId = parseInt(document.getElementById('modal-item-id').value);
+        const value = parseFloat(document.getElementById('modal-value').value);
+        const remark = document.getElementById('modal-remark').value.trim();
+
+        if (isNaN(value)) {
+            alert('请输入有效的数值');
+            return;
+        }
+
+        const item = testItems.find(i => i.id === itemId);
+        const passed = value >= item.min_value && value <= item.max_value;
+
+        document.getElementById(`val-${itemId}`).textContent = value;
+        document.getElementById(`result-${itemId}`).innerHTML =
+            `<span class="badge bg-${passed ? 'success' : 'danger'}">${passed ? 'PASS' : 'FAIL'}</span>`;
+        document.getElementById(`item-row-${itemId}`).classList.add(passed ? 'table-success' : 'table-danger');
+
+        fetch(`/api/tests/runs/${currentRunId}/results`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({test_item_id: itemId, actual_value: value, remark: remark}),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.code !== 0) {
+                addLog(`提交失败: ${res.message}`, 'error');
+            }
+        });
+
+        bootstrap.Modal.getInstance(document.getElementById('valueModal')).hide();
+
+        const nextIndex = currentItemIndex + 1;
+        if (nextIndex < testItems.length) {
+            setTimeout(() => promptForValue(nextIndex), 300);
+        } else {
+            addLog('所有测试项已完成', 'success');
+            fetch(`/api/tests/runs/${currentBatchId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: 'completed'}),
+            });
+            document.getElementById('start-btn').classList.remove('d-none');
+            document.getElementById('stop-btn').classList.add('d-none');
+        }
+    }
+
+    function updateProgress(data) {
+        document.getElementById('pass-count').textContent = data.passed_count || 0;
+        document.getElementById('fail-count').textContent = data.failed_count || 0;
+        document.getElementById('total-count').textContent = data.total || 0;
+        const total = data.total || 1;
+        document.getElementById('progress-pass').style.width = ((data.passed_count || 0) / total * 100) + '%';
+        document.getElementById('progress-fail').style.width = ((data.failed_count || 0) / total * 100) + '%';
+    }
+
+    function addLog(msg, type) {
+        const div = document.getElementById('process-log');
+        const time = new Date().toLocaleTimeString();
+        const colors = {info: '#0d6efd', pass: '#198754', fail: '#dc3545', success: '#198754', error: '#dc3545', warning: '#ffc107'};
+        const p = document.createElement('p');
+        p.className = 'mb-1 small';
+        p.innerHTML = `<span class="text-muted">[${time}]</span> <span style="color: ${colors[type] || '#333'}">${msg}</span>`;
+        div.appendChild(p);
+        div.scrollTop = div.scrollHeight;
+    }
+</script>
+{% endblock %}
