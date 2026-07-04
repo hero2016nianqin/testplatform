@@ -17,10 +17,16 @@ def index():
     return render_template('index.html')
 
 
-@main_bp.route('/test')
-def test_page():
-    """测试执行页面 - 显示测试项列表，支持实测值输入和实时进度"""
-    return render_template('test_run.html')
+@main_bp.route('/lines')
+def lines_page():
+    """线体列表页面"""
+    return render_template('test_run.html', view='lines')
+
+
+@main_bp.route('/equipment')
+def equipment_page():
+    """装备列表页面（含测试执行视图）"""
+    return render_template('test_run.html', view='equipment')
 
 
 @main_bp.route('/logs')

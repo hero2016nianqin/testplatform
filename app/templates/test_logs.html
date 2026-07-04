@@ -25,29 +25,54 @@
             <div class="tab-pane fade show active" id="query-tab">
                 <div class="card">
                     <div class="card-body">
-                        <form id="query-form" class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <input type="text" class="form-control" id="q-batch" placeholder="批次号">
-                            </div>
+                        <form id="query-form" class="row g-2 mb-3">
                             <div class="col-md-2">
-                                <input type="text" class="form-control" id="q-operator" placeholder="操作员">
-                            </div>
-                            <div class="col-md-2">
-                                <input type="text" class="form-control" id="q-serial" placeholder="序列号">
-                            </div>
-                            <div class="col-md-2">
-                                <select class="form-select" id="q-passed">
-                                    <option value="">全部结果</option>
-                                    <option value="true">PASS</option>
-                                    <option value="false">FAIL</option>
+                                <select class="form-select form-select-sm" id="q-time-range">
+                                    <option value="">时间范围</option>
+                                    <option value="24h">最近 24 小时</option>
+                                    <option value="7d" selected>最近一周</option>
+                                    <option value="30d">最近一个月</option>
+                                    <option value="custom">自定义</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <button type="submit" class="btn btn-primary">
+                            <div class="col-md-2" id="custom-date-group" style="display:none">
+                                <div class="row g-1">
+                                    <div class="col-6"><input type="date" class="form-control form-control-sm" id="q-start-date"></div>
+                                    <div class="col-6"><input type="date" class="form-control form-control-sm" id="q-end-date"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-1">
+                                <select class="form-select form-select-sm" id="q-status">
+                                    <option value="">全部状态</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="failed">失败</option>
+                                </select>
+                            </div>
+                            <div class="col-md-1">
+                                <select class="form-select form-select-sm" id="q-passed">
+                                    <option value="">全部</option>
+                                    <option value="true">通过</option>
+                                    <option value="false">失败</option>
+                                </select>
+                            </div>
+                            <div class="col-md-1">
+                                <input type="text" class="form-control form-control-sm" id="q-serial" placeholder="序列号">
+                            </div>
+                            <div class="col-md-1">
+                                <input type="text" class="form-control form-control-sm" id="q-operator" placeholder="操作员">
+                            </div>
+                            <div class="col-md-1">
+                                <input type="text" class="form-control form-control-sm" id="q-batch" placeholder="批次号">
+                            </div>
+                            <div class="col-md-1">
+                                <input type="text" class="form-control form-control-sm" id="q-station" placeholder="装备ID">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm">
                                     <i class="bi bi-search"></i> 查询
                                 </button>
-                                <button type="button" class="btn btn-success" id="export-btn">
-                                    <i class="bi bi-download"></i> 导出CSV
+                                <button type="button" class="btn btn-success btn-sm" id="export-btn">
+                                    <i class="bi bi-download"></i> 导出
                                 </button>
                             </div>
                         </form>
@@ -122,6 +147,10 @@
             queryResults();
         });
 
+        document.getElementById('q-time-range').addEventListener('change', function() {
+            document.getElementById('custom-date-group').style.display = this.value === 'custom' ? '' : 'none';
+        });
+
         document.getElementById('export-btn').addEventListener('click', function() {
             const params = getQueryParams();
             window.location.href = '/api/logs/export?' + params + '&format=csv';
@@ -132,19 +161,46 @@
             uploadLog();
         });
 
+        // 从 URL 参数初始化查询条件
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('time_range')) document.getElementById('q-time-range').value = urlParams.get('time_range');
+        if (urlParams.has('status')) document.getElementById('q-status').value = urlParams.get('status');
+        if (urlParams.has('passed')) document.getElementById('q-passed').value = urlParams.get('passed');
+        if (urlParams.has('serial_number')) document.getElementById('q-serial').value = urlParams.get('serial_number');
+        if (urlParams.has('operator')) document.getElementById('q-operator').value = urlParams.get('operator');
+        if (urlParams.has('batch_id')) document.getElementById('q-batch').value = urlParams.get('batch_id');
+        if (urlParams.has('station_id')) document.getElementById('q-station').value = urlParams.get('station_id');
+        // 如果有初始参数，自动查询
+        if (urlParams.toString()) {
+            document.getElementById('query-form').dispatchEvent(new Event('submit'));
+        }
+
         loadStats();
     });
 
     function getQueryParams() {
         const params = new URLSearchParams();
-        const batch = document.getElementById('q-batch').value.trim();
-        const operator = document.getElementById('q-operator').value.trim();
-        const serial = document.getElementById('q-serial').value.trim();
+        const timeRange = document.getElementById('q-time-range').value;
+        if (timeRange && timeRange !== 'custom') {
+            params.set('time_range', timeRange);
+        } else if (timeRange === 'custom') {
+            const sd = document.getElementById('q-start-date').value;
+            const ed = document.getElementById('q-end-date').value;
+            if (sd) params.set('start_date', sd + 'T00:00:00');
+            if (ed) params.set('end_date', ed + 'T23:59:59');
+        }
+        const status = document.getElementById('q-status').value;
+        if (status) params.set('status', status);
         const passed = document.getElementById('q-passed').value;
-        if (batch) params.set('batch_id', batch);
-        if (operator) params.set('operator', operator);
-        if (serial) params.set('serial_number', serial);
         if (passed) params.set('passed', passed);
+        const serial = document.getElementById('q-serial').value.trim();
+        if (serial) params.set('serial_number', serial);
+        const operator = document.getElementById('q-operator').value.trim();
+        if (operator) params.set('operator', operator);
+        const batch = document.getElementById('q-batch').value.trim();
+        if (batch) params.set('batch_id', batch);
+        const station = document.getElementById('q-station').value.trim();
+        if (station) params.set('station_id', station);
         return params.toString();
     }
 

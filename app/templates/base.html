@@ -26,8 +26,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/test">
-                            <i class="bi bi-play-circle"></i> 测试执行
+                        <a class="nav-link" href="/lines">
+                            <i class="bi bi-pin-angle"></i> 线体
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/equipment">
+                            <i class="bi bi-hdd-stack"></i> 装备
                         </a>
                     </li>
                     <li class="nav-item">
@@ -48,6 +53,13 @@
                     </li>
                 </ul>
                 <ul class="navbar-nav">
+                    <li class="nav-item" id="factory-selector" style="display:none;">
+                        <select class="form-select form-select-sm bg-dark text-light border-secondary"
+                                id="nav-factory-select" style="min-width:140px;margin-right:12px;"
+                                onchange="onFactoryChange(this.value)">
+                            <option value="">加载中...</option>
+                        </select>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userDropdown"
                            role="button" data-bs-toggle="dropdown">
@@ -90,6 +102,44 @@
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
+        // ===== 全局厂区选择器 =====
+        let currentFactoryId = null;
+
+        function loadFactorySelector() {
+            fetch('/api/stations/factories')
+                .then(r => r.json())
+                .then(res => {
+                    const sel = document.getElementById('nav-factory-select');
+                    if (!res.data || !res.data.length) {
+                        sel.innerHTML = '<option value="">无厂区</option>';
+                        document.getElementById('factory-selector').style.display = '';
+                        return;
+                    }
+                    sel.innerHTML = '<option value="">-- 选择厂区 --</option>'
+                        + res.data.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+                    // 恢复上次选择
+                    const saved = localStorage.getItem('selectedFactoryId');
+                    if (saved && res.data.some(f => f.id == saved)) {
+                        sel.value = saved;
+                        currentFactoryId = parseInt(saved);
+                    } else if (res.data.length > 0) {
+                        sel.value = res.data[0].id;
+                        currentFactoryId = res.data[0].id;
+                    }
+                    document.getElementById('factory-selector').style.display = '';
+                    // 通知页面
+                    if (typeof onFactoryChange === 'function') onFactoryChange(sel.value);
+                });
+        }
+
+        function onFactoryChange(factoryId) {
+            currentFactoryId = factoryId ? parseInt(factoryId) : null;
+            if (currentFactoryId) localStorage.setItem('selectedFactoryId', currentFactoryId);
+            else localStorage.removeItem('selectedFactoryId');
+            // 通知当前页面
+            if (typeof onFactorySelected === 'function') onFactorySelected(currentFactoryId);
+        }
+
         // 页面加载时检查登录状态，控制导航显示
         document.addEventListener('DOMContentLoaded', function() {
             fetch('/api/auth/me')
@@ -105,6 +155,8 @@
                         if (user.role === 'process') {
                             document.querySelectorAll('.process-only').forEach(el => el.style.display = '');
                         }
+                        // 加载厂区选择器
+                        loadFactorySelector();
                     } else {
                         // 未登录，跳转登录页
                         if (window.location.pathname !== '/login') {

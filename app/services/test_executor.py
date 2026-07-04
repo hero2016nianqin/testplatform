@@ -27,20 +27,15 @@ class TestExecutor:
     """
 
     def __init__(self, operator: str, serial_number: str = '',
-                 product_type: str = '', config_id: Optional[int] = None):
-        """
-        初始化执行器。
-
-        Args:
-            operator: 操作员姓名
-            serial_number: 被测产品序列号
-            product_type: 产品型号
-            config_id: 使用的配置方案 ID（可选）
-        """
+                 product_type: str = '', config_id: Optional[int] = None,
+                 station_id: Optional[int] = None,
+                 slot_id: Optional[int] = None):
         self.operator = operator
         self.serial_number = serial_number
         self.product_type = product_type
         self.config_id = config_id
+        self.station_id = station_id
+        self.slot_id = slot_id
         self.test_run = None
         self._progress_callback = None
 
@@ -83,6 +78,8 @@ class TestExecutor:
             product_type=self.product_type,
             status='running',
             started_at=datetime.utcnow(),
+            station_id=self.station_id,
+            slot_id=self.slot_id,
         )
         db.session.add(self.test_run)
         db.session.commit()

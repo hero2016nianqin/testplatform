@@ -142,12 +142,16 @@ def start_test_run():
     serial_number = data.get('serial_number', '')
     product_type = data.get('product_type', '')
     config_id = data.get('config_id')
+    station_id = data.get('station_id')
+    slot_id = data.get('slot_id')
 
     executor = TestExecutor(
         operator=operator,
         serial_number=serial_number,
         product_type=product_type,
         config_id=config_id,
+        station_id=station_id,
+        slot_id=slot_id,
     )
     run = executor.start_run()
     return jsonify({

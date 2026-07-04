@@ -24,6 +24,16 @@
                     <i class="bi bi-file-earmark"></i> 配置方案
                 </button>
             </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#definition-tab">
+                    <i class="bi bi-box"></i> 装备定义
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#factory-tab">
+                    <i class="bi bi-building"></i> 厂区线体
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -150,6 +160,88 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 装备定义管理 -->
+            <div class="tab-pane fade" id="definition-tab">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-box"></i> 装备定义 / 版本管理</span>
+                        <button class="btn btn-sm btn-primary" onclick="showDefCreateModal()">
+                            <i class="bi bi-plus-lg"></i> 新增定义
+                        </button>
+                    </div>
+                    <div class="card-body" id="definition-list">
+                        <p class="text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 装备定义 新建/编辑 Modal -->
+            <div class="modal fade" id="defModal" tabindex="-1" data-bs-backdrop="static">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="defModalTitle">新建装备定义</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="edit-def-id">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">名称 <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="def-name" placeholder="如 SPI 检测装备">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">编码</label>
+                                    <input type="text" class="form-control" id="def-code" placeholder="如 SPI-01">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">版本</label>
+                                    <input type="text" class="form-control" id="def-version" value="1.0.0">
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong><i class="bi bi-layout-three-columns"></i> 层级模板定义</strong>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-success me-1" onclick="addChassisToEditor()"><i class="bi bi-plus-circle"></i> 增加机框</button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="renderDefPreview()"><i class="bi bi-arrow-repeat"></i> 刷新预览</button>
+                                </div>
+                            </div>
+                            <div id="def-editor-preview" class="p-3" style="min-height:200px;border:1px dashed #ccc;border-radius:8px;background:#fafafa;">
+                                <p class="text-muted text-center">点击「增加机框」开始定义模板</p>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" onclick="saveDefFromEditor()">保存定义</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 厂区线体管理 -->
+            <div class="tab-pane fade" id="factory-tab">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-building"></i> 厂区 / 线体 / 装备管理</span>
+                        <div>
+                            <button class="btn btn-sm btn-primary" onclick="showFactoryModal()">
+                                <i class="bi bi-plus-lg"></i> 新增厂区
+                            </button>
+                            <button class="btn btn-sm btn-success" onclick="showLineModal()">
+                                <i class="bi bi-plus-lg"></i> 新增线体
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="showEquipmentModal()">
+                                <i class="bi bi-plus-lg"></i> 新增装备
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body" id="factory-list">
+                        <p class="text-muted">加载中...</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -206,6 +298,161 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="save-item-btn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 线体创建/编辑 Modal -->
+<div class="modal fade" id="lineModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lineModalTitle">新建线体</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-line-id">
+                <ul class="nav nav-tabs mb-3 small" id="lineCreateTabs">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#line-blank">新建空白</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#line-copy">复制线体</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#line-import">导入线体</button></li>
+                </ul>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="line-blank">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">线体名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="line-name" placeholder="如 SMT 线体 03">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">所属厂区 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="line-factory"><option value="">-- 请选择 --</option></select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">编码</label>
+                                <input type="text" class="form-control" id="line-code" placeholder="如 SMT-L03">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">场景</label>
+                                <input type="text" class="form-control" id="line-scenario" placeholder="如 高速贴片/多功能">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">描述</label>
+                                <input type="text" class="form-control" id="line-desc" placeholder="可选描述">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="line-copy">
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">选择要复制的线体 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="line-copy-source"><option value="">-- 请选择 --</option></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">新线体名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="line-copy-name" placeholder="输入新名称">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">目标厂区 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="line-copy-factory"><option value="">-- 请选择 --</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="line-import">
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label class="form-label">导入配置 (JSON)</label>
+                                <textarea class="form-control font-monospace" id="line-import-data" rows="6" placeholder='{"name":"...","factory_id":1,"code":"...","scenario":"..."}'></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="save-line-btn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 装备创建 Modal -->
+<div class="modal fade" id="equipmentModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="equipModalTitle">新建装备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-equip-id">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">所属线体 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="equip-line"><option value="">-- 请选择 --</option></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">装备名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="equip-name" placeholder="如 SPI 检测装备">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">工序</label>
+                        <select class="form-select" id="equip-process">
+                            <option value="">-- 选择 --</option>
+                            <option value="FT">FT（终测）</option>
+                            <option value="老化">老化（Burn In）</option>
+                            <option value="ORT">ORT（可靠性）</option>
+                            <option value="SMT">SMT（贴片）</option>
+                            <option value="Assembly">Assembly（组装）</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">工位</label>
+                        <select class="form-select" id="equip-workstation">
+                            <option value="">-- 选择 --</option>
+                            <option value="MP1">MP1</option>
+                            <option value="MP2">MP2</option>
+                            <option value="MP3">MP3</option>
+                            <option value="MP4">MP4</option>
+                            <option value="MP5">MP5</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">执行器</label>
+                        <input type="text" class="form-control" id="equip-actuator" placeholder="如 Robot-A1">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">硬件编码</label>
+                        <input type="text" class="form-control" id="equip-hw-code" placeholder="HW-001">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">软件编码</label>
+                        <input type="text" class="form-control" id="equip-sw-code" placeholder="SW-001">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">装备定义（版本模板）</label>
+                        <select class="form-select" id="equip-definition">
+                            <option value="">-- 无 --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">版本选择</label>
+                        <select class="form-select" id="equip-version-strategy">
+                            <option value="latest">最新版</option>
+                            <option value="specified">指定版本</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="equip-version-group" style="display:none">
+                        <label class="form-label">指定版本号</label>
+                        <input type="text" class="form-control" id="equip-version-specified" placeholder="如 1.0.0">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="save-equip-btn">保存</button>
             </div>
         </div>
     </div>
@@ -511,5 +758,525 @@
                 }
             });
     }
+
+    // ==================== 厂区/线体管理 ====================
+
+    function loadFactories() {
+        fetch('/api/stations/hierarchy')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code !== 0) return;
+                const div = document.getElementById('factory-list');
+                const data = res.data;
+                if (!data || data.length === 0) {
+                    div.innerHTML = '<p class="text-muted text-center py-3">暂无厂区，请先创建</p>';
+                    return;
+                }
+                let html = '';
+                    data.forEach(f => {
+                        html += `<div class="card mb-2 border-primary">
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center bg-light">
+                                <strong><i class="bi bi-building"></i> ${f.name}
+                                    ${f.code ? `<span class="badge bg-secondary ms-1">${f.code}</span>` : ''}
+                                    <span class="badge bg-info ms-1">${f.lines ? f.lines.length : 0} 线体</span>
+                                </strong>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editFactory(${f.id})">编辑</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteFactory(${f.id})">删除</button>
+                                </div>
+                            </div>
+                            <div class="card-body py-2">`;
+                        if (f.lines && f.lines.length > 0) {
+                            f.lines.forEach(l => {
+                                html += `<div class="mb-2 p-2 bg-light rounded">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <strong><i class="bi bi-pin-angle"></i> ${l.name}
+                                            ${l.code ? `<span class="badge bg-secondary ms-1">${l.code}</span>` : ''}
+                                            <span class="badge bg-info ms-1">${l.stations ? l.stations.length : 0} 装备</span>
+                                        </strong>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-success" onclick="showEquipmentModal(${l.id})"><i class="bi bi-plus-lg"></i> 新增装备</button>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="editLine(${l.id})">编辑</button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteLine(${l.id})">删除</button>
+                                        </div>
+                                    </div>`;
+                                if (l.stations && l.stations.length > 0) {
+                                    html += `<table class="table table-sm mb-0">
+                                        <thead><tr><th>装备名称</th><th>编码</th><th>机框数</th><th>版本</th><th>操作</th></tr></thead><tbody>`;
+                                    l.stations.forEach(s => {
+                                        const needsUp = s.needs_update;
+                                        const versionHtml = `v${s.deployed_version}`
+                                            + (s.definition_name ? `<br><small class="text-muted">${s.definition_name}</small>` : '')
+                                            + (needsUp ? ` <span class="badge bg-warning text-dark">最新 v${s.latest_version}</span>` : '');
+                                        const updateBtn = needsUp
+                                            ? `<button class="btn btn-sm btn-outline-warning ms-1" onclick="updateStationVersion(${s.id},this)">更新</button>`
+                                            : '';
+                                        html += `<tr>
+                                            <td><a href="/equipment?equipment_id=${s.id}" class="text-decoration-none"><i class="bi bi-hdd-stack"></i> ${s.name}</a></td>
+                                            <td>${s.code || '-'}</td>
+                                            <td>${s.chassis_count}</td>
+                                            <td>${versionHtml}</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary" onclick="editEquipment(${s.id})">编辑</button>
+                                                ${updateBtn}
+                                                <button class="btn btn-sm btn-outline-danger" onclick="deleteEquipment(${s.id})">删除</button>
+                                            </td>
+                                        </tr>`;
+                                    });
+                                    html += `</tbody></table>`;
+                                } else {
+                                    html += `<p class="text-muted mb-0 small">暂无装备</p>`;
+                                }
+                                html += `</div>`;
+                            });
+                        } else {
+                            html += `<p class="text-muted mb-0 small">暂无线体</p>`;
+                        }
+                        html += `</div></div>`;
+                    });
+                div.innerHTML = html;
+            });
+    }
+
+    function showFactoryModal() {
+        const name = prompt('请输入厂区名称：');
+        if (!name) return;
+        const code = prompt('请输入厂区编码（可选）：');
+        fetch('/api/stations/factories', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, code: code || ''}),
+        }).then(r => r.json()).then(res => {
+            alert(res.code === 0 ? '创建成功' : res.message);
+            if (res.code === 0) loadFactories();
+        });
+    }
+
+    function editFactory(id) {
+        const name = prompt('请输入新名称：');
+        if (!name) return;
+        fetch(`/api/stations/factories/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) loadFactories();
+        });
+    }
+
+    function deleteFactory(id) {
+        if (!confirm('确定删除该厂区及其所有线体和装备？')) return;
+        fetch(`/api/stations/factories/${id}`, {method: 'DELETE'})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) loadFactories();
+            });
+    }
+
+    function showLineModal() {
+        document.getElementById('edit-line-id').value = '';
+        document.getElementById('lineModalTitle').textContent = '新建线体';
+        document.getElementById('line-name').value = '';
+        document.getElementById('line-code').value = '';
+        document.getElementById('line-scenario').value = '';
+        document.getElementById('line-desc').value = '';
+        document.getElementById('line-copy-name').value = '';
+        document.getElementById('line-import-data').value = '';
+
+        // 加载厂区
+        fetch('/api/stations/factories').then(r => r.json()).then(res => {
+            const opts = (res.data || []).map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+            document.getElementById('line-factory').innerHTML = '<option value="">-- 请选择 --</option>' + opts;
+            document.getElementById('line-copy-factory').innerHTML = '<option value="">-- 请选择 --</option>' + opts;
+        });
+        // 加载可复制的线体
+        fetch('/api/stations/hierarchy').then(r => r.json()).then(res => {
+            const lines = [];
+            (res.data || []).forEach(f => (f.lines || []).forEach(l => lines.push({id: l.id, name: l.name, factory: f.name})));
+            const opts = lines.map(l => `<option value="${l.id}">${l.name} (${l.factory})</option>`).join('');
+            document.getElementById('line-copy-source').innerHTML = '<option value="">-- 请选择 --</option>' + opts;
+        });
+
+        new bootstrap.Modal(document.getElementById('lineModal')).show();
+    }
+
+    function editLine(id) {
+        // 简单编辑：弹出字段
+        const name = prompt('请输入新名称：');
+        if (!name) return;
+        fetch(`/api/stations/lines/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) loadFactories();
+        });
+    }
+
+    function deleteLine(id) {
+        if (!confirm('确定删除该线体及其所有装备？')) return;
+        fetch(`/api/stations/lines/${id}`, {method: 'DELETE'})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) loadFactories();
+            });
+    }
+
+    // ==================== 线体保存 ====================
+
+    document.getElementById('save-line-btn').addEventListener('click', function() {
+        const tab = document.querySelector('#lineCreateTabs .nav-link.active');
+        if (!tab) return;
+        const target = tab.getAttribute('data-bs-target');
+
+        let data = {};
+        if (target === '#line-blank') {
+            const name = document.getElementById('line-name').value.trim();
+            const factoryId = document.getElementById('line-factory').value;
+            if (!name || !factoryId) { alert('请填写线体名称并选择厂区'); return; }
+            data = {name, factory_id: parseInt(factoryId), code: document.getElementById('line-code').value.trim(),
+                    scenario: document.getElementById('line-scenario').value.trim(),
+                    description: document.getElementById('line-desc').value.trim()};
+        } else if (target === '#line-copy') {
+            const sourceId = document.getElementById('line-copy-source').value;
+            const name = document.getElementById('line-copy-name').value.trim();
+            const factoryId = document.getElementById('line-copy-factory').value;
+            if (!sourceId || !name || !factoryId) { alert('请选择源线体、填写名称并选择厂区'); return; }
+            data = {name, factory_id: parseInt(factoryId), copy_from_id: parseInt(sourceId)};
+        } else if (target === '#line-import') {
+            try { data = JSON.parse(document.getElementById('line-import-data').value); }
+            catch(e) { alert('JSON 格式不正确'); return; }
+            if (!data.name || !data.factory_id) { alert('JSON 中必须包含 name 和 factory_id'); return; }
+        } else return;
+
+        fetch('/api/stations/lines', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data),
+        }).then(r => r.json()).then(res => {
+            alert(res.code === 0 ? '创建成功' : res.message);
+            if (res.code === 0) { bootstrap.Modal.getInstance(document.getElementById('lineModal')).hide(); loadFactories(); }
+        });
+    });
+
+    // ==================== 装备管理 ====================
+
+    function showEquipmentModal(lineId) {
+        document.getElementById('edit-equip-id').value = '';
+        document.getElementById('equipModalTitle').textContent = '新建装备';
+        document.getElementById('equip-name').value = '';
+        document.getElementById('equip-actuator').value = '';
+        document.getElementById('equip-hw-code').value = '';
+        document.getElementById('equip-sw-code').value = '';
+        document.getElementById('equip-process').value = '';
+        document.getElementById('equip-workstation').value = '';
+        document.getElementById('equip-version-strategy').value = 'latest';
+        document.getElementById('equip-version-specified').value = '';
+        document.getElementById('equip-version-group').style.display = 'none';
+
+        // 加载线体
+        fetch('/api/stations/hierarchy').then(r => r.json()).then(res => {
+            const lines = [];
+            (res.data || []).forEach(f => (f.lines || []).forEach(l => lines.push({id: l.id, name: l.name, factory: f.name})));
+            const opts = lines.map(l => `<option value="${l.id}">${l.name} (${l.factory})</option>`).join('');
+            document.getElementById('equip-line').innerHTML = '<option value="">-- 请选择 --</option>' + opts;
+            if (lineId) document.getElementById('equip-line').value = lineId;
+        });
+        // 加载装备定义
+        fetch('/api/stations/definitions').then(r => r.json()).then(res => {
+            const opts = (res.data || []).map(d => `<option value="${d.id}">${d.name} (v${d.current_version})</option>`).join('');
+            document.getElementById('equip-definition').innerHTML = '<option value="">-- 无 --</option>' + opts;
+        });
+
+        new bootstrap.Modal(document.getElementById('equipmentModal')).show();
+    }
+
+    document.getElementById('equip-version-strategy').addEventListener('change', function() {
+        document.getElementById('equip-version-group').style.display = this.value === 'specified' ? '' : 'none';
+    });
+
+    document.getElementById('save-equip-btn').addEventListener('click', function() {
+        const lineId = document.getElementById('equip-line').value;
+        const name = document.getElementById('equip-name').value.trim();
+        if (!lineId || !name) { alert('请选择线体并填写装备名称'); return; }
+
+        const defId = document.getElementById('equip-definition').value;
+        const verStrategy = document.getElementById('equip-version-strategy').value;
+        const versionSpecified = document.getElementById('equip-version-specified').value.trim();
+        let deployedVersion = null;
+        let latestVersion = null;
+        let definitionId = defId ? parseInt(defId) : null;
+
+        // 如果选择了定义，获取版本信息
+        if (definitionId) {
+            // 需要从定义的 current_version 获取
+            // 用同步方式先查定义
+            fetch('/api/stations/definitions').then(r => r.json()).then(defRes => {
+                const def = (defRes.data || []).find(d => d.id === definitionId);
+                if (def) {
+                    latestVersion = def.current_version;
+                    deployedVersion = (verStrategy === 'specified' && versionSpecified) ? versionSpecified : def.current_version;
+                }
+                submitEquipment(lineId, name, definitionId, deployedVersion, latestVersion);
+            });
+        } else {
+            submitEquipment(lineId, name, null, versionSpecified || '1.0.0', versionSpecified || '1.0.0');
+        }
+    });
+
+    function submitEquipment(lineId, name, definitionId, deployedVersion, latestVersion) {
+        fetch('/api/stations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: name,
+                line_id: parseInt(lineId),
+                definition_id: definitionId,
+                deployed_version: deployedVersion,
+                latest_version: latestVersion,
+                process_type: document.getElementById('equip-process').value,
+                workstation: document.getElementById('equip-workstation').value,
+                actuator: document.getElementById('equip-actuator').value.trim(),
+                hardware_code: document.getElementById('equip-hw-code').value.trim(),
+                software_code: document.getElementById('equip-sw-code').value.trim(),
+                description: '',
+            }),
+        }).then(r => r.json()).then(res => {
+            alert(res.code === 0 ? '装备创建成功' : res.message);
+            if (res.code === 0) { bootstrap.Modal.getInstance(document.getElementById('equipmentModal')).hide(); loadFactories(); }
+        });
+    }
+
+    function editEquipment(id) {
+        const name = prompt('请输入装备新名称：');
+        if (!name) return;
+        fetch(`/api/stations/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) loadFactories();
+        });
+    }
+
+    function deleteEquipment(id) {
+        if (!confirm('确定删除该装备及其所有配置数据？')) return;
+        fetch(`/api/stations/${id}`, {method: 'DELETE'})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) loadFactories();
+            });
+    }
+
+    // ==================== 装备定义管理 ====================
+
+    // ==================== 装备定义管理（视觉模板） ====================
+
+    let defEditorLayout = { cabinets: [{ name: '机柜 1', chassis: [] }] };
+
+    function renderDefMiniPreview(layout) {
+        const cabs = (layout && layout.cabinets) || [{name:'机柜 1',chassis:[]}];
+        let html = `<div style="border:2px solid #0d6efd;border-radius:8px;padding:8px;background:#f8f9ff;font-size:.75rem;">
+            <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
+                <span class="badge bg-info" style="font-size:.65rem;">装备参数</span>
+                <span class="badge bg-secondary" style="font-size:.65rem;">硬件参数</span>
+                <span class="badge bg-primary" style="font-size:.65rem;">软件参数</span>
+                <span class="badge bg-warning text-dark" style="font-size:.65rem;">场景参数</span>
+            </div>`;
+        cabs.forEach(cab => {
+            html += `<div style="border:1.5px solid #6f42c1;border-radius:6px;padding:6px;margin-top:4px;background:#f8f0ff;">
+                <strong style="font-size:.7rem;">${cab.name}</strong>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">`;
+            (cab.chassis || []).forEach(ch => {
+                html += `<div style="border:1.5px solid #198754;border-radius:4px;padding:4px;background:#f0fff4;min-width:80px;">
+                    <div style="font-size:.65rem;font-weight:600;">${ch.name}</div>
+                    <div style="font-size:.6rem;color:#666;">${ch.slot_count}槽位</div>
+                </div>`;
+            });
+            html += `</div></div>`;
+        });
+        html += `</div>`;
+        return html;
+    }
+
+    function loadDefinitions() {
+        fetch('/api/stations/definitions')
+            .then(r => r.json()).then(res => {
+                const div = document.getElementById('definition-list');
+                if (!res.data || !res.data.length) {
+                    div.innerHTML = '<p class="text-muted">暂无装备定义，请新增</p>'; return;
+                }
+                let html = '';
+                res.data.forEach(d => {
+                    const layout = d.layout_config || { cabinets: [{ name: '机柜 1', chassis: [{name:'机框 1',slot_count:4},{name:'机框 2',slot_count:4}] }] };
+                    html += `<div class="card mb-2">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${d.name}</strong>
+                                    ${d.code ? `<code class="ms-2 text-muted">${d.code}</code>` : ''}
+                                    <span class="badge bg-primary ms-2">v${d.current_version}</span>
+                                    <span class="badge bg-secondary ms-1">${d.deployment_count} 部署</span>
+                                </div>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" onclick="showDefEditModal(${d.id})"><i class="bi bi-pencil"></i> 编辑</button>
+                                    <button class="btn btn-outline-danger" onclick="deleteDef(${d.id})"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </div>
+                            <div class="mt-2">${renderDefMiniPreview(layout)}</div>
+                        </div>
+                    </div>`;
+                });
+                div.innerHTML = html;
+            });
+    }
+
+    function showDefCreateModal() {
+        document.getElementById('edit-def-id').value = '';
+        document.getElementById('def-name').value = '';
+        document.getElementById('def-code').value = '';
+        document.getElementById('def-version').value = '1.0.0';
+        defEditorLayout = { cabinets: [{ name: '机柜 1', chassis: [] }] };
+        renderDefPreview();
+        document.getElementById('defModalTitle').textContent = '新建装备定义';
+        new bootstrap.Modal(document.getElementById('defModal')).show();
+    }
+
+    function showDefEditModal(id) {
+        fetch('/api/stations/definitions/' + id)
+            .then(r => r.json()).then(res => {
+                if (res.code !== 0) return;
+                const d = res.data;
+                document.getElementById('edit-def-id').value = d.id;
+                document.getElementById('def-name').value = d.name;
+                document.getElementById('def-code').value = d.code || '';
+                document.getElementById('def-version').value = d.current_version;
+                defEditorLayout = JSON.parse(JSON.stringify(d.layout_config || { cabinets: [{ name: '机柜 1', chassis: [{name:'机框 1',slot_count:4},{name:'机框 2',slot_count:4}] }] }));
+                renderDefPreview();
+                document.getElementById('defModalTitle').textContent = '编辑装备定义';
+                new bootstrap.Modal(document.getElementById('defModal')).show();
+            });
+    }
+
+    function renderDefPreview() {
+        const cab = defEditorLayout.cabinets[0];
+        if (!cab) return;
+        let html = `<div class="station-rect" style="cursor:default;">
+            <div class="station-header" style="margin-bottom:10px;padding-bottom:6px;">
+                <strong><i class="bi bi-cpu"></i> 测试工站</strong>
+                <div style="display:flex;gap:4px;">
+                    <span class="badge bg-info" style="font-size:.7rem;">装备参数</span>
+                    <span class="badge bg-secondary" style="font-size:.7rem;">硬件参数</span>
+                    <span class="badge bg-primary" style="font-size:.7rem;">软件参数</span>
+                    <span class="badge bg-warning text-dark" style="font-size:.7rem;">场景参数</span>
+                </div>
+            </div>
+            <div class="cabinet-rect" style="cursor:default;">
+                <div class="cabinet-header" style="margin-bottom:8px;">
+                    <strong><i class="bi bi-layers"></i> ${cab.name}</strong>
+                </div>
+                <div class="cabinet-body">`;
+        (cab.chassis || []).forEach((ch, idx) => {
+            html += `<div class="chassis-rect" style="flex:0 0 auto;min-width:140px;position:relative;">
+                <div class="chassis-header">
+                    <strong style="font-size:.8rem;">${ch.name}</strong>
+                    <small class="text-muted" style="font-size:.7rem;">${ch.slot_count}槽</small>
+                </div>
+                <div class="chassis-slots" style="justify-content:center;">`;
+            for (let si = 1; si <= (ch.slot_count || 4); si++) {
+                html += `<div class="slot-item slot-idle" style="width:44px;height:34px;font-size:.65rem;margin:2px;cursor:default;">
+                    <div class="text-center"><div>S${si}</div></div>
+                </div>`;
+            }
+            html += `</div>
+                <div style="display:flex;gap:4px;margin-top:6px;justify-content:center;">
+                    <button class="btn btn-sm btn-outline-success" style="font-size:.65rem;padding:1px 6px;" onclick="incSlotCount(${idx})"><i class="bi bi-plus"></i> 槽</button>
+                    <button class="btn btn-sm btn-outline-warning" style="font-size:.65rem;padding:1px 6px;" onclick="decSlotCount(${idx})"><i class="bi bi-dash"></i> 槽</button>
+                    <button class="btn btn-sm btn-outline-danger" style="font-size:.65rem;padding:1px 6px;" onclick="removeChassisFromEditor(${idx})"><i class="bi bi-x"></i></button>
+                </div>
+            </div>`;
+        });
+        html += `</div></div></div>`;
+        document.getElementById('def-editor-preview').innerHTML = html;
+    }
+
+    function addChassisToEditor() {
+        const cab = defEditorLayout.cabinets[0];
+        const idx = (cab.chassis || []).length + 1;
+        cab.chassis.push({ name: '机框 ' + idx, slot_count: 4 });
+        renderDefPreview();
+    }
+
+    function removeChassisFromEditor(idx) {
+        const cab = defEditorLayout.cabinets[0];
+        cab.chassis.splice(idx, 1);
+        renderDefPreview();
+    }
+
+    function incSlotCount(idx) {
+        const cab = defEditorLayout.cabinets[0];
+        cab.chassis[idx].slot_count = Math.min((cab.chassis[idx].slot_count || 4) + 1, 16);
+        renderDefPreview();
+    }
+
+    function decSlotCount(idx) {
+        const cab = defEditorLayout.cabinets[0];
+        cab.chassis[idx].slot_count = Math.max((cab.chassis[idx].slot_count || 4) - 1, 1);
+        renderDefPreview();
+    }
+
+    function saveDefFromEditor() {
+        const id = document.getElementById('edit-def-id').value;
+        const name = document.getElementById('def-name').value.trim();
+        if (!name) { alert('名称不能为空'); return; }
+        const code = document.getElementById('def-code').value.trim();
+        const ver = document.getElementById('def-version').value.trim() || '1.0.0';
+        // 重排机框名称
+        const cab = defEditorLayout.cabinets[0];
+        (cab.chassis || []).forEach((ch, i) => {
+            if (!ch.name || ch.name === '') ch.name = '机框 ' + (i + 1);
+        });
+        const body = { name, code, current_version: ver, layout_config: defEditorLayout };
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/stations/definitions/${id}` : '/api/stations/definitions';
+        fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) {
+                bootstrap.Modal.getInstance(document.getElementById('defModal')).hide();
+                loadDefinitions();
+            } else {
+                alert(res.message);
+            }
+        });
+    }
+
+    function deleteDef(id) {
+        if (!confirm('确定删除该装备定义？')) return;
+        fetch(`/api/stations/definitions/${id}`, {method: 'DELETE'})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) loadDefinitions();
+            });
+    }
+
+    function updateStationVersion(stationId, btn) {
+        if (!confirm('确定更新该装备到最新版本？')) return;
+        btn.disabled = true;
+        btn.textContent = '更新中...';
+        fetch(`/api/stations/${stationId}/update-version`, {method: 'POST'})
+            .then(r => r.json()).then(res => {
+                alert(res.message);
+                loadFactories();
+            }).catch(() => { btn.disabled = false; btn.textContent = '更新'; });
+    }
+
+    // 加载厂区数据
+    document.addEventListener('DOMContentLoaded', function() {
+        loadFactories();
+        loadDefinitions();
+        // 切换 tab 时刷新定义列表
+        document.querySelector('[data-bs-target="#definition-tab"]')?.addEventListener('click', function() {
+            setTimeout(loadDefinitions, 100);
+        });
+    });
 </script>
 {% endblock %}

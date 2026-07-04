@@ -63,8 +63,12 @@ def query_test_results():
         operator: 操作员
         serial_number: 序列号
         passed: PASS/FAIL（true/false）
-        start_date: 开始时间（ISO格式）
+        status: completed/failed（批次状态）
+        time_range: 24h/7d/30d（快捷时间范围）
+        start_date: 开始时间（ISO格式，与time_range互斥）
         end_date: 结束时间（ISO格式）
+        station_id: 装备ID
+        slot_id: 槽位ID
         page: 页码
         per_page: 每页条数
     """
@@ -74,8 +78,12 @@ def query_test_results():
     operator = request.args.get('operator')
     serial_number = request.args.get('serial_number')
     passed = request.args.get('passed')
+    status = request.args.get('status')
+    time_range = request.args.get('time_range')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    station_id = request.args.get('station_id', type=int)
+    slot_id = request.args.get('slot_id', type=int)
 
     query = TestResult.query.join(TestRun)
 
@@ -88,21 +96,47 @@ def query_test_results():
             TestResult.serial_number.like(f'%{serial_number}%'))
     if passed is not None:
         query = query.filter(TestResult.passed == (passed.lower() == 'true'))
+    if status:
+        query = query.filter(TestRun.status == status)
+    if station_id:
+        query = query.filter(TestRun.station_id == station_id)
+    if slot_id:
+        query = query.filter(TestRun.slot_id == slot_id)
+
+    # 时间范围处理
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    if time_range == '24h':
+        start_date = (now - timedelta(hours=24)).isoformat()
+    elif time_range == '7d':
+        start_date = (now - timedelta(days=7)).isoformat()
+    elif time_range == '30d':
+        start_date = (now - timedelta(days=30)).isoformat()
+
     if start_date:
-        from datetime import datetime
         query = query.filter(
             TestResult.tested_at >= datetime.fromisoformat(start_date))
     if end_date:
-        from datetime import datetime
         query = query.filter(
             TestResult.tested_at <= datetime.fromisoformat(end_date))
 
     query = query.order_by(TestResult.tested_at.desc())
     pagination = query.paginate(page=page, per_page=per_page)
+    results = []
+    for r in pagination.items:
+        d = r.to_dict()
+        # 附加批次信息和装备信息
+        run = r.test_run
+        if run:
+            d['batch_id'] = run.batch_id
+            d['run_status'] = run.status
+            d['station_id'] = run.station_id
+            d['slot_id'] = run.slot_id
+        results.append(d)
 
     return jsonify({
         'code': 0,
-        'data': [r.to_dict() for r in pagination.items],
+        'data': results,
         'total': pagination.total,
         'page': page,
         'per_page': per_page,

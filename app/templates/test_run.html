@@ -2,11 +2,102 @@
 {% block title %}测试执行{% endblock %}
 {% block content %}
 <div class="row" id="station-view">
-    <div class="col-12 mb-3">
-        <h5 class="mb-0"><i class="bi bi-grid-3x3-gap-fill"></i> 选择测试工站</h5>
+    <!-- 左栏：线体列表 -->
+    {% if view != 'equipment' %}
+    <div class="col-md-12 mb-3" id="lines-panel">
+        <div class="card">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-pin-angle"></i> <strong>线体</strong></span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary active" id="lines-mine-btn" onclick="switchLinesView('mine')">我的线体</button>
+                    <button class="btn btn-outline-primary" id="lines-all-btn" onclick="switchLinesView('all')">全部线体</button>
+                </div>
+            </div>
+            <div class="card-body p-0" id="lines-list" style="max-height:calc(100vh - 160px);overflow-y:auto;">
+                <p class="text-muted text-center small py-3">加载中...</p>
+            </div>
+        </div>
     </div>
-    <div class="col-12" id="station-container">
-        <!-- 由 JS 动态渲染 -->
+    {% endif %}
+    <!-- 右栏：装备列表 -->
+    {% if view != 'lines' %}
+    <div class="col-md-12 mb-3" id="equipments-panel">
+        <div class="card">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-hdd-stack"></i> <strong>装备</strong></span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary active" id="equip-mine-btn" onclick="switchEquipView('mine')">我的装备</button>
+                    <button class="btn btn-outline-primary" id="equip-all-btn" onclick="switchEquipView('all')">全部装备</button>
+                </div>
+            </div>
+            <div class="card-body p-0" id="equipment-list" style="max-height:calc(100vh - 160px);overflow-y:auto;">
+                <p class="text-muted text-center small py-3">加载中...</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 装备编辑 Modal -->
+<div class="modal fade" id="equipEditModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑装备</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-equip-id">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">装备名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit-equip-name">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">所属线体</label>
+                        <select class="form-select" id="edit-equip-line"></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">工序</label>
+                        <select class="form-select" id="edit-equip-process">
+                            <option value="">-- 选择 --</option>
+                            <option value="FT">FT（终测）</option>
+                            <option value="老化">老化（Burn In）</option>
+                            <option value="ORT">ORT（可靠性）</option>
+                            <option value="SMT">SMT（贴片）</option>
+                            <option value="Assembly">Assembly（组装）</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">工位</label>
+                        <select class="form-select" id="edit-equip-workstation">
+                            <option value="">-- 选择 --</option>
+                            <option value="MP1">MP1</option>
+                            <option value="MP2">MP2</option>
+                            <option value="MP3">MP3</option>
+                            <option value="MP4">MP4</option>
+                            <option value="MP5">MP5</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">执行器</label>
+                        <input type="text" class="form-control" id="edit-equip-actuator">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">硬件编码</label>
+                        <input type="text" class="form-control" id="edit-equip-hw">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">软件编码</label>
+                        <input type="text" class="form-control" id="edit-equip-sw">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="save-edit-equip-btn">保存</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -151,7 +242,17 @@
     cursor: pointer; transition: all .2s;
 }
 .station-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-.chassis-box { border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.station-rect { border: 3px solid #0d6efd; border-radius: 12px; padding: 16px; margin-bottom: 16px; background: #f8f9ff; }
+.station-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #0d6efd33; }
+.station-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.station-badges .badge { cursor: pointer; font-size: .75rem; }
+.station-badges .badge:hover { filter: brightness(1.1); }
+.cabinet-rect { border: 2px solid #6f42c1; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #f8f0ff; }
+.cabinet-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #6f42c133; }
+.cabinet-body { display: flex; flex-wrap: wrap; gap: 10px; }
+.chassis-rect { border: 2px solid #198754; border-radius: 8px; padding: 10px; background: #f0fff4; flex: 1 1 auto; min-width: 200px; }
+.chassis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #19875433; }
+.chassis-slots { display: flex; flex-wrap: wrap; gap: 4px; }
 .slot-item {
     display: inline-flex; align-items: center; justify-content: center;
     width: 72px; height: 56px; margin: 4px; border-radius: 6px;
@@ -200,10 +301,23 @@ let socket = null;
 let currentRunId = null, currentBatchId = null;
 let currentItemIndex = 0, testItems = [];
 let currentStationId = null, currentSlotId = null;
+let currentLinesScope = 'all';
+let currentEquipScope = 'all';
 
 document.addEventListener('DOMContentLoaded', function() {
     setupSocket();
-    loadStations();
+    var view = '{{ view }}';
+    if (view === 'lines') {
+        loadLinesList('all');
+    } else if (view === 'equipment') {
+        loadEquipmentsList('all');
+        // 如果 URL 有 line_id 参数，加载该线体的装备
+        var p = new URLSearchParams(window.location.search);
+        var li = p.get('line_id');
+        if (li) fetch('/api/stations?line_id=' + li).then(r=>r.json()).then(r=>renderEquipmentTable(r.data||[]));
+    } else {
+        loadLinesList('all');
+    }
 
     document.getElementById('barcode-form').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -219,13 +333,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') submitModalValue();
     });
 
-    // 点击页面其他位置关闭右键菜单
     document.addEventListener('click', function() {
         document.getElementById('context-menu').classList.add('d-none');
     });
     document.addEventListener('contextmenu', function() {
         document.getElementById('context-menu').classList.add('d-none');
     });
+
+    // 检查 URL 参数
+    const params = new URLSearchParams(window.location.search);
+    const eqId = params.get('equipment_id');
+    if (eqId) {
+        setTimeout(() => selectEquipment(parseInt(eqId)), 500);
+    }
 });
 
 function setupSocket() {
@@ -235,68 +355,226 @@ function setupSocket() {
     socket.on('run_failed', function(d) { addLog('测试失败: ' + (d.error||'未知'), 'error'); resetTestUI(); });
 }
 
-// ==================== 工站视图 ====================
+// ==================== 线体列表（我的/全部） ====================
 
-function loadStations() {
-    fetch('/api/stations')
+function switchLinesView(scope) {
+    currentLinesScope = scope;
+    document.querySelectorAll('#lines-panel .btn-group .btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('lines-' + scope + '-btn').classList.add('active');
+    loadLinesList(scope);
+}
+
+function loadLinesList(scope) {
+    fetch('/api/stations/lines?scope=' + scope)
         .then(r => r.json())
         .then(res => {
-            if (res.code === 0) renderStations(res.data);
+            const div = document.getElementById('lines-list');
+            if (!res.data || !res.data.length) {
+                div.innerHTML = '<p class="text-muted text-center small py-3">暂无线体</p>';
+                return;
+            }
+            div.innerHTML = `<table class="table table-hover mb-0"><thead><tr>
+                <th>线体名称</th><th>厂区</th><th>创建人</th></tr></thead><tbody>`
+                + res.data.map(l => `<tr style="cursor:pointer" onclick="loadEquipmentsForLine(${l.id})">
+                    <td><strong>${l.name}</strong>${l.code ? `<br><small class="text-muted">${l.code}</small>` : ''}</td>
+                    <td>${l.factory_name}</td>
+                    <td>${l.created_by || '-'}</td>
+                </tr>`).join('')
+                + `</tbody></table>`;
         });
 }
 
-function renderStations(stations) {
-    const container = document.getElementById('station-container');
-    container.innerHTML = '<div class="row">' + stations.map(s => `
-        <div class="col-md-6 col-lg-4 mb-3">
-            <div class="card station-card position-relative" onclick="selectStation(${s.id})">
-                ${s.has_settings ? `<span class="settings-badge" onclick="event.stopPropagation();openStationSettings(${s.id})" title="工站设置"><i class="bi bi-gear-fill text-secondary"></i></span>` : ''}
-                <div class="card-body text-center py-4">
-                    <i class="bi bi-hdd-stack" style="font-size:2.5rem;color:#0d6efd;"></i>
-                    <h5 class="mt-2 mb-1">${s.name}</h5>
-                    <small class="text-muted">${s.chassis_count} 个机框</small>
-                </div>
-            </div>
-        </div>
-    `).join('') + '</div>';
-    if (stations.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center">暂无工站，请由工艺工程师创建</p>';
+function loadEquipmentsForLine(lineId) {
+    // 如果在 lines 页面，跳转到 equipment 页面并带上 line_id 参数
+    if (window.location.pathname === '/lines') {
+        window.location.href = '/equipment?line_id=' + lineId;
+        return;
     }
+    // 高亮选中行
+    document.querySelectorAll('#lines-list tbody tr').forEach(el => el.classList.remove('table-active'));
+    if (event && event.currentTarget) event.currentTarget.classList.add('table-active');
+    // 加载该线体的装备
+    fetch('/api/stations?line_id=' + lineId)
+        .then(r => r.json())
+        .then(res => renderEquipmentTable(res.data || []));
 }
 
-function selectStation(stationId) {
+// ==================== 装备列表（我的/全部） ====================
+
+function switchEquipView(scope) {
+    currentEquipScope = scope;
+    document.querySelectorAll('#equipments-panel .btn-group .btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('equip-' + scope + '-btn').classList.add('active');
+    loadEquipmentsList(scope);
+}
+
+function editEquipment(id) {
+    // 加载装备详情
+    fetch('/api/stations/' + id).then(r=>r.json()).then(res => {
+        if (res.code !== 0) return;
+        const s = res.data;
+        document.getElementById('edit-equip-id').value = s.id;
+        document.getElementById('edit-equip-name').value = s.name;
+        document.getElementById('edit-equip-process').value = s.process_type || '';
+        document.getElementById('edit-equip-workstation').value = s.workstation || '';
+        document.getElementById('edit-equip-actuator').value = s.actuator || '';
+        document.getElementById('edit-equip-hw').value = s.hardware_code || '';
+        document.getElementById('edit-equip-sw').value = s.software_code || '';
+        // 加载线体列表
+        fetch('/api/stations/hierarchy').then(r=>r.json()).then(hRes => {
+            const lines = [];
+            (hRes.data||[]).forEach(f => (f.lines||[]).forEach(l => lines.push({id:l.id,name:l.name,factory:f.name})));
+            const opts = lines.map(l => `<option value="${l.id}">${l.name} (${l.factory})</option>`).join('');
+            document.getElementById('edit-equip-line').innerHTML = '<option value="">-- 请选择 --</option>' + opts;
+            document.getElementById('edit-equip-line').value = s.line_id || '';
+        });
+        new bootstrap.Modal(document.getElementById('equipEditModal')).show();
+    });
+}
+
+document.getElementById('save-edit-equip-btn').addEventListener('click', function() {
+    const id = document.getElementById('edit-equip-id').value;
+    const data = {
+        name: document.getElementById('edit-equip-name').value.trim(),
+        line_id: parseInt(document.getElementById('edit-equip-line').value) || null,
+        process_type: document.getElementById('edit-equip-process').value,
+        workstation: document.getElementById('edit-equip-workstation').value,
+        actuator: document.getElementById('edit-equip-actuator').value.trim(),
+        hardware_code: document.getElementById('edit-equip-hw').value.trim(),
+        software_code: document.getElementById('edit-equip-sw').value.trim(),
+    };
+    fetch('/api/stations/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+    }).then(r=>r.json()).then(res => {
+        if (res.code === 0) {
+            bootstrap.Modal.getInstance(document.getElementById('equipEditModal')).hide();
+            loadEquipmentsList(currentEquipScope);
+        } else {
+            alert(res.message);
+        }
+    });
+});
+
+function loadEquipmentsList(scope) {
+    fetch('/api/stations?scope=' + scope)
+        .then(r => r.json())
+        .then(res => renderEquipmentTable(res.data || []));
+}
+
+function renderEquipmentTable(stations) {
+    const div = document.getElementById('equipment-list');
+    if (!stations.length) {
+        div.innerHTML = '<p class="text-muted text-center small py-3">暂无装备</p>';
+        return;
+    }
+    div.innerHTML = `<table class="table table-hover mb-0"><thead><tr>
+        <th>装备名称</th><th>工序/工位</th><th>执行器</th><th>硬件编码</th><th>位置</th><th>创建人</th><th>操作</th>
+    </tr></thead><tbody>`
+        + stations.map(s => `<tr>
+            <td><strong>${s.name}</strong>${s.code ? `<br><small class="text-muted">${s.code}</small>` : ''}</td>
+            <td>${[s.process_type, s.workstation].filter(Boolean).join(' / ') || '-'}</td>
+            <td>${s.actuator || '-'}</td>
+            <td>${s.hardware_code || '-'}</td>
+            <td>${s.location || '-'}</td>
+            <td>${s.created_by || '-'}</td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="selectEquipment(${s.id})" title="查看"><i class="bi bi-eye"></i></button>
+                    <button class="btn btn-outline-primary" onclick="editEquipment(${s.id})" title="编辑"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-info" onclick="openStationSettings(${s.id})" title="参数配置"><i class="bi bi-gear"></i></button>
+                    <button class="btn btn-outline-warning" onclick="unbindEquipment(${s.id})" title="解除绑定"><i class="bi bi-link-45deg"></i></button>
+                    <button class="btn btn-outline-danger" onclick="deleteEquip(${s.id})" title="删除"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        </tr>`).join('')
+        + `</tbody></table>`;
+}
+
+function unbindEquipment(id) {
+    if (!confirm('确定解除该装备的绑定？')) return;
+    fetch(`/api/stations/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({line_id: null, definition_id: null}),
+    }).then(r => r.json()).then(res => {
+        if (res.code === 0) { loadEquipmentsList(currentEquipScope); loadLinesList(currentLinesScope); }
+    });
+}
+
+function deleteEquip(id) {
+    if (!confirm('确定删除该装备？')) return;
+    fetch(`/api/stations/${id}`, {method: 'DELETE'})
+        .then(r => r.json()).then(res => {
+            if (res.code === 0) { loadEquipmentsList(currentEquipScope); loadLinesList(currentLinesScope); }
+        });
+}
+
+// ==================== 装备视图（机框+槽位） ====================
+
+function selectEquipment(stationId) {
     currentStationId = stationId;
-    fetch(`/api/stations/${stationId}/chassis`)
+    fetch(`/api/stations/${stationId}/detail`)
         .then(r => r.json())
         .then(res => {
             if (res.code !== 0) return;
-            const container = document.getElementById('station-container');
-            container.innerHTML = renderChassisView(res.data);
+            document.getElementById('station-view').innerHTML = renderEquipmentDetail(res.data);
+            document.title = '测试执行 - ' + (res.data.station.name || '');
         });
 }
 
-function renderChassisView(chassisList) {
-    if (!chassisList || chassisList.length === 0) {
-        return `<p class="text-muted text-center">该工站暂无机框</p>`;
+function renderEquipmentDetail(detail) {
+    if (!detail || !detail.cabinets || detail.cabinets.length === 0) {
+        return `<p class="text-muted text-center">该装备暂无机柜</p>`;
     }
-    let html = `<div class="mb-2"><button class="btn btn-sm btn-outline-secondary" onclick="loadStations()"><i class="bi bi-arrow-left"></i> 返回工站列表</button></div>`;
-    chassisList.forEach(c => {
-        html += `<div class="chassis-box" oncontextmenu="showChassisMenu(event,${c.id},'${c.name}',${c.station_id})">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong><i class="bi bi-server"></i> ${c.name}</strong>
-                <small class="text-muted">${c.slot_count_actual} 个槽位</small>
+    const st = detail.station;
+    const stationId = st.id;
+    let html = `<div class="mb-2 d-flex justify-content-between align-items-center">
+        <button class="btn btn-sm btn-outline-secondary" onclick="goBackToStations()">
+            <i class="bi bi-arrow-left"></i> 返回
+        </button>
+        <span class="fs-6 px-3 py-2"><strong>${st.name}</strong></span>
+    </div>`;
+    // 测试工站（最外层）
+    html += `<div class="station-rect" oncontextmenu="showStationMenu(event,${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
+        <div class="station-header">
+            <strong><i class="bi bi-cpu"></i> ${st.name}</strong>
+            <div class="station-badges">
+                <span class="badge bg-info" onclick="event.stopPropagation();openStationSettings(${stationId})" title="装备参数"><i class="bi bi-gear"></i> 装备参数</span>
+                <span class="badge bg-secondary" onclick="event.stopPropagation();openStationSettings(${stationId})" title="硬件参数"><i class="bi bi-motherboard"></i> 硬件参数</span>
+                <span class="badge bg-primary" onclick="event.stopPropagation();openStationSettings(${stationId})" title="软件参数"><i class="bi bi-code-square"></i> 软件参数</span>
+                <span class="badge bg-warning text-dark" onclick="event.stopPropagation();openStationSettings(${stationId})" title="场景参数"><i class="bi bi-sliders"></i> 场景参数</span>
             </div>
-            <div>`;
-        (c.slots || []).forEach(s => {
-            html += `<div class="slot-item slot-${s.status}" onclick="selectSlot(${s.id},${c.station_id})" oncontextmenu="showSlotMenu(event,${s.id},${c.id},'${s.name}','${s.status}',${c.station_id})" title="${s.name}">
-                <div class="text-center">
-                    <div>${s.name.replace('槽位 ','S')}</div>
-                    <div style="font-size:.65rem">${statusLabel(s.status)}</div>
+        </div>`;
+    // 机柜（第二层）
+    detail.cabinets.forEach(cab => {
+        html += `<div class="cabinet-rect" oncontextmenu="showCabinetMenu(event,${cab.id},'${cab.name}',${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
+            <div class="cabinet-header">
+                <strong><i class="bi bi-layers"></i> ${cab.name}</strong>
+            </div>
+            <div class="cabinet-body">`;
+        // 机框（第三层）
+        (cab.chassis || []).forEach(ch => {
+            html += `<div class="chassis-rect" oncontextmenu="showChassisMenu(event,${ch.id},'${ch.name}',${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
+                <div class="chassis-header">
+                    <strong><i class="bi bi-server"></i> ${ch.name}</strong>
+                    <small class="text-muted">${ch.slot_count_actual} 槽位</small>
                 </div>
-            </div>`;
+                <div class="chassis-slots">`;
+            (ch.slots || []).forEach(s => {
+                html += `<div class="slot-item slot-${s.status}" onclick="selectSlot(${s.id},${stationId})" oncontextmenu="showSlotMenu(event,${s.id},${ch.id},'${s.name}','${s.status}',${stationId})" title="${s.name}">
+                    <div class="text-center">
+                        <div>${s.name.replace('槽位 ','S')}</div>
+                        <div style="font-size:.65rem">${statusLabel(s.status)}</div>
+                    </div>
+                </div>`;
+            });
+            html += `</div></div>`;
         });
         html += `</div></div>`;
     });
+    html += `</div>`;
     return html;
 }
 
@@ -310,6 +588,7 @@ function showContextMenu(event, title, items) {
     const container = document.getElementById('ctx-items');
     container.innerHTML = items.map(item => {
         if (item.divider) return '<div class="context-menu-divider"></div>';
+        if (item.disabled) return '<div class="context-menu-item disabled-label" style="cursor:default;opacity:.55;font-style:italic;font-size:.8rem;padding:3px 14px">' + item.label + '</div>';
         const cls = item.danger ? ' context-menu-item danger' : ' context-menu-item';
         return `<div class="${cls}" onclick="event.stopPropagation();${item.action}">${item.icon||''} ${item.label}</div>`;
     }).join('');
@@ -322,6 +601,84 @@ function showContextMenu(event, title, items) {
     menu.classList.remove('d-none');
 }
 
+function quickAddEquipment(event, lineName, lineId) {
+    fetch('/api/stations/definitions').then(r=>r.json()).then(defRes => {
+        let defId = null;
+        if (defRes.data && defRes.data.length > 0) {
+            let dpStr = '选择装备定义（或取消以手动输入）：\n';
+            defRes.data.forEach((d, i) => { dpStr += `${i+1}. ${d.name} (v${d.current_version})\n`; });
+            const defIdx = parseInt(prompt(dpStr + '为线体 "' + lineName + '" 新增装备\n请输入编号（或取消以手动输入）：')) - 1;
+            if (!isNaN(defIdx) && defIdx >= 0 && defIdx < defRes.data.length) {
+                defId = defRes.data[defIdx].id;
+            }
+        }
+        let name = '';
+        if (defId) {
+            const def = defRes.data.find(d => d.id === defId);
+            name = prompt('装备名称（默认使用定义名称）：', def ? def.name : '') || (def ? def.name : '');
+        } else {
+            name = prompt(`为线体 "${lineName}" 新增装备，请输入装备名称：`);
+        }
+        if (!name) return;
+        fetch('/api/stations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, line_id: lineId, definition_id: defId, description: ''}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) { loadLinesList(currentLinesScope); loadEquipmentsList(currentEquipScope); }
+            else { alert(res.message); }
+        });
+    });
+}
+
+function showEquipmentMenu(event, stationId) {
+    showContextMenu(event, '装备操作', [
+        { label: '进入测试', icon: '<i class="bi bi-play-circle"></i>', action: `selectEquipment(${stationId})` },
+        { label: '编辑基本信息', icon: '<i class="bi bi-pencil"></i>', action: `editEquipment(${stationId})` },
+        { label: '参数配置', icon: '<i class="bi bi-gear"></i>', action: `openStationSettings(${stationId})` },
+        { label: '版本更新', icon: '<i class="bi bi-cloud-arrow-up"></i>', action: `updateVersion(${stationId})` },
+        { divider: true },
+        { label: '测试日志', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '测试结果', icon: '<i class="bi bi-file-text"></i>', action: `goto('/logs')` },
+        { divider: true },
+        { label: '系统初始化', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+    ]);
+}
+
+function updateVersion(stationId) {
+    fetch(`/api/stations/${stationId}/version-check`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const d = res.data;
+        if (!d.needs_update) { alert(`已是最新版本 v${d.deployed_version}`); return; }
+        if (!confirm(`当前版本 v${d.deployed_version}，最新版本 v${d.latest_version}，确定更新？`)) return;
+        fetch(`/api/stations/${stationId}/update-version`, {method:'POST'})
+            .then(r=>r.json()).then(r2=>{ alert(r2.message); loadLinesList(currentLinesScope); loadEquipmentsList(currentEquipScope); });
+    });
+}
+
+function showStationMenu(event, stationId) {
+    showContextMenu(event, '测试工站', [
+        { label: '系统初始化', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartStation(${stationId})` },
+    ]);
+}
+
+function showCabinetMenu(event, cabinetId, cabinetName, stationId) {
+    showContextMenu(event, '机柜: ' + cabinetName, [
+        { label: '系统初始化', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartCabinet(${cabinetId})` },
+        { divider: true },
+        { label: '系统初始化（工站）', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')`, danger: true },
+        { label: '测试日志（工站）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号（工站）', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启（工站）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartStation(${stationId})` },
+    ]);
+}
+
 function showChassisMenu(event, chassisId, chassisName, stationId) {
     showContextMenu(event, '机框: ' + chassisName, [
         { label: '系统初始化', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
@@ -331,6 +688,17 @@ function showChassisMenu(event, chassisId, chassisName, stationId) {
         { divider: true },
         { label: '禁用所有槽位', icon: '<i class="bi bi-slash-circle"></i>', action: `toggleAllSlots(${chassisId},false)` },
         { label: '启用所有槽位', icon: '<i class="bi bi-check-circle"></i>', action: `toggleAllSlots(${chassisId},true)` },
+        { divider: true },
+        { label: '— 机柜级操作 —', icon: '', action: '', disabled: true },
+        { label: '系统初始化（机柜）', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志（机柜）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '强制重启（机柜）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `goto('/init')` },
+        { divider: true },
+        { label: '— 工站级操作 —', icon: '', action: '', disabled: true },
+        { label: '系统初始化（工站）', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志（工站）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号（工站）', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启（工站）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartStation(${stationId})` },
     ]);
 }
 
@@ -346,6 +714,21 @@ function showSlotMenu(event, slotId, chassisId, slotName, status, stationId) {
         { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartSlot(${slotId})` },
         { divider: true },
         { label: isDisabled ? '启用槽位' : '禁用槽位', icon: '<i class="bi bi-' + (isDisabled ? 'check-circle' : 'x-circle') + '"></i>', action: `toggleSlot(${slotId},${!isDisabled})`, danger: !isDisabled },
+        { divider: true },
+        { label: '— 机框级操作 —', icon: '', action: '', disabled: true },
+        { label: '禁用所有槽位', icon: '<i class="bi bi-slash-circle"></i>', action: `toggleAllSlots(${chassisId},false)` },
+        { label: '启用所有槽位', icon: '<i class="bi bi-check-circle"></i>', action: `toggleAllSlots(${chassisId},true)` },
+        { label: '强制重启（机框）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartChassis(${chassisId})` },
+        { divider: true },
+        { label: '— 机柜级操作 —', icon: '', action: '', disabled: true },
+        { label: '系统初始化（机柜）', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志（机柜）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { divider: true },
+        { label: '— 工站级操作 —', icon: '', action: '', disabled: true },
+        { label: '系统初始化（工站）', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志（工站）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号（工站）', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启（工站）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartStation(${stationId})` },
     ]);
 }
 
@@ -353,31 +736,58 @@ function showSlotMenu(event, slotId, chassisId, slotName, status, stationId) {
 
 function goto(url) { window.location.href = url; }
 
+function forceRestartStation(stationId) {
+    if (!confirm('确定强制重启该测试工站的所有槽位？')) return;
+    fetch(`/api/stations/${stationId}/detail`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const promises = [];
+        (res.data.cabinets||[]).forEach(cab => (cab.chassis||[]).forEach(ch => (ch.slots||[]).forEach(s => {
+            promises.push(fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) }));
+        })));
+        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+    });
+}
+
+function forceRestartCabinet(cabinetId) {
+    if (!confirm('确定强制重启该机柜下的所有槽位？')) return;
+    // cabinetId is not directly fetchable; re-fetch detail and filter
+    fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const cab = (res.data.cabinets||[]).find(c=>c.id===cabinetId);
+        if (!cab) return;
+        const promises = [];
+        (cab.chassis||[]).forEach(ch => (ch.slots||[]).forEach(s => {
+            promises.push(fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) }));
+        }));
+        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+    });
+}
+
 function forceRestartChassis(chassisId) {
     if (!confirm('确定强制重启该机框下的所有槽位？')) return;
-    fetch(`/api/stations/${currentStationId}/chassis`)
-        .then(r=>r.json()).then(res=>{
-            if (res.code !== 0) return;
-            const chassis = res.data.find(c=>c.id===chassisId);
-            if (!chassis) return;
-            const promises = (chassis.slots||[]).map(s =>
-                fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
-            );
-            Promise.all(promises).then(()=>{ selectStation(currentStationId); });
-        });
+    fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        let chassis = null;
+        (res.data.cabinets||[]).forEach(cab => (cab.chassis||[]).forEach(ch => { if (ch.id===chassisId) chassis=ch; }));
+        if (!chassis) return;
+        const promises = (chassis.slots||[]).map(s =>
+            fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
+        );
+        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+    });
 }
 
 function toggleAllSlots(chassisId, enable) {
-    fetch(`/api/stations/${currentStationId}/chassis`)
-        .then(r=>r.json()).then(res=>{
-            if (res.code !== 0) return;
-            const chassis = res.data.find(c=>c.id===chassisId);
-            if (!chassis) return;
-            const promises = (chassis.slots||[]).map(s =>
-                fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: enable ? 'idle' : 'disabled'}) })
-            );
-            Promise.all(promises).then(()=>{ selectStation(currentStationId); });
-        });
+    fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        let chassis = null;
+        (res.data.cabinets||[]).forEach(cab => (cab.chassis||[]).forEach(ch => { if (ch.id===chassisId) chassis=ch; }));
+        if (!chassis) return;
+        const promises = (chassis.slots||[]).map(s =>
+            fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: enable ? 'idle' : 'disabled'}) })
+        );
+        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+    });
 }
 
 function scanTest(slotId, stationId) {
@@ -387,29 +797,28 @@ function scanTest(slotId, stationId) {
 
 function loadBoard(slotId) {
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle'}) })
-        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+        .then(()=>{ selectEquipment(currentStationId); });
 }
 
 function stopSlotTest(slotId) {
     if (!confirm('确定停止该槽位的测试？')) return;
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
-        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+        .then(()=>{ selectEquipment(currentStationId); });
 }
 
 function slotResults(slotId) {
-    // 跳转到日志页并查询该槽位相关结果
     window.location.href = '/logs?slot_id=' + slotId;
 }
 
 function forceRestartSlot(slotId) {
     if (!confirm('确定强制重启该槽位？')) return;
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
-        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+        .then(()=>{ loadHierarchy(); });
 }
 
 function toggleSlot(slotId, disable) {
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: disable ? 'disabled' : 'idle'}) })
-        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+        .then(()=>{ selectEquipment(currentStationId); });
 }
 
 function statusLabel(st) {
@@ -442,11 +851,47 @@ function goBackToStations() {
     switchView('station-view');
     currentSlotId = null;
     currentRunId = null;
+    // 恢复布局
+    const isEquipOnly = window.location.pathname === '/equipment';
+    const isLinesOnly = window.location.pathname === '/lines';
+    let html = '';
+    if (!isEquipOnly) {
+        html += `<div class="col-md-12 mb-3" id="lines-panel">
+            <div class="card">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-pin-angle"></i> <strong>线体</strong></span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary active" id="lines-mine-btn" onclick="switchLinesView('mine')">我的线体</button>
+                        <button class="btn btn-outline-primary" id="lines-all-btn" onclick="switchLinesView('all')">全部线体</button>
+                    </div>
+                </div>
+                <div class="card-body p-0" id="lines-list" style="max-height:calc(100vh - 160px);overflow-y:auto;"><p class="text-muted text-center small py-3">加载中...</p></div>
+            </div>
+        </div>`;
+    }
+    if (!isLinesOnly) {
+        html += `<div class="col-md-12 mb-3" id="equipments-panel">
+            <div class="card">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-hdd-stack"></i> <strong>装备</strong></span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary active" id="equip-mine-btn" onclick="switchEquipView('mine')">我的装备</button>
+                        <button class="btn btn-outline-primary" id="equip-all-btn" onclick="switchEquipView('all')">全部装备</button>
+                    </div>
+                </div>
+                <div class="card-body p-0" id="equipment-list" style="max-height:calc(100vh - 160px);overflow-y:auto;"><p class="text-muted text-center small py-3">加载中...</p></div>
+            </div>
+        </div>`;
+    }
+    document.getElementById('station-view').innerHTML = html;
+    if (!isEquipOnly) loadLinesList(currentLinesScope);
+    if (!isLinesOnly) loadEquipmentsList(currentEquipScope);
 }
 
 function switchView(viewId) {
     document.getElementById('station-view').classList.toggle('d-none', viewId !== 'station-view');
     document.getElementById('test-exec-view').classList.toggle('d-none', viewId !== 'test-exec-view');
+    if (viewId === 'station-view') { document.title = '测试执行 - 选择装备'; }
 }
 
 function openStationSettings(stationId) {
@@ -458,7 +903,12 @@ function openStationSettings(stationId) {
 function startTestRun() {
     const serial = document.getElementById('barcode-input').value.trim();
     if (!serial) return;
-    const data = { operator: document.getElementById('operator-display').textContent, serial_number: serial };
+    const data = {
+        operator: document.getElementById('operator-display').textContent,
+        serial_number: serial,
+        station_id: currentStationId,
+        slot_id: currentSlotId,
+    };
 
     document.getElementById('barcode-form').querySelector('button[type=submit]').classList.add('d-none');
     document.getElementById('stop-btn').classList.remove('d-none');

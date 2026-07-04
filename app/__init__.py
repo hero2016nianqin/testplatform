@@ -55,6 +55,7 @@ def create_app(config_object=None):
     # 导入数据模型（确保它们在 SQLAlchemy 中注册），然后自动建表
     from app.models import TestItem, TestResult, TestConfig, TestRun, User
     from app.models.station import (
+        Factory, ProductionLine,
         TestStation, TestChassis, TestSlot,
         EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
     )

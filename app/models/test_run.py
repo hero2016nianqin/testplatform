@@ -36,6 +36,11 @@ class TestRun(db.Model):
     started_at = db.Column(db.DateTime, nullable=True)
     # 结束时间
     ended_at = db.Column(db.DateTime, nullable=True)
+    # 关联的工站 ID 和槽位 ID（方便按装备/槽位查询）
+    station_id = db.Column(db.Integer, db.ForeignKey('test_stations.id'),
+                           nullable=True, index=True)
+    slot_id = db.Column(db.Integer, db.ForeignKey('test_slots.id'),
+                        nullable=True, index=True)
     # 记录创建时间
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

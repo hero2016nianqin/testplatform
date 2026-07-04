@@ -5,7 +5,7 @@
     <div class="col-12 mb-3">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-gear-wide-connected"></i> <span id="station-name">工站设置</span></h5>
-            <a href="/test" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回测试</a>
+            <a href="/equipment" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回装备</a>
         </div>
     </div>
 </div>
@@ -55,15 +55,15 @@
                     <div class="col-md-6">
                         <label class="form-label small">测试模式</label>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="eq-mode-normal" checked>
+                            <input class="form-check-input" type="radio" name="test-mode" id="eq-mode-normal" value="normal" checked>
                             <label class="form-check-label">正常测试</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="eq-mode-verify">
+                            <input class="form-check-input" type="radio" name="test-mode" id="eq-mode-verify" value="verify">
                             <label class="form-check-label">验证测试</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="eq-mode-cal">
+                            <input class="form-check-input" type="radio" name="test-mode" id="eq-mode-cal" value="calibration">
                             <label class="form-check-label">校准测试</label>
                         </div>
                     </div>
@@ -193,9 +193,9 @@ function loadEquipment() {
         document.getElementById('eq-process-control').checked = d.process_control_enabled;
         document.getElementById('eq-ip').value = d.equipment_ip || '';
         document.getElementById('eq-service-addr').value = d.equipment_service_address || '';
-        document.getElementById('eq-mode-normal').checked = d.test_mode_normal;
-        document.getElementById('eq-mode-verify').checked = d.test_mode_verify;
-        document.getElementById('eq-mode-cal').checked = d.test_mode_calibration;
+        if (d.test_mode_verify) document.getElementById('eq-mode-verify').checked = true;
+        else if (d.test_mode_calibration) document.getElementById('eq-mode-cal').checked = true;
+        else document.getElementById('eq-mode-normal').checked = true;
         document.getElementById('eq-barcode-verify').checked = d.barcode_verify_enabled;
     });
 }
@@ -210,6 +210,7 @@ function saveEquipment() {
         test_mode_normal: document.getElementById('eq-mode-normal').checked,
         test_mode_verify: document.getElementById('eq-mode-verify').checked,
         test_mode_calibration: document.getElementById('eq-mode-cal').checked,
+        test_mode: document.querySelector('input[name="test-mode"]:checked')?.value || 'normal',
         barcode_verify_enabled: document.getElementById('eq-barcode-verify').checked,
     };
     fetch(`/api/stations/${stationId}/equipment`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
