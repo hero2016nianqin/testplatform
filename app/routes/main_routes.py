@@ -35,6 +35,12 @@ def logs_page():
     return render_template('test_logs.html')
 
 
+@main_bp.route('/records')
+def records_page():
+    """测试记录页面 - R1/R2/R3 层级结构"""
+    return render_template('test_records.html')
+
+
 @main_bp.route('/settings')
 def settings_page():
     """参数设置页面 - 管理测试项、导入/导出配置方案"""

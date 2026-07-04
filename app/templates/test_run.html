@@ -138,6 +138,7 @@
 
 <!-- 实时日志面板（底部固定，全宽） -->
 <div class="log-panel d-none" id="log-panel">
+    <div class="log-panel-resize-handle" id="log-resize-handle"></div>
     <div class="log-panel-body">
         <div class="log-panel-sidebar" id="log-filter-bar">
             <button class="log-filter-btn active" data-level="all" onclick="filterLogs('all')" title="全部"><span class="dot dot-all"></span> 全部</button>
@@ -188,6 +189,11 @@
 .chassis-rect { border: 2px solid #198754; border-radius: 8px; padding: 10px; background: #f0fff4; }
 .chassis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #19875433; }
 .chassis-slots { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 单元素时内层大小接近外层 */
+.station-rect.single-cab { padding: 8px; }
+.station-rect.single-cab .cabinet-rect { padding: 8px; }
+.station-rect.single-cab .chassis-rect { padding: 6px; font-size: .85rem; }
+.station-rect.single-cab .slot-item { width: 80px; height: 66px; }
 .slot-item {
     position: relative; overflow: hidden;
     display: inline-flex; align-items: center; justify-content: center;
@@ -206,7 +212,7 @@
 .slot-testing { background: #cff4fc; color: #055160; border-color: #9eeaf9; }
 .slot-pass { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
 .slot-fail { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
-.slot-disabled { background: #e9ecef; color: #adb5bd; opacity: .5; }
+.slot-disabled { background: #e9ecef; color: #adb5bd; opacity: .5; cursor: default !important; }
 .slot-selected { border-color: #0d6efd !important; box-shadow: 0 0 0 3px rgba(13,110,253,.2); }
 .settings-badge {
     position: absolute; top: 8px; right: 8px; cursor: pointer;
@@ -226,6 +232,10 @@
     flex-direction: column;
 }
 .log-panel.d-none { display: none; }
+.log-panel-resize-handle {
+    height: 5px; background: #2a2a4e; cursor: ns-resize; flex-shrink: 0;
+}
+.log-panel-resize-handle:hover { background: #0d6efd; }
 .log-panel-body {
     display: flex;
     flex: 1;
@@ -387,9 +397,6 @@ document.addEventListener('DOMContentLoaded', function() {
         loadLinesList('all');
     }
 
-
-
-
     document.addEventListener('click', function() {
         document.getElementById('context-menu').classList.add('d-none');
     });
@@ -436,13 +443,14 @@ function loadLinesList(scope) {
         .then(r => r.json())
         .then(res => {
             const div = document.getElementById('lines-list');
-            if (!res.data || !res.data.length) {
+            var list = res.data || [];
+            if (!list.length) {
                 div.innerHTML = '<p class="text-muted text-center small py-3">暂无线体</p>';
                 return;
             }
             div.innerHTML = `<table class="table table-hover mb-0"><thead><tr>
                 <th>线体名称</th><th>厂区</th><th>创建人</th></tr></thead><tbody>`
-                + res.data.map(l => `<tr style="cursor:pointer" onclick="loadEquipmentsForLine(${l.id})">
+                + list.map(l => `<tr style="cursor:pointer" onclick="loadEquipmentsForLine(${l.id})">
                     <td><strong>${l.name}</strong>${l.code ? `<br><small class="text-muted">${l.code}</small>` : ''}</td>
                     <td>${l.factory_name}</td>
                     <td>${l.created_by || '-'}</td>
@@ -527,7 +535,10 @@ document.getElementById('save-edit-equip-btn').addEventListener('click', functio
 function loadEquipmentsList(scope) {
     fetch('/api/stations?scope=' + scope)
         .then(r => r.json())
-        .then(res => renderEquipmentTable(res.data || []));
+        .then(res => {
+            var list = res.data || [];
+            renderEquipmentTable(list);
+        });
 }
 
 function renderEquipmentTable(stations) {
@@ -595,6 +606,21 @@ function selectEquipment(stationId) {
             if (st.factory_name && typeof setFactoryLocked === 'function') {
                 setFactoryLocked(st.factory_name);
             }
+            // 打印装备参数到日志
+            fetch(`/api/stations/${stationId}/equipment`).then(r=>r.json()).then(cfg=>{
+                if (cfg.code !== 0 || !cfg.data) return;
+                const d = cfg.data;
+                let modes = [];
+                if (d.test_mode_normal) modes.push('正常测试');
+                if (d.test_mode_verify) modes.push('验证测试');
+                if (d.test_mode_calibration) modes.push('校准测试');
+                addLogEntry('info', `装备 IP: ${d.equipment_ip || '-'}`);
+                addLogEntry('info', `测试模式: ${modes.join(', ') || '无'}`);
+                addLogEntry('info', `条码校验: ${d.barcode_verify_enabled ? '开启' : '关闭'}`);
+                addLogEntry('info', `自动上板: ${d.auto_load_enabled ? '开启' : '关闭'}`);
+                addLogEntry('info', `调试模式: ${d.debug_mode_enabled ? '开启' : '关闭'}`);
+                addLogEntry('info', `工序管控: ${d.process_control_enabled ? '开启' : '关闭'}`);
+            });
         });
 }
 
@@ -605,8 +631,9 @@ function renderEquipmentDetail(detail) {
     const st = detail.station;
     const stationId = st.id;
     let html = '';
+    const isSingleCab = detail.cabinets.length === 1 && detail.cabinets[0].chassis.length === 1;
     // 测试工站（最外层）
-    html += `<div class="station-rect" oncontextmenu="showStationMenu(event,${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
+    html += `<div class="station-rect${isSingleCab ? ' single-cab' : ''}" oncontextmenu="showStationMenu(event,${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
         <div class="station-header">
             <strong class="station-name"><i class="bi bi-cpu"></i> ${st.name}</strong>
             <div class="station-badges">
@@ -630,7 +657,9 @@ function renderEquipmentDetail(detail) {
                 <div class="chassis-slots">`;
             (ch.slots || []).forEach(s => {
                 const fillColor = s.status === 'fail' ? '#f1aeb5' : (s.status === 'pass' ? '#a3cfbb' : '#9eeaf9');
-                html += `<div class="slot-item slot-${s.status}" id="slot-${s.id}" ondblclick="openBarcodeModal(${s.id},${stationId})" oncontextmenu="showSlotMenu(event,${s.id},${ch.id},'${s.name}','${s.status}',${stationId})" title="${s.name}">
+                const isDisabled = s.status === 'disabled';
+                const dblclick = isDisabled ? '' : `ondblclick="openBarcodeModal(${s.id},${stationId})"`;
+                html += `<div class="slot-item slot-${s.status}" id="slot-${s.id}" ${dblclick} oncontextmenu="showSlotMenu(event,${s.id},${ch.id},'${s.name}','${s.status}',${stationId})" title="${s.name}">
                     <div class="slot-progress-fill" id="slot-fill-${s.id}" style="height:${s.status==='pass'||s.status==='fail'?'100':'0'}%;background:${fillColor}"></div>
                     <div class="slot-content text-center">
                         <div>${s.name.replace('槽位 ','S')}</div>
@@ -785,6 +814,12 @@ function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFa
             fillEl.style.background = finalPassed ? '#a3cfbb' : '#f1aeb5';
             fillEl.style.height = '100%';
         }
+        // 更新槽位状态文字
+        const slotEl = document.getElementById('slot-' + slotId);
+        if (slotEl) {
+            const labelEl = slotEl.querySelector('.slot-content div:last-child');
+            if (labelEl) labelEl.textContent = statusLabel(newStatus);
+        }
         return;
     }
     const item = items[index];
@@ -895,6 +930,31 @@ function exportLogs() {
     URL.revokeObjectURL(a.href);
 }
 
+// 日志面板拖拽调整高度（手动后程序不再自动改变）
+let logResizing = false;
+let logStartY = 0, logStartH = 0;
+document.addEventListener('mousedown', function(e) {
+    const handle = e.target.closest('#log-resize-handle');
+    if (!handle) return;
+    logResizing = true;
+    logStartY = e.clientY;
+    logStartH = document.getElementById('log-panel').offsetHeight;
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+});
+document.addEventListener('mousemove', function(e) {
+    if (!logResizing) return;
+    const panel = document.getElementById('log-panel');
+    const newH = Math.max(100, Math.min(window.innerHeight * 0.6, logStartH - (e.clientY - logStartY)));
+    panel.style.height = newH + 'px';
+});
+document.addEventListener('mouseup', function() {
+    if (logResizing) {
+        logResizing = false;
+        document.body.style.cursor = '';
+    }
+});
+
 function showEquipmentMenu(event, stationId) {
     showContextMenu(event, '装备操作', [
         { label: '进入测试', icon: '<i class="bi bi-play-circle"></i>', action: `selectEquipment(${stationId})` },
@@ -969,10 +1029,15 @@ function showChassisMenu(event, chassisId, chassisName, stationId) {
 function showSlotMenu(event, slotId, chassisId, slotName, status, stationId) {
     const isDisabled = status === 'disabled';
     const isTesting = status === 'testing';
-    showContextMenu(event, '槽位: ' + slotName, [
-        { label: '扫码测试', icon: '<i class="bi bi-upc-scan"></i>', action: `scanTest(${slotId},${stationId})` },
-        { label: '上板', icon: '<i class="bi bi-box-arrow-in-down"></i>', action: `loadBoard(${slotId})` },
-        { divider: true },
+    const menuItems = [];
+    if (!isDisabled) {
+        menuItems.push(
+            { label: '扫码测试', icon: '<i class="bi bi-upc-scan"></i>', action: `scanTest(${slotId},${stationId})` },
+            { label: '上板', icon: '<i class="bi bi-box-arrow-in-down"></i>', action: `loadBoard(${slotId})` },
+            { divider: true },
+        );
+    }
+    menuItems.push(
         ...(isTesting ? [{ label: '停止测试', icon: '<i class="bi bi-stop-circle"></i>', action: `stopSlotTest(${slotId})`, danger: true }] : []),
         { label: '测试结果', icon: '<i class="bi bi-file-text"></i>', action: `slotResults(${slotId})` },
         { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartSlot(${slotId})` },
@@ -993,7 +1058,7 @@ function showSlotMenu(event, slotId, chassisId, slotName, status, stationId) {
         { label: '测试日志（工站）', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
         { label: '切换账号（工站）', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
         { label: '强制重启（工站）', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartStation(${stationId})` },
-    ]);
+    );
 }
 
 // ==================== 右键菜单操作 ====================

@@ -191,6 +191,7 @@ class TestStation(db.Model):
             'has_settings': self.has_settings,
             'sort_order': self.sort_order,
             'chassis_count': self.chassis.count(),
+            'factory_id': self.line.factory_id if self.line else None,
             'line_name': self.line.name if self.line else '',
             'factory_name': self.line.factory.name if self.line and self.line.factory else '',
             'definition_name': self.definition.name if self.definition else '',

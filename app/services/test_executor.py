@@ -29,13 +29,15 @@ class TestExecutor:
     def __init__(self, operator: str, serial_number: str = '',
                  product_type: str = '', config_id: Optional[int] = None,
                  station_id: Optional[int] = None,
-                 slot_id: Optional[int] = None):
+                 slot_id: Optional[int] = None,
+                 task_order: str = ''):
         self.operator = operator
         self.serial_number = serial_number
         self.product_type = product_type
         self.config_id = config_id
         self.station_id = station_id
         self.slot_id = slot_id
+        self.task_order = task_order
         self.test_run = None
         self._progress_callback = None
 
@@ -76,6 +78,7 @@ class TestExecutor:
             operator=self.operator,
             serial_number=self.serial_number,
             product_type=self.product_type,
+            task_order=self.task_order,
             status='running',
             started_at=datetime.utcnow(),
             station_id=self.station_id,

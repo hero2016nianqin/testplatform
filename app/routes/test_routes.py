@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from app import db
-from app.models import TestItem, TestResult, TestRun
+from app.models import TestItem, TestResult, TestRun, TestStation
 from app.auth import login_required, process_required
 from app.services.test_executor import TestExecutor
 
@@ -144,6 +144,7 @@ def start_test_run():
     config_id = data.get('config_id')
     station_id = data.get('station_id')
     slot_id = data.get('slot_id')
+    task_order = data.get('task_order', '')
 
     executor = TestExecutor(
         operator=operator,
@@ -152,6 +153,7 @@ def start_test_run():
         config_id=config_id,
         station_id=station_id,
         slot_id=slot_id,
+        task_order=task_order,
     )
     run = executor.start_run()
     return jsonify({
@@ -259,6 +261,73 @@ def get_run_results(run_id):
         'data': [r.to_dict() for r in results],
         'total': len(results),
     })
+
+
+@test_bp.route('/records', methods=['GET'])
+def get_test_records():
+    """
+    获取 R1/R2/R3 层级测试记录
+    参数: station_id, status, date_from, date_to, serial, limit, offset
+    """
+    query = TestRun.query
+    station_id = request.args.get('station_id', type=int)
+    if station_id:
+        query = query.filter_by(station_id=station_id)
+    status = request.args.get('status')
+    if status:
+        query = query.filter_by(status=status)
+    date_from = request.args.get('date_from')
+    if date_from:
+        query = query.filter(TestRun.created_at >= date_from)
+    date_to = request.args.get('date_to')
+    if date_to:
+        query = query.filter(TestRun.created_at <= date_to + ' 23:59:59')
+    serial = request.args.get('serial')
+    if serial:
+        query = query.filter(TestRun.serial_number.ilike(f'%{serial}%'))
+    task_order = request.args.get('task_order')
+    if task_order:
+        query = query.filter(TestRun.task_order.ilike(f'%{task_order}%'))
+    operator = request.args.get('operator')
+    if operator:
+        query = query.filter(TestRun.operator.ilike(f'%{operator}%'))
+
+    limit = min(request.args.get('limit', 50, type=int), 200)
+    offset = request.args.get('offset', 0, type=int)
+    total = query.count()
+    runs = query.order_by(TestRun.created_at.desc()).offset(offset).limit(limit).all()
+
+    data = []
+    for run in runs:
+        run_dict = run.to_dict()
+        station = TestStation.query.get(run.station_id)
+        if station:
+            line = station.line
+            run_dict['station_name'] = station.name
+            run_dict['process_type'] = station.process_type
+            run_dict['workstation'] = station.workstation
+            run_dict['line_name'] = line.name if line else None
+            run_dict['factory_name'] = line.factory.name if line and line.factory else None
+        else:
+            run_dict['station_name'] = None
+            run_dict['process_type'] = None
+            run_dict['workstation'] = None
+            run_dict['line_name'] = None
+            run_dict['factory_name'] = None
+        results = TestResult.query.filter_by(test_run_id=run.id).order_by(TestResult.id).all()
+        r2_list = []
+        for r in results:
+            r2 = r.to_dict()
+            # R3: detailed indicator info merged into r2
+            item = TestItem.query.get(r.test_item_id)
+            r2['item_detail'] = item.to_dict() if item else None
+            r2_list.append(r2)
+        data.append({
+            'run': run_dict,
+            'results': r2_list,
+        })
+
+    return jsonify({'code': 0, 'data': data, 'total': total})
 
 
 @test_bp.route('/categories', methods=['GET'])

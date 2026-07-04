@@ -20,6 +20,8 @@ class TestRun(db.Model):
     batch_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
     # 产品型号，用于区分不同产品的测试标准
     product_type = db.Column(db.String(100), default='')
+    # 任务令号（工单号）
+    task_order = db.Column(db.String(100), default='', index=True)
     # 被测产品序列号
     serial_number = db.Column(db.String(200), index=True)
     # 操作员姓名
@@ -53,6 +55,7 @@ class TestRun(db.Model):
             'id': self.id,
             'batch_id': self.batch_id,
             'product_type': self.product_type,
+            'task_order': self.task_order,
             'serial_number': self.serial_number,
             'operator': self.operator,
             'status': self.status,

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}测试记录 - 测试平台{% endblock %}
+{% block content %}
+<style>
+.r1-row { cursor: pointer; }
+.r1-row:hover { background: #e9ecef; }
+.r1-row td { vertical-align: middle; }
+.r2-table { margin: 0; font-size: .85rem; }
+.r2-table th { background: #f8f9fa; }
+.r3-table { font-size: .82rem; margin-bottom: 0; }
+.r3-table td { padding: 3px 8px; }
+</style>
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-journal-text"></i> 测试记录（R1/R2/R3）</h5>
+            <a href="/equipment" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回装备</a>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form id="record-filter" class="row g-2">
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" id="f-station">
+                    <option value="">全部装备</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" id="f-status">
+                    <option value="">全部状态</option>
+                    <option value="completed">已完成</option>
+                    <option value="failed">已失败</option>
+                    <option value="running">运行中</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control form-control-sm" id="f-serial" placeholder="序列号">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control form-control-sm" id="f-task-order" placeholder="任务令号">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control form-control-sm" id="f-operator" placeholder="操作员">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> 查询</button>
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-success btn-sm w-100" onclick="exportRecords()"><i class="bi bi-download"></i> 导出</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="records-container">
+    <p class="text-muted text-center">请输入查询条件后点击查询</p>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let recordsData = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/stations').then(r=>r.json()).then(res => {
+        if (res.code !== 0) return;
+        const sel = document.getElementById('f-station');
+        (res.data||[]).forEach(st => {
+            const opt = document.createElement('option');
+            opt.value = st.id; opt.textContent = st.name;
+            sel.appendChild(opt);
+        });
+    });
+    document.getElementById('record-filter').addEventListener('submit', function(e) {
+        e.preventDefault();
+        loadRecords();
+    });
+});
+
+function loadRecords() {
+    const params = new URLSearchParams();
+    const sid = document.getElementById('f-station').value;
+    if (sid) params.set('station_id', sid);
+    const st = document.getElementById('f-status').value;
+    if (st) params.set('status', st);
+    const serial = document.getElementById('f-serial').value.trim();
+    if (serial) params.set('serial', serial);
+    const to = document.getElementById('f-task-order').value.trim();
+    if (to) params.set('task_order', to);
+    const op = document.getElementById('f-operator').value.trim();
+    if (op) params.set('operator', op);
+    const container = document.getElementById('records-container');
+    container.innerHTML = '<p class="text-muted text-center">加载中...</p>';
+    fetch('/api/tests/records?' + params.toString()).then(r=>r.json()).then(res => {
+        if (res.code !== 0) { container.innerHTML = '<p class="text-danger">加载失败</p>'; return; }
+        recordsData = res.data || [];
+        if (!recordsData.length) { container.innerHTML = '<p class="text-muted text-center">暂无记录</p>'; return; }
+        renderR1();
+    });
+}
+
+function renderR1() {
+    let html = `<div class="table-responsive">
+        <table class="table table-sm table-hover table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:30px"></th>
+                    <th>批次号</th>
+                    <th>序列号</th>
+                    <th>任务令号</th>
+                    <th>测试装备</th>
+                    <th>线体</th>
+                    <th>厂区</th>
+                    <th>工位</th>
+                    <th>工序</th>
+                    <th>操作员</th>
+                    <th>开始时间</th>
+                    <th>结束时间</th>
+                    <th>测试项</th>
+                    <th>通过</th>
+                    <th>失败</th>
+                    <th>结果</th>
+                </tr>
+            </thead>
+            <tbody>`;
+    recordsData.forEach((item, ri) => {
+        const run = item.run;
+        const results = item.results || [];
+        const passCount = results.filter(r => r.passed).length;
+        const failCount = results.filter(r => !r.passed).length;
+        const total = results.length;
+        const runStatus = run.status === 'completed' ? (failCount > 0 ? '失败' : '通过') : (run.status === 'failed' ? '失败' : '运行中');
+        const statusCls = failCount > 0 ? 'danger' : (run.status === 'completed' ? 'success' : 'warning');
+        const startStr = run.started_at ? new Date(run.started_at).toLocaleString() : '-';
+        const endStr = run.ended_at ? new Date(run.ended_at).toLocaleString() : '-';
+        html += `<tr class="r1-row" onclick="toggleR2(${ri})">
+            <td><i class="bi bi-chevron-right" id="chevron-${ri}"></i></td>
+            <td><code>${run.batch_id || '-'}</code></td>
+            <td><strong>${run.serial_number || '-'}</strong></td>
+            <td>${run.task_order || '-'}</td>
+            <td>${run.station_name || '-'}</td>
+            <td>${run.line_name || '-'}</td>
+            <td>${run.factory_name || '-'}</td>
+            <td>${run.workstation || '-'}</td>
+            <td>${run.process_type || '-'}</td>
+            <td>${run.operator || '-'}</td>
+            <td style="font-size:.8rem">${startStr}</td>
+            <td style="font-size:.8rem">${endStr}</td>
+            <td>${total}</td>
+            <td class="text-success">${passCount}</td>
+            <td class="text-danger">${failCount}</td>
+            <td><span class="badge bg-${statusCls}">${runStatus}</span></td>
+        </tr>
+        <tr id="r2-row-${ri}" style="display:none">
+            <td colspan="16" style="padding:0;background:#f8f9fa">
+                <div id="r2-content-${ri}" style="padding:10px"></div>
+            </td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+    document.getElementById('records-container').innerHTML = html;
+}
+
+function toggleR2(ri) {
+    const row = document.getElementById('r2-row-' + ri);
+    const chevron = document.getElementById('chevron-' + ri);
+    if (!row) return;
+    const visible = row.style.display !== 'none';
+    row.style.display = visible ? 'none' : '';
+    chevron.className = visible ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
+    if (!visible && !row.dataset.loaded) {
+        row.dataset.loaded = '1';
+        renderR2(ri);
+    }
+}
+
+function renderR2(ri) {
+    const item = recordsData[ri];
+    const results = item.results || [];
+    const container = document.getElementById('r2-content-' + ri);
+    if (!results.length) {
+        container.innerHTML = '<p class="text-muted text-center mb-0">暂无测试结果</p>';
+        return;
+    }
+    let html = `<table class="table table-sm table-hover table-bordered r2-table mb-0">
+        <thead>
+            <tr><th style="width:30px"></th><th>测试项</th><th>结果</th><th>结束时间</th></tr>
+        </thead>
+        <tbody>`;
+    results.forEach((r, ri2) => {
+        const detail = r.item_detail || {};
+        const passed = r.passed;
+        const r3Id = `r3-${ri}-${ri2}`;
+        const testTime = r.tested_at ? new Date(r.tested_at).toLocaleString() : '-';
+        html += `<tr class="r1-row" onclick="toggleR3('${r3Id}')">
+            <td><i class="bi bi-chevron-right" id="chevron-${r3Id}"></i></td>
+            <td><strong>${detail.name || r.item_name || '-'}</strong></td>
+            <td><span class="badge bg-${passed ? 'success' : 'danger'}">${passed ? 'PASS' : 'FAIL'}</span></td>
+            <td style="font-size:.8rem">${testTime}</td>
+        </tr>
+        <tr id="${r3Id}" style="display:none">
+            <td colspan="4" style="padding:8px;background:#fff">
+                <table class="table table-sm table-bordered r3-table mb-0">
+                    <thead>
+                        <tr>${detail.name ? `<th>测试项</th>` : ''}<th>标准值</th><th>判定下限</th><th>判定上限</th><th>实测值</th><th>偏差</th><th>耗时</th><th>操作员</th><th>序列号</th><th>备注</th><th>结束时间</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>${detail.name ? `<td><strong>${detail.name}</strong></td>` : ''}<td>${detail.expected_value ?? '-'} ${detail.unit || ''}</td><td>${detail.min_value ?? '-'}</td><td>${detail.max_value ?? '-'}</td><td><strong>${r.actual_value}</strong></td><td>${r.deviation ?? '-'}</td><td>${r.duration_ms ?? 0} ms</td><td>${r.operator || '-'}</td><td>${r.serial_number || '-'}</td><td>${r.remark || '-'}</td><td>${r.tested_at ? new Date(r.tested_at).toLocaleString() : '-'}</td></tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+function toggleR3(r3Id) {
+    const row = document.getElementById(r3Id);
+    const chevron = document.getElementById('chevron-' + r3Id);
+    if (!row) return;
+    const visible = row.style.display !== 'none';
+    row.style.display = visible ? 'none' : '';
+    if (chevron) chevron.className = visible ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
+}
+
+function exportRecords() {
+    if (!recordsData.length) { alert('没有数据可以导出'); return; }
+    const rows = [['批次号','序列号','任务令号','测试装备','线体','厂区','工位','工序','操作员','开始时间','结束时间','测试项','通过','失败','结果']];
+    recordsData.forEach(item => {
+        const run = item.run;
+        const results = item.results || [];
+        const passCount = results.filter(r => r.passed).length;
+        const failCount = results.filter(r => !r.passed).length;
+        const total = results.length;
+        const runStatus = run.status === 'completed' ? (failCount > 0 ? '失败' : '通过') : (run.status === 'failed' ? '失败' : '运行中');
+        const startStr = run.started_at ? new Date(run.started_at).toLocaleString() : '-';
+        const endStr = run.ended_at ? new Date(run.ended_at).toLocaleString() : '-';
+        rows.push([
+            run.batch_id || '-',
+            run.serial_number || '-',
+            run.task_order || '-',
+            run.station_name || '-',
+            run.line_name || '-',
+            run.factory_name || '-',
+            run.workstation || '-',
+            run.process_type || '-',
+            run.operator || '-',
+            startStr, endStr,
+            total, passCount, failCount, runStatus
+        ]);
+    });
+    const csv = rows.map(r => r.map(v => typeof v === 'string' && (v.includes(',')||v.includes('"')) ? '"'+v.replace(/"/g,'""')+'"' : v).join(',')).join('\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '测试记录_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+</script>
+{% endblock %}
