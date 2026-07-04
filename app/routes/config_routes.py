@@ -4,6 +4,8 @@
 提供配置方案的 CRUD、激活切换、导入（支持 CSV/XLSX/JSON/XML）、
 导出和应用功能。配置方案可以保存当前测试项的完整快照，
 方便在不同产线或产品型号之间切换测试参数。
+
+权限说明：所有接口仅工艺工程师（process role）可访问。
 """
 
 import os
@@ -13,6 +15,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app import db
 from app.models import TestItem, TestConfig
+from app.auth import process_required
 from config.config_manager import ConfigManager, ConfigImportError
 
 # 配置管理蓝图，URL 前缀为 /api/configs
@@ -20,6 +23,7 @@ config_bp = Blueprint('configs', __name__)
 
 
 @config_bp.route('', methods=['GET'])
+@process_required
 def list_configs():
     """获取所有配置方案列表"""
     configs = TestConfig.query.order_by(TestConfig.updated_at.desc()).all()
@@ -31,6 +35,7 @@ def list_configs():
 
 
 @config_bp.route('', methods=['POST'])
+@process_required
 def create_config():
     """
     创建新的配置方案。
@@ -62,6 +67,7 @@ def create_config():
 
 
 @config_bp.route('/<int:config_id>', methods=['GET'])
+@process_required
 def get_config(config_id):
     """获取指定配置方案的详细信息（包含 config_data）"""
     config = TestConfig.query.get_or_404(config_id)
@@ -73,6 +79,7 @@ def get_config(config_id):
 
 
 @config_bp.route('/<int:config_id>/activate', methods=['POST'])
+@process_required
 def activate_config(config_id):
     """
     激活指定的配置方案。
@@ -90,6 +97,7 @@ def activate_config(config_id):
 
 
 @config_bp.route('/<int:config_id>', methods=['DELETE'])
+@process_required
 def delete_config(config_id):
     """删除指定的配置方案"""
     config = TestConfig.query.get_or_404(config_id)
@@ -99,6 +107,7 @@ def delete_config(config_id):
 
 
 @config_bp.route('/import', methods=['POST'])
+@process_required
 def import_config():
     """
     导入配置文件。
@@ -167,6 +176,7 @@ def import_config():
 
 
 @config_bp.route('/export', methods=['GET'])
+@process_required
 def export_config():
     """
     导出测试项为配置文件。
@@ -211,6 +221,7 @@ def export_config():
 
 
 @config_bp.route('/apply/<int:config_id>', methods=['POST'])
+@process_required
 def apply_config(config_id):
     """
     应用指定配置方案到系统。

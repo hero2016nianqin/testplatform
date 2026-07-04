@@ -7,9 +7,10 @@ Flask 应用工厂模块
 3. 初始化 SocketIO（实时通信）
 4. 初始化 CORS（跨域支持）
 5. 创建数据库表
-6. 注册所有路由蓝图
-7. 启动后台调度器
-8. 创建必要的文件目录
+6. 创建默认用户账号
+7. 注册所有路由蓝图
+8. 启动后台调度器
+9. 创建必要的文件目录
 """
 
 import os
@@ -43,22 +44,31 @@ def create_app(config_object=None):
     else:
         app.config.from_object(config_object)
 
+    # 设置 session 过期时间为 24 小时
+    app.config['PERMANENT_SESSION_LIFETIME'] = 86400
+
     # 初始化各扩展组件
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins='*')
     cors.init_app(app)
 
     # 导入数据模型（确保它们在 SQLAlchemy 中注册），然后自动建表
-    from app.models import TestItem, TestResult, TestConfig, TestRun
+    from app.models import TestItem, TestResult, TestConfig, TestRun, User
     with app.app_context():
         db.create_all()
+        # 如果没有用户数据，创建默认账号
+        from app.routes.auth_routes import seed_default_users
+        seed_default_users()
 
     # 注册各功能模块的路由蓝图，每个蓝图有独立的 URL 前缀
+    from app.routes.auth_routes import auth_bp
     from app.routes.test_routes import test_bp
     from app.routes.config_routes import config_bp
     from app.routes.log_routes import log_bp
     from app.routes.init_routes import init_bp
 
+    # 认证相关路由（登录页 + API）
+    app.register_blueprint(auth_bp)
     # API 路由组
     app.register_blueprint(test_bp, url_prefix='/api/tests')
     app.register_blueprint(config_bp, url_prefix='/api/configs')

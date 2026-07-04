@@ -3,6 +3,8 @@
 
 提供系统状态查询、示例数据初始化、系统重置和默认配置导入功能。
 用于首次部署时的快速初始化，或需要清空数据重新开始时的操作。
+
+权限说明：除 /status 外，所有接口仅工艺工程师（process role）可访问。
 """
 
 from datetime import datetime
@@ -10,6 +12,7 @@ from flask import Blueprint, request, jsonify
 
 from app import db
 from app.models import TestItem, TestConfig, TestResult, TestRun
+from app.auth import process_required
 from config.config_manager import ConfigManager
 
 # 初始化管理蓝图，URL 前缀为 /api/init
@@ -40,6 +43,7 @@ def init_status():
 
 
 @init_bp.route('/sample', methods=['POST'])
+@process_required
 def init_sample_data():
     """
     创建一组示例测试项，方便快速开始使用。
@@ -91,6 +95,7 @@ def init_sample_data():
 
 
 @init_bp.route('/reset', methods=['POST'])
+@process_required
 def reset_system():
     """
     重置系统，清空所有数据。
@@ -117,6 +122,7 @@ def reset_system():
 
 
 @init_bp.route('/import-defaults', methods=['POST'])
+@process_required
 def import_default_config():
     """
     通过上传配置文件来初始化系统。

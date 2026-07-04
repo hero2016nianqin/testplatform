@@ -214,6 +214,15 @@
 {% block extra_scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // 权限检查：非工艺工程师跳转到首页
+        fetch('/api/auth/me')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code !== 0 || res.data.role !== 'process') {
+                    window.location.href = '/';
+                }
+            });
+
         loadItems();
         loadConfigs();
         loadCategories();

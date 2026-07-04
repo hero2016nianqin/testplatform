@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify
 
 from app import db
 from app.models import TestItem, TestResult, TestRun
+from app.auth import login_required, process_required
 from app.services.test_executor import TestExecutor
 
 # 测试相关蓝图，URL 前缀为 /api/tests
@@ -45,8 +46,9 @@ def list_test_items():
 
 
 @test_bp.route('/items', methods=['POST'])
+@process_required
 def create_test_item():
-    """创建新的测试项"""
+    """创建新的测试项（仅工艺工程师）"""
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({'code': 1, 'message': 'name is required'}), 400
@@ -67,8 +69,9 @@ def create_test_item():
 
 
 @test_bp.route('/items/<int:item_id>', methods=['PUT'])
+@process_required
 def update_test_item(item_id):
-    """更新测试项的属性（包括启用/禁用状态）"""
+    """更新测试项的属性（包括启用/禁用状态，仅工艺工程师）"""
     item = TestItem.query.get_or_404(item_id)
     data = request.get_json()
     for field in ['name', 'description', 'unit', 'category']:
@@ -85,8 +88,9 @@ def update_test_item(item_id):
 
 
 @test_bp.route('/items/<int:item_id>', methods=['DELETE'])
+@process_required
 def delete_test_item(item_id):
-    """删除指定的测试项"""
+    """删除指定的测试项（仅工艺工程师）"""
     item = TestItem.query.get_or_404(item_id)
     db.session.delete(item)
     db.session.commit()
@@ -123,6 +127,7 @@ def list_test_runs():
 
 
 @test_bp.route('/runs', methods=['POST'])
+@login_required
 def start_test_run():
     """
     启动一个新的测试批次。
@@ -153,6 +158,7 @@ def start_test_run():
 
 
 @test_bp.route('/runs/<int:run_id>/results', methods=['POST'])
+@login_required
 def submit_result(run_id):
     """
     提交单个测试项的测试结果。
@@ -211,6 +217,7 @@ def submit_result(run_id):
 
 
 @test_bp.route('/runs/<run_id>', methods=['PUT'])
+@login_required
 def update_test_run(run_id):
     """
     更新测试批次状态（completed / failed）。

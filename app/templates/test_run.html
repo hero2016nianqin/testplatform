@@ -11,7 +11,7 @@
                 <form id="run-form">
                     <div class="mb-3">
                         <label class="form-label">操作员</label>
-                        <input type="text" class="form-control" id="operator" required>
+                        <input type="text" class="form-control" id="operator" readonly>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">序列号</label>
@@ -146,6 +146,15 @@
         loadConfigs();
         setupSocket();
 
+        // 从 session 中自动填充操作员信息
+        fetch('/api/auth/me')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code === 0 && res.data) {
+                    document.getElementById('operator').value = res.data.display_name;
+                }
+            });
+
         document.getElementById('run-form').addEventListener('submit', function(e) {
             e.preventDefault();
             startTestRun();
@@ -210,11 +219,6 @@
 
     function startTestRun() {
         const operator = document.getElementById('operator').value.trim();
-        if (!operator) {
-            alert('请输入操作员姓名');
-            return;
-        }
-
         const data = {
             operator: operator,
             serial_number: document.getElementById('serial-number').value.trim(),
