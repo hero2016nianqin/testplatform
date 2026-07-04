@@ -140,6 +140,21 @@
             if (typeof onFactorySelected === 'function') onFactorySelected(currentFactoryId);
         }
 
+        function setFactoryLocked(factoryName) {
+            const sel = document.getElementById('nav-factory-select');
+            if (!sel) return;
+            sel.disabled = true;
+            sel.innerHTML = `<option value="">${factoryName}</option>`;
+            sel.value = '';
+        }
+
+        function setFactoryUnlocked() {
+            const sel = document.getElementById('nav-factory-select');
+            if (!sel) return;
+            sel.disabled = false;
+            loadFactorySelector();
+        }
+
         // 页面加载时检查登录状态，控制导航显示
         document.addEventListener('DOMContentLoaded', function() {
             fetch('/api/auth/me')

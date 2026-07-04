@@ -137,16 +137,15 @@
 </div>
 
 <!-- 实时日志面板（底部固定，全宽） -->
-<div class="log-panel" id="log-panel">
-    <div class="log-panel-resize-handle" id="log-resize-handle"></div>
+<div class="log-panel d-none" id="log-panel">
     <div class="log-panel-body">
         <div class="log-panel-sidebar" id="log-filter-bar">
-            <button class="log-filter-btn active" data-level="all" onclick="filterLogs('all')" title="全部">全部</button>
-            <button class="log-filter-btn" data-level="debug" onclick="filterLogs('debug')" title="调试">调试</button>
-            <button class="log-filter-btn" data-level="info" onclick="filterLogs('info')" title="提示">提示</button>
-            <button class="log-filter-btn" data-level="warn" onclick="filterLogs('warn')" title="告警">告警</button>
-            <button class="log-filter-btn" data-level="error" onclick="filterLogs('error')" title="错误">错误</button>
-            <button class="log-filter-btn" data-level="fatal" onclick="filterLogs('fatal')" title="致命">致命</button>
+            <button class="log-filter-btn active" data-level="all" onclick="filterLogs('all')" title="全部"><span class="dot dot-all"></span> 全部</button>
+            <button class="log-filter-btn" data-level="debug" onclick="filterLogs('debug')" title="调试"><span class="dot dot-debug"></span> 调试</button>
+            <button class="log-filter-btn" data-level="info" onclick="filterLogs('info')" title="提示"><span class="dot dot-info"></span> 提示</button>
+            <button class="log-filter-btn" data-level="warn" onclick="filterLogs('warn')" title="告警"><span class="dot dot-warn"></span> 告警</button>
+            <button class="log-filter-btn" data-level="error" onclick="filterLogs('error')" title="错误"><span class="dot dot-error"></span> 错误</button>
+            <button class="log-filter-btn" data-level="fatal" onclick="filterLogs('fatal')" title="致命"><span class="dot dot-fatal"></span> 致命</button>
         </div>
         <div class="log-panel-content">
             <div class="log-panel-toolbar">
@@ -157,9 +156,7 @@
                     <button onclick="toggleLogPanel()"><i class="bi bi-eye-slash"></i> 隐藏</button>
                 </div>
             </div>
-            <div class="log-panel-entries" id="log-body">
-                <div class="log-entry"><span class="log-msg" style="color:#666;">启动日志系统...</span></div>
-            </div>
+            <div class="log-panel-entries" id="log-body"></div>
         </div>
     </div>
 </div>
@@ -178,9 +175,13 @@
 .station-rect { border: 3px solid #0d6efd; border-radius: 12px; padding: 16px; margin-bottom: 16px; background: #f8f9ff; max-width: 520px; }
 .detail-container { display: flex; justify-content: center; }
 .station-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #0d6efd33; }
-.station-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.station-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .station-badges .badge { cursor: pointer; font-size: .75rem; }
 .station-badges .badge:hover { filter: brightness(1.1); }
+.station-name { flex: 1; }
+
+    width: 0%;
+}
 .cabinet-rect { border: 2px solid #6f42c1; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #f8f0ff; }
 .cabinet-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #6f42c133; }
 .cabinet-body { display: flex; flex-direction: column; gap: 8px; }
@@ -188,11 +189,19 @@
 .chassis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #19875433; }
 .chassis-slots { display: flex; flex-wrap: wrap; gap: 4px; }
 .slot-item {
+    position: relative; overflow: hidden;
     display: inline-flex; align-items: center; justify-content: center;
     width: 72px; height: 56px; margin: 4px; border-radius: 6px;
     font-size: .8rem; font-weight: 500; cursor: pointer; transition: all .15s;
     border: 2px solid transparent;
 }
+.slot-progress-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 0%; z-index: 0;
+    transition: height 0.4s ease, background-color 0.4s ease;
+    border-radius: 0 0 4px 4px;
+}
+.slot-content { position: relative; z-index: 1; }
 .slot-idle { background: #e9ecef; color: #495057; }
 .slot-testing { background: #cff4fc; color: #055160; border-color: #9eeaf9; }
 .slot-pass { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
@@ -207,28 +216,16 @@
 
 /* 实时日志面板（底部固定、全宽） */
 .log-panel {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 1050;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 1050;
+    height: 240px;
     background: #1a1a2e;
     border-top: 2px solid #0d6efd;
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
     font-size: .8rem;
     display: flex;
     flex-direction: column;
-    transition: height .15s;
 }
 .log-panel.d-none { display: none; }
-.log-panel-resize-handle {
-    height: 5px;
-    background: #2a2a4e;
-    cursor: ns-resize;
-    flex-shrink: 0;
-    transition: background .15s;
-}
-.log-panel-resize-handle:hover { background: #0d6efd; }
 .log-panel-body {
     display: flex;
     flex: 1;
@@ -244,10 +241,11 @@
     padding: 8px 4px;
     gap: 4px;
     border-right: 1px solid #2a2a4e;
+    align-items: stretch;
 }
 .log-filter-btn {
-    font-size: .65rem;
-    padding: 4px 2px;
+    font-size: .6rem;
+    padding: 6px 2px;
     border-radius: 4px;
     border: 1px solid #333;
     background: #222;
@@ -255,16 +253,25 @@
     cursor: pointer;
     transition: all .15s;
     text-align: center;
-    writing-mode: vertical-lr;
-    letter-spacing: 2px;
     line-height: 1.2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
 }
 .log-filter-btn.active {
-    background: #0d6efd;
+    background: #0d6efd33;
     color: #fff;
     border-color: #0d6efd;
 }
 .log-filter-btn:hover:not(.active) { background: #333; color: #fff; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dot-all { background: #aaa; }
+.dot-debug { background: #28a745; }
+.dot-info { background: #0dcaf0; }
+.dot-warn { background: #ffc107; }
+.dot-error { background: #dc3545; }
+.dot-fatal { background: #8b0000; }
 .log-panel-content {
     flex: 1;
     display: flex;
@@ -406,15 +413,12 @@ function setupSocket() {
         const icon = d.passed ? '✓' : '✗';
         const detail = d.passed ? d.actual_value : d.actual_value + ' (期望: ' + d.expected_value + ')';
         addLogEntry(level, icon + ' ' + (d.item_name||'') + ': ' + detail);
-        if (currentStationId) selectEquipment(currentStationId);
     });
     socket.on('run_completed', function(d) {
         addLogEntry('info', '测试完成：通过 ' + (d.passed_items||0) + '/' + (d.total_items||0));
-        if (currentStationId) selectEquipment(currentStationId);
     });
     socket.on('run_failed', function(d) {
         addLogEntry('fatal', '测试失败：' + (d.error||'未知错误'));
-        if (currentStationId) selectEquipment(currentStationId);
     });
 }
 
@@ -578,12 +582,19 @@ function deleteEquip(id) {
 
 function selectEquipment(stationId) {
     currentStationId = stationId;
+    addLogEntry('info', '进入装备测试视图 - stationId: ' + stationId);
     fetch(`/api/stations/${stationId}/detail`)
         .then(r => r.json())
         .then(res => {
             if (res.code !== 0) return;
             document.getElementById('station-view').innerHTML = renderEquipmentDetail(res.data);
             document.title = '测试执行 - ' + (res.data.station.name || '');
+            showLogPanel(true);
+            // 锁定厂区选择器为当前装备所属厂区
+            const st = res.data.station;
+            if (st.factory_name && typeof setFactoryLocked === 'function') {
+                setFactoryLocked(st.factory_name);
+            }
         });
 }
 
@@ -593,21 +604,16 @@ function renderEquipmentDetail(detail) {
     }
     const st = detail.station;
     const stationId = st.id;
-    let html = `<div class="mb-2 d-flex justify-content-between align-items-center">
-        <button class="btn btn-sm btn-outline-secondary" onclick="goBackToStations()">
-            <i class="bi bi-arrow-left"></i> 返回
-        </button>
-        <span class="fs-6 px-3 py-2"><strong>${st.name}</strong></span>
-    </div>`;
+    let html = '';
     // 测试工站（最外层）
     html += `<div class="station-rect" oncontextmenu="showStationMenu(event,${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
         <div class="station-header">
-            <strong><i class="bi bi-cpu"></i> ${st.name}</strong>
+            <strong class="station-name"><i class="bi bi-cpu"></i> ${st.name}</strong>
             <div class="station-badges">
                 <span class="badge bg-secondary" onclick="event.stopPropagation();showStationParams(${stationId})" title="参数设置"><i class="bi bi-gear"></i> 参数设置</span>
             </div>
         </div>`;
-    // 机柜（第二层）
+        // 机柜（第二层）
     detail.cabinets.forEach(cab => {
         html += `<div class="cabinet-rect" oncontextmenu="showCabinetMenu(event,${cab.id},'${cab.name}',${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
             <div class="cabinet-header">
@@ -623,8 +629,10 @@ function renderEquipmentDetail(detail) {
                 </div>
                 <div class="chassis-slots">`;
             (ch.slots || []).forEach(s => {
-                html += `<div class="slot-item slot-${s.status}" ondblclick="openBarcodeModal(${s.id},${stationId})" oncontextmenu="showSlotMenu(event,${s.id},${ch.id},'${s.name}','${s.status}',${stationId})" title="${s.name}">
-                    <div class="text-center">
+                const fillColor = s.status === 'fail' ? '#f1aeb5' : (s.status === 'pass' ? '#a3cfbb' : '#9eeaf9');
+                html += `<div class="slot-item slot-${s.status}" id="slot-${s.id}" ondblclick="openBarcodeModal(${s.id},${stationId})" oncontextmenu="showSlotMenu(event,${s.id},${ch.id},'${s.name}','${s.status}',${stationId})" title="${s.name}">
+                    <div class="slot-progress-fill" id="slot-fill-${s.id}" style="height:${s.status==='pass'||s.status==='fail'?'100':'0'}%;background:${fillColor}"></div>
+                    <div class="slot-content text-center">
                         <div>${s.name.replace('槽位 ','S')}</div>
                         <div style="font-size:.65rem">${statusLabel(s.status)}</div>
                     </div>
@@ -691,9 +699,10 @@ function quickAddEquipment(event, lineName, lineId) {
     });
 }
 
-// ==================== 扫码测试（双击弹窗） ====================
+// ==================== 扫码测试（双击弹窗，扫码即测） ====================
 
 function openBarcodeModal(slotId, stationId) {
+    addLogEntry('info', '打开扫码弹窗 - 槽位: ' + slotId);
     document.getElementById('barcode-slot-id').value = slotId;
     document.getElementById('barcode-station-id').value = stationId;
     document.getElementById('barcode-input-modal').value = '';
@@ -715,43 +724,94 @@ function submitBarcodeTest() {
     const stationId = document.getElementById('barcode-station-id').value;
     const barcode = document.getElementById('barcode-input-modal').value.trim();
     if (!barcode) { alert('请输入条码'); return; }
-    // 显示进度
+    addLogEntry('info', `扫码测试启动 - 条码: ${barcode}, 槽位: ${slotId}`);
     document.getElementById('barcode-test-progress').classList.remove('d-none');
-    // 调用扫板/开始测试 API
-    fetch(`/api/test/start`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ slot_id: parseInt(slotId), station_id: parseInt(stationId), barcode }),
-    }).then(r => r.json()).then(res => {
-        if (res.code !== 0) { alert(res.message || '测试启动失败'); return; }
-        // 轮询进度
-        pollTestProgress(res.data ? res.data.batch_id : null, slotId, stationId);
-    }).catch(() => { alert('请求失败'); });
+    document.getElementById('barcode-progress-text').textContent = '启动中...';
+    // 获取测试项列表
+    fetch('/api/tests/items?active_only=true').then(r=>r.json()).then(itemRes => {
+        const items = itemRes.data || [];
+        if (!items.length) { addLogEntry('error', '没有可用的测试项'); alert('没有可用的测试项'); return; }
+        addLogEntry('info', `获取到 ${items.length} 个测试项`);
+        // 调用测试批次启动 API
+        fetch(`/api/tests/runs`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                serial_number: barcode,
+                slot_id: parseInt(slotId),
+                station_id: parseInt(stationId),
+                operator: '操作员',
+            }),
+        }).then(r => r.json()).then(res => {
+            if (res.code !== 0) { addLogEntry('error', '测试启动失败: ' + (res.message || '')); alert(res.message || '测试启动失败'); return; }
+            const run = res.data;
+            const batchId = run.batch_id;
+            addLogEntry('info', `测试批次创建成功 - ID: ${run.id}, batch_id: ${batchId}`);
+            // 更新槽位状态
+            if (slotId) {
+                fetch(`/api/stations/slots/${slotId}`, {
+                    method:'PUT', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({status:'testing', current_batch_id: batchId})
+                });
+                addLogEntry('info', '槽位状态已更新为测试中');
+            }
+            // 关闭弹窗，然后逐个执行测试项
+            bootstrap.Modal.getInstance(document.getElementById('barcodeModal')).hide();
+            // 逐个执行测试项（模拟自动测试）
+            executeTestItems(run.id, run.batch_id, items, slotId, stationId);
+        }).catch(() => { addLogEntry('error', '测试启动请求失败'); alert('请求失败'); });
+    });
 }
 
-function pollTestProgress(batchId, slotId, stationId) {
-    if (!batchId) return;
-    const check = () => {
-        const url = batchId ? `/api/test/progress/${batchId}` : `/api/test/progress?slot_id=${slotId}`;
-        fetch(url).then(r => r.json()).then(res => {
-            if (res.code !== 0) return;
-            const p = res.data;
-            if (p) {
-                const total = p.total || 1;
-                const done = (p.pass || 0) + (p.fail || 0);
-                const pct = Math.round(done / total * 100);
-                document.getElementById('barcode-progress-bar').style.width = pct + '%';
-                document.getElementById('barcode-progress-text').textContent = `${done}/${total} (通过:${p.pass||0} 失败:${p.fail||0})`;
-                if (p.status === 'running') { setTimeout(check, 1000); return; }
-            }
-            // 完成
-            document.getElementById('barcode-progress-bar').classList.remove('progress-bar-animated');
-            document.getElementById('barcode-progress-text').textContent = '测试完成';
-            bootstrap.Modal.getInstance(document.getElementById('barcodeModal')).hide();
-            if (currentStationId) selectEquipment(currentStationId);
-        }).catch(() => {});
-    };
-    check();
+function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFailed) {
+    if (!index) index = 0;
+    if (hasFailed === undefined) hasFailed = false;
+    if (index >= items.length) {
+        const finalPassed = !hasFailed;
+        addLogEntry('info', `批次 ${batchId} 全部测试项执行完成，结果：${finalPassed ? '通过' : '失败'}`);
+        // 更新槽位状态
+        const newStatus = finalPassed ? 'pass' : 'fail';
+        fetch(`/api/stations/slots/${slotId}`, {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({status: newStatus, current_batch_id: null})
+        });
+        fetch(`/api/tests/runs/${runId}`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: 'completed'})
+        });
+        // 更新 slot 填充条：100% + 最终颜色
+        const fillEl = document.getElementById('slot-fill-' + slotId);
+        if (fillEl) {
+            fillEl.style.background = finalPassed ? '#a3cfbb' : '#f1aeb5';
+            fillEl.style.height = '100%';
+        }
+        return;
+    }
+    const item = items[index];
+    const baseValue = parseFloat(item.expected_value) || 0;
+    const minVal = parseFloat(item.min_value) || (baseValue - 1);
+    const maxVal = parseFloat(item.max_value) || (baseValue + 1);
+    const range = maxVal - minVal;
+    const inRange = Math.random() < 0.9;
+    const actual = inRange
+        ? minVal + Math.random() * range
+        : (Math.random() < 0.5 ? minVal - Math.random() * 0.5 : maxVal + Math.random() * 0.5);
+    const passed = !inRange ? false : true;
+    if (!passed) hasFailed = true;
+    addLogEntry(passed ? 'info' : 'error', `测试项 ${index+1}/${items.length} - ${item.name}: ${Math.round(actual * 100) / 100} (${passed ? '通过' : '失败'})`);
+    // 更新 slot 进度条（从下往上填充）
+    const fillEl = document.getElementById('slot-fill-' + slotId);
+    if (fillEl) {
+        const pct = Math.round((index + 1) / items.length * 100);
+        fillEl.style.background = '#9eeaf9';
+        fillEl.style.height = pct + '%';
+    }
+    fetch(`/api/tests/runs/${runId}/results`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({test_item_id: item.id, actual_value: Math.round(actual * 100) / 100}),
+    }).then(r => r.json()).then(() => {
+        setTimeout(() => executeTestItems(runId, batchId, items, slotId, stationId, index + 1, hasFailed), 500);
+    });
 }
 
 // ==================== 参数设置弹窗 ====================
@@ -777,6 +837,10 @@ function renderLogs() {
     if (!body.isConnected) return;
     const filtered = logFilter === 'all' ? logEntries : logEntries.filter(e => e.level === logFilter);
     const levelLabels = { debug:'调试', info:'提示', warn:'告警', error:'错误', fatal:'致命' };
+    if (filtered.length === 0) {
+        body.innerHTML = '<div class="log-entry"><span class="log-msg" style="color:#555;">暂无日志</span></div>';
+        return;
+    }
     body.innerHTML = filtered.map(e => {
         return `<div class="log-entry">
             <span class="log-time">${e.time}</span>
@@ -784,13 +848,25 @@ function renderLogs() {
             <span class="log-msg">${e.msg}</span>
         </div>`;
     }).join('');
-    body.scrollTop = body.scrollHeight;
 }
 
 function filterLogs(level) {
     logFilter = level;
     document.querySelectorAll('#log-filter-bar .log-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.level === level));
     renderLogs();
+}
+
+function showLogPanel(show) {
+    const panel = document.getElementById('log-panel');
+    const btn = document.getElementById('log-show-btn');
+    if (show) {
+        panel.classList.remove('d-none');
+        btn.classList.add('d-none');
+        renderLogs();
+    } else {
+        panel.classList.add('d-none');
+        btn.classList.remove('d-none');
+    }
 }
 
 function toggleLogPanel() {
@@ -818,31 +894,6 @@ function exportLogs() {
     a.click();
     URL.revokeObjectURL(a.href);
 }
-
-// 日志面板拖拽调整高度
-let logResizing = false;
-let logStartY = 0, logStartH = 0;
-document.addEventListener('mousedown', function(e) {
-    const handle = e.target.closest('#log-resize-handle');
-    if (!handle) return;
-    logResizing = true;
-    logStartY = e.clientY;
-    logStartH = document.getElementById('log-panel').offsetHeight;
-    document.body.style.cursor = 'ns-resize';
-    e.preventDefault();
-});
-document.addEventListener('mousemove', function(e) {
-    if (!logResizing) return;
-    const panel = document.getElementById('log-panel');
-    const newH = Math.max(100, Math.min(window.innerHeight * 0.6, logStartH - (e.clientY - logStartY)));
-    panel.style.height = newH + 'px';
-});
-document.addEventListener('mouseup', function() {
-    if (logResizing) {
-        logResizing = false;
-        document.body.style.cursor = '';
-    }
-});
 
 function showEquipmentMenu(event, stationId) {
     showContextMenu(event, '装备操作', [
@@ -951,19 +1002,20 @@ function goto(url) { window.location.href = url; }
 
 function forceRestartStation(stationId) {
     if (!confirm('确定强制重启该测试工站的所有槽位？')) return;
+    addLogEntry('warn', '强制重启工站所有槽位...');
     fetch(`/api/stations/${stationId}/detail`).then(r=>r.json()).then(res=>{
         if (res.code !== 0) return;
         const promises = [];
         (res.data.cabinets||[]).forEach(cab => (cab.chassis||[]).forEach(ch => (ch.slots||[]).forEach(s => {
             promises.push(fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) }));
         })));
-        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+        Promise.all(promises).then(()=>{ addLogEntry('info', '工站已强制重启完成'); if (currentStationId) selectEquipment(currentStationId); });
     });
 }
 
 function forceRestartCabinet(cabinetId) {
     if (!confirm('确定强制重启该机柜下的所有槽位？')) return;
-    // cabinetId is not directly fetchable; re-fetch detail and filter
+    addLogEntry('warn', '强制重启机柜...');
     fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
         if (res.code !== 0) return;
         const cab = (res.data.cabinets||[]).find(c=>c.id===cabinetId);
@@ -972,12 +1024,13 @@ function forceRestartCabinet(cabinetId) {
         (cab.chassis||[]).forEach(ch => (ch.slots||[]).forEach(s => {
             promises.push(fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) }));
         }));
-        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+        Promise.all(promises).then(()=>{ addLogEntry('info', '机柜已强制重启完成'); if (currentStationId) selectEquipment(currentStationId); });
     });
 }
 
 function forceRestartChassis(chassisId) {
     if (!confirm('确定强制重启该机框下的所有槽位？')) return;
+    addLogEntry('warn', '强制重启机框...');
     fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
         if (res.code !== 0) return;
         let chassis = null;
@@ -986,11 +1039,12 @@ function forceRestartChassis(chassisId) {
         const promises = (chassis.slots||[]).map(s =>
             fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
         );
-        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+        Promise.all(promises).then(()=>{ addLogEntry('info', '机框已强制重启完成'); if (currentStationId) selectEquipment(currentStationId); });
     });
 }
 
 function toggleAllSlots(chassisId, enable) {
+    addLogEntry('info', enable ? '启用机框全部槽位...' : '禁用机框全部槽位...');
     fetch(`/api/stations/${currentStationId}/detail`).then(r=>r.json()).then(res=>{
         if (res.code !== 0) return;
         let chassis = null;
@@ -999,7 +1053,7 @@ function toggleAllSlots(chassisId, enable) {
         const promises = (chassis.slots||[]).map(s =>
             fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: enable ? 'idle' : 'disabled'}) })
         );
-        Promise.all(promises).then(()=>{ if (currentStationId) selectEquipment(currentStationId); });
+        Promise.all(promises).then(()=>{ addLogEntry('info', enable ? '已启用全部槽位' : '已禁用全部槽位'); if (currentStationId) selectEquipment(currentStationId); });
     });
 }
 
@@ -1008,14 +1062,16 @@ function scanTest(slotId, stationId) {
 }
 
 function loadBoard(slotId) {
+    addLogEntry('info', '上板操作（槽位 ' + slotId + '）');
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle'}) })
-        .then(()=>{ selectEquipment(currentStationId); });
+        .then(()=>{ addLogEntry('info', '上板完成'); selectEquipment(currentStationId); });
 }
 
 function stopSlotTest(slotId) {
     if (!confirm('确定停止该槽位的测试？')) return;
+    addLogEntry('warn', '手动停止槽位 ' + slotId + ' 测试');
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
-        .then(()=>{ selectEquipment(currentStationId); });
+        .then(()=>{ addLogEntry('info', '槽位测试已停止'); selectEquipment(currentStationId); });
 }
 
 function slotResults(slotId) {
@@ -1024,13 +1080,15 @@ function slotResults(slotId) {
 
 function forceRestartSlot(slotId) {
     if (!confirm('确定强制重启该槽位？')) return;
+    addLogEntry('warn', '强制重启槽位 ' + slotId);
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
-        .then(()=>{ loadHierarchy(); });
+        .then(()=>{ addLogEntry('info', '槽位 ' + slotId + ' 已重启'); loadHierarchy(); });
 }
 
 function toggleSlot(slotId, disable) {
+    addLogEntry('info', disable ? '禁用槽位 ' + slotId : '启用槽位 ' + slotId);
     fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: disable ? 'disabled' : 'idle'}) })
-        .then(()=>{ selectEquipment(currentStationId); });
+        .then(()=>{ addLogEntry('info', disable ? '槽位 ' + slotId + ' 已禁用' : '槽位 ' + slotId + ' 已启用'); selectEquipment(currentStationId); });
 }
 
 function statusLabel(st) {
@@ -1041,6 +1099,9 @@ function statusLabel(st) {
 function goBackToStations() {
     currentSlotId = null;
     currentRunId = null;
+    addLogEntry('info', '返回装备列表');
+    showLogPanel(false);
+    if (typeof setFactoryUnlocked === 'function') setFactoryUnlocked();
     // 恢复布局
     const isEquipOnly = window.location.pathname === '/equipment';
     const isLinesOnly = window.location.pathname === '/lines';
