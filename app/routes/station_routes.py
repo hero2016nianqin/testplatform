@@ -354,21 +354,8 @@ def create_station():
     db.session.add(station)
     db.session.flush()
 
-    # 自动创建默认配置
-    db.session.add(EquipmentConfig(station_id=station.id))
-    db.session.add(SoftwareConfig(station_id=station.id))
-    db.session.add(ScenarioConfig(station_id=station.id))
-
-    # 自动创建 2 个机框各 4 个槽位
-    for ci in range(1, 3):
-        chassis = TestChassis(station_id=station.id,
-                              name=f'机框 {ci}', slot_count=4, sort_order=ci)
-        db.session.add(chassis)
-        db.session.flush()
-        for si in range(1, 5):
-            db.session.add(TestSlot(
-                chassis_id=chassis.id, name=f'槽位 {si}', sort_order=si))
-
+    # 自动创建默认配置和层级（按定义模板或默认布局）
+    _create_station_full(station)
     db.session.commit()
     return jsonify({'code': 0, 'data': station.to_dict(),
                     'message': '装备创建成功'})
