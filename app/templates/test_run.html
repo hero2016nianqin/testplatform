@@ -1,53 +1,47 @@
 {% extends "base.html" %}
-{% block title %}测试执行 - 测试平台{% endblock %}
+{% block title %}测试执行{% endblock %}
 {% block content %}
-<div class="row">
-    <div class="col-md-4">
+<div class="row" id="station-view">
+    <div class="col-12 mb-3">
+        <h5 class="mb-0"><i class="bi bi-grid-3x3-gap-fill"></i> 选择测试工站</h5>
+    </div>
+    <div class="col-12" id="station-container">
+        <!-- 由 JS 动态渲染 -->
+    </div>
+</div>
+
+<!-- 右键菜单 -->
+<div id="context-menu" class="context-menu d-none">
+    <div class="context-menu-header" id="ctx-title">操作</div>
+    <div class="context-menu-items" id="ctx-items"></div>
+</div>
+
+<!-- 测试执行界面（扫描条码后显示） -->
+<div class="row d-none" id="test-exec-view">
+    <!-- 左侧：层级信息 + 进度 -->
+    <div class="col-md-3">
         <div class="card mb-3">
-            <div class="card-header">
-                <i class="bi bi-gear"></i> 测试参数
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-info-circle"></i> 当前工位</span>
+                <button class="btn btn-sm btn-outline-secondary" id="back-to-stations">
+                    <i class="bi bi-arrow-left"></i> 返回
+                </button>
             </div>
             <div class="card-body">
-                <form id="run-form">
-                    <div class="mb-3">
-                        <label class="form-label">操作员</label>
-                        <input type="text" class="form-control" id="operator" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">序列号</label>
-                        <input type="text" class="form-control" id="serial-number">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">产品型号</label>
-                        <input type="text" class="form-control" id="product-type">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">配置方案</label>
-                        <select class="form-select" id="config-select">
-                            <option value="">默认配置</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100" id="start-btn">
-                        <i class="bi bi-play-fill"></i> 开始测试
-                    </button>
-                    <button type="button" class="btn btn-danger w-100 mt-2 d-none" id="stop-btn">
-                        <i class="bi bi-stop-fill"></i> 停止测试
-                    </button>
-                </form>
+                <p class="mb-1"><strong id="exec-station"></strong></p>
+                <p class="mb-1 text-muted small"><span id="exec-chassis"></span> → <span id="exec-slot"></span></p>
+                <hr class="my-2">
+                <p class="mb-1"><small>操作员：<span id="operator-display">-</span></small></p>
+                <p class="mb-0"><small>批次号：<span id="batch-id">-</span></small></p>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-bar-chart"></i> 测试进度
-            </div>
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> 测试进度</div>
             <div class="card-body">
-                <div class="mb-2">
-                    <small>批次号: <span id="batch-id">-</span></small>
-                </div>
-                <div class="progress mb-2" style="height: 25px;">
-                    <div class="progress-bar bg-success" id="progress-pass" style="width: 0%"></div>
-                    <div class="progress-bar bg-danger" id="progress-fail" style="width: 0%"></div>
+                <div class="progress mb-2" style="height:20px;">
+                    <div class="progress-bar bg-success" id="progress-pass" style="width:0%"></div>
+                    <div class="progress-bar bg-danger" id="progress-fail" style="width:0%"></div>
                 </div>
                 <div class="d-flex justify-content-between small">
                     <span>通过: <strong id="pass-count">0</strong></span>
@@ -56,339 +50,536 @@
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-header"><i class="bi bi-clock-history"></i> 过程日志</div>
+            <div class="card-body p-2">
+                <div id="process-log" style="max-height:200px;overflow-y:auto;background:#1a1a2e;border-radius:6px;padding:8px;font-family:monospace;font-size:0.8rem;">
+                    <p class="text-muted mb-0">等待测试开始...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="col-md-8">
+    <!-- 右侧：条码输入 + 测试项 -->
+    <div class="col-md-9">
         <div class="card mb-3">
-            <div class="card-header">
-                <i class="bi bi-list-check"></i> 测试项目
+            <div class="card-body py-3">
+                <form id="barcode-form" class="row g-2 align-items-center">
+                    <div class="col-md-8">
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                            <input type="text" class="form-control" id="barcode-input"
+                                   placeholder="扫描条码后回车开始测试" autofocus>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-success btn-lg w-100">
+                            <i class="bi bi-play-fill"></i> 开始
+                        </button>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-danger btn-lg w-100 d-none" id="stop-btn">
+                            <i class="bi bi-stop-fill"></i> 停止
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-check"></i> 测试项目</span>
+                <span class="badge bg-secondary" id="items-count">0 项</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0" id="test-items-table">
                         <thead>
                             <tr>
-                                <th>序号</th>
-                                <th>项目名称</th>
-                                <th>标准值</th>
-                                <th>下限</th>
-                                <th>上限</th>
-                                <th>单位</th>
-                                <th>实测值</th>
-                                <th>结果</th>
-                                <th>操作</th>
+                                <th style="width:50px">#</th>
+                                <th>测试项目</th>
+                                <th style="width:80px">标准值</th>
+                                <th style="width:70px">下限</th>
+                                <th style="width:70px">上限</th>
+                                <th style="width:50px">单位</th>
+                                <th style="width:100px">实测值</th>
+                                <th style="width:70px">结果</th>
+                                <th style="width:60px">操作</th>
                             </tr>
                         </thead>
                         <tbody id="test-items-body">
-                            <tr>
-                                <td colspan="9" class="text-center text-muted">
-                                    请先开始测试
-                                </td>
-                            </tr>
+                            <tr><td colspan="9" class="text-center text-muted py-4">扫描条码开始测试</td></tr>
                         </tbody>
                     </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-clock-history"></i> 测试过程日志
-            </div>
-            <div class="card-body">
-                <div id="process-log" style="max-height: 200px; overflow-y: auto;">
-                    <p class="text-muted small">等待测试开始...</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 输入实测值 Modal -->
+<!-- 实测值输入弹窗 -->
 <div class="modal fade" id="valueModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-sm">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">输入实测值</h5>
+                <h6 class="modal-title" id="modal-title">输入实测值</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="modal-item-id">
-                <div class="mb-3">
-                    <label class="form-label" id="modal-item-name">项目名称</label>
-                    <div class="input-group">
-                        <input type="number" class="form-control" id="modal-value" step="any">
-                        <span class="input-group-text" id="modal-unit"></span>
-                    </div>
+                <div class="mb-2">
+                    <small class="text-muted" id="modal-range"></small>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">备注</label>
-                    <textarea class="form-control" id="modal-remark" rows="2"></textarea>
+                <div class="input-group">
+                    <input type="number" class="form-control form-control-lg" id="modal-value" step="any" placeholder="实测值">
+                    <span class="input-group-text" id="modal-unit"></span>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="modal-submit">提交</button>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
+
 {% block extra_scripts %}
+<style>
+.station-card {
+    cursor: pointer; transition: all .2s;
+}
+.station-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.chassis-box { border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.slot-item {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 72px; height: 56px; margin: 4px; border-radius: 6px;
+    font-size: .8rem; font-weight: 500; cursor: pointer; transition: all .15s;
+    border: 2px solid transparent;
+}
+.slot-idle { background: #e9ecef; color: #495057; }
+.slot-testing { background: #cff4fc; color: #055160; border-color: #9eeaf9; }
+.slot-pass { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
+.slot-fail { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
+.slot-disabled { background: #e9ecef; color: #adb5bd; opacity: .5; }
+.slot-selected { border-color: #0d6efd !important; box-shadow: 0 0 0 3px rgba(13,110,253,.2); }
+.settings-badge {
+    position: absolute; top: 8px; right: 8px; cursor: pointer;
+    opacity: .6; transition: opacity .2s;
+}
+.settings-badge:hover { opacity: 1; }
+
+/* 右键菜单 */
+.context-menu {
+    position: fixed; z-index: 9999;
+    background: #fff; border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    min-width: 180px; padding: 4px 0;
+    font-size: .88rem;
+}
+.context-menu-header {
+    padding: 6px 14px; font-weight: 600;
+    border-bottom: 1px solid #eee;
+    color: #333;
+}
+.context-menu-items { padding: 4px 0; }
+.context-menu-item {
+    padding: 7px 14px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    color: #333; transition: background .12s;
+}
+.context-menu-item:hover { background: #f0f4ff; color: #0d6efd; }
+.context-menu-item .bi { font-size: 1rem; width: 18px; }
+.context-menu-divider { height: 1px; background: #eee; margin: 4px 0; }
+.context-menu-item.danger { color: #dc3545; }
+.context-menu-item.danger:hover { background: #fff0f0; color: #dc3545; }
+</style>
 <script>
-    let socket = null;
-    let currentRunId = null;
-    let currentBatchId = null;
-    let currentItemIndex = 0;
-    let testItems = [];
+let socket = null;
+let currentRunId = null, currentBatchId = null;
+let currentItemIndex = 0, testItems = [];
+let currentStationId = null, currentSlotId = null;
 
-    document.addEventListener('DOMContentLoaded', function() {
-        loadConfigs();
-        setupSocket();
+document.addEventListener('DOMContentLoaded', function() {
+    setupSocket();
+    loadStations();
 
-        // 从 session 中自动填充操作员信息
-        fetch('/api/auth/me')
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0 && res.data) {
-                    document.getElementById('operator').value = res.data.display_name;
-                }
-            });
-
-        document.getElementById('run-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            startTestRun();
-        });
-
-        document.getElementById('stop-btn').addEventListener('click', function() {
-            stopTestRun();
-        });
-
-        document.getElementById('modal-submit').addEventListener('click', function() {
-            submitModalValue();
-        });
-
-        document.getElementById('modal-value').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') submitModalValue();
-        });
+    document.getElementById('barcode-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        startTestRun();
+    });
+    document.getElementById('back-to-stations').addEventListener('click', function() {
+        if (currentRunId) { stopTestRun(); }
+        goBackToStations();
+    });
+    document.getElementById('stop-btn').addEventListener('click', function() { stopTestRun(); });
+    document.getElementById('modal-submit').addEventListener('click', function() { submitModalValue(); });
+    document.getElementById('modal-value').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') submitModalValue();
     });
 
-    function loadConfigs() {
-        fetch('/api/configs')
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0 && res.data.length > 0) {
-                    const select = document.getElementById('config-select');
-                    res.data.forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c.id;
-                        opt.textContent = `${c.name} (v${c.version})`;
-                        if (c.is_active) opt.selected = true;
-                        select.appendChild(opt);
-                    });
-                }
-            });
-    }
+    // 点击页面其他位置关闭右键菜单
+    document.addEventListener('click', function() {
+        document.getElementById('context-menu').classList.add('d-none');
+    });
+    document.addEventListener('contextmenu', function() {
+        document.getElementById('context-menu').classList.add('d-none');
+    });
+});
 
-    function setupSocket() {
-        socket = io();
-        socket.on('run_started', function(data) {
-            currentBatchId = data.batch_id;
-            addLog(`测试开始 - 批次: ${data.batch_id}`, 'info');
-        });
+function setupSocket() {
+    socket = io();
+    socket.on('item_tested', function(d) { updateProgress(d); addLog(`${d.passed ? '✓' : '✗'} ${d.item_name}: ${d.actual_value}`, d.passed ? 'pass' : 'fail'); });
+    socket.on('run_completed', function() { resetTestUI(); });
+    socket.on('run_failed', function(d) { addLog('测试失败: ' + (d.error||'未知'), 'error'); resetTestUI(); });
+}
 
-        socket.on('item_tested', function(data) {
-            updateProgress(data);
-            addLog(`${data.passed ? '✓' : '✗'} ${data.item_name}: ${data.actual_value} (标准: ${data.expected_value})`, data.passed ? 'pass' : 'fail');
-        });
+// ==================== 工站视图 ====================
 
-        socket.on('run_completed', function(data) {
-            addLog(`测试完成 - 通过: ${data.passed_items}, 失败: ${data.failed_items}`, 'success');
-            document.getElementById('start-btn').classList.remove('d-none');
-            document.getElementById('stop-btn').classList.add('d-none');
-            currentRunId = null;
-        });
-
-        socket.on('run_failed', function(data) {
-            addLog(`测试失败: ${data.error || '未知错误'}`, 'error');
-            document.getElementById('start-btn').classList.remove('d-none');
-            document.getElementById('stop-btn').classList.add('d-none');
-            currentRunId = null;
-        });
-    }
-
-    function startTestRun() {
-        const operator = document.getElementById('operator').value.trim();
-        const data = {
-            operator: operator,
-            serial_number: document.getElementById('serial-number').value.trim(),
-            product_type: document.getElementById('product-type').value.trim(),
-            config_id: document.getElementById('config-select').value || null,
-        };
-
-        document.getElementById('start-btn').classList.add('d-none');
-        document.getElementById('stop-btn').classList.remove('d-none');
-        addLog('正在启动测试...', 'info');
-
-        fetch('/api/tests/runs', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data),
-        })
+function loadStations() {
+    fetch('/api/stations')
         .then(r => r.json())
         .then(res => {
+            if (res.code === 0) renderStations(res.data);
+        });
+}
+
+function renderStations(stations) {
+    const container = document.getElementById('station-container');
+    container.innerHTML = '<div class="row">' + stations.map(s => `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card station-card position-relative" onclick="selectStation(${s.id})">
+                ${s.has_settings ? `<span class="settings-badge" onclick="event.stopPropagation();openStationSettings(${s.id})" title="工站设置"><i class="bi bi-gear-fill text-secondary"></i></span>` : ''}
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-hdd-stack" style="font-size:2.5rem;color:#0d6efd;"></i>
+                    <h5 class="mt-2 mb-1">${s.name}</h5>
+                    <small class="text-muted">${s.chassis_count} 个机框</small>
+                </div>
+            </div>
+        </div>
+    `).join('') + '</div>';
+    if (stations.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">暂无工站，请由工艺工程师创建</p>';
+    }
+}
+
+function selectStation(stationId) {
+    currentStationId = stationId;
+    fetch(`/api/stations/${stationId}/chassis`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.code !== 0) return;
+            const container = document.getElementById('station-container');
+            container.innerHTML = renderChassisView(res.data);
+        });
+}
+
+function renderChassisView(chassisList) {
+    if (!chassisList || chassisList.length === 0) {
+        return `<p class="text-muted text-center">该工站暂无机框</p>`;
+    }
+    let html = `<div class="mb-2"><button class="btn btn-sm btn-outline-secondary" onclick="loadStations()"><i class="bi bi-arrow-left"></i> 返回工站列表</button></div>`;
+    chassisList.forEach(c => {
+        html += `<div class="chassis-box" oncontextmenu="showChassisMenu(event,${c.id},'${c.name}',${c.station_id})">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong><i class="bi bi-server"></i> ${c.name}</strong>
+                <small class="text-muted">${c.slot_count_actual} 个槽位</small>
+            </div>
+            <div>`;
+        (c.slots || []).forEach(s => {
+            html += `<div class="slot-item slot-${s.status}" onclick="selectSlot(${s.id},${c.station_id})" oncontextmenu="showSlotMenu(event,${s.id},${c.id},'${s.name}','${s.status}',${c.station_id})" title="${s.name}">
+                <div class="text-center">
+                    <div>${s.name.replace('槽位 ','S')}</div>
+                    <div style="font-size:.65rem">${statusLabel(s.status)}</div>
+                </div>
+            </div>`;
+        });
+        html += `</div></div>`;
+    });
+    return html;
+}
+
+// ==================== 右键菜单 ====================
+
+function showContextMenu(event, title, items) {
+    event.preventDefault();
+    event.stopPropagation();
+    const menu = document.getElementById('context-menu');
+    document.getElementById('ctx-title').textContent = title;
+    const container = document.getElementById('ctx-items');
+    container.innerHTML = items.map(item => {
+        if (item.divider) return '<div class="context-menu-divider"></div>';
+        const cls = item.danger ? ' context-menu-item danger' : ' context-menu-item';
+        return `<div class="${cls}" onclick="event.stopPropagation();${item.action}">${item.icon||''} ${item.label}</div>`;
+    }).join('');
+    // 定位菜单
+    let x = event.clientX, y = event.clientY;
+    const mw = 200, mh = container.children.length * 36 + 40;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 10;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 10;
+    menu.style.left = x + 'px'; menu.style.top = y + 'px';
+    menu.classList.remove('d-none');
+}
+
+function showChassisMenu(event, chassisId, chassisName, stationId) {
+    showContextMenu(event, '机框: ' + chassisName, [
+        { label: '系统初始化', icon: '<i class="bi bi-arrow-repeat"></i>', action: `goto('/init')` },
+        { label: '测试日志', icon: '<i class="bi bi-journal-text"></i>', action: `goto('/logs')` },
+        { label: '切换账号', icon: '<i class="bi bi-person-switch"></i>', action: `goto('/login')` },
+        { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartChassis(${chassisId})` },
+        { divider: true },
+        { label: '禁用所有槽位', icon: '<i class="bi bi-slash-circle"></i>', action: `toggleAllSlots(${chassisId},false)` },
+        { label: '启用所有槽位', icon: '<i class="bi bi-check-circle"></i>', action: `toggleAllSlots(${chassisId},true)` },
+    ]);
+}
+
+function showSlotMenu(event, slotId, chassisId, slotName, status, stationId) {
+    const isDisabled = status === 'disabled';
+    const isTesting = status === 'testing';
+    showContextMenu(event, '槽位: ' + slotName, [
+        { label: '扫码测试', icon: '<i class="bi bi-upc-scan"></i>', action: `scanTest(${slotId},${stationId})` },
+        { label: '上板', icon: '<i class="bi bi-box-arrow-in-down"></i>', action: `loadBoard(${slotId})` },
+        { divider: true },
+        ...(isTesting ? [{ label: '停止测试', icon: '<i class="bi bi-stop-circle"></i>', action: `stopSlotTest(${slotId})`, danger: true }] : []),
+        { label: '测试结果', icon: '<i class="bi bi-file-text"></i>', action: `slotResults(${slotId})` },
+        { label: '强制重启', icon: '<i class="bi bi-arrow-clockwise"></i>', action: `forceRestartSlot(${slotId})` },
+        { divider: true },
+        { label: isDisabled ? '启用槽位' : '禁用槽位', icon: '<i class="bi bi-' + (isDisabled ? 'check-circle' : 'x-circle') + '"></i>', action: `toggleSlot(${slotId},${!isDisabled})`, danger: !isDisabled },
+    ]);
+}
+
+// ==================== 右键菜单操作 ====================
+
+function goto(url) { window.location.href = url; }
+
+function forceRestartChassis(chassisId) {
+    if (!confirm('确定强制重启该机框下的所有槽位？')) return;
+    fetch(`/api/stations/${currentStationId}/chassis`)
+        .then(r=>r.json()).then(res=>{
+            if (res.code !== 0) return;
+            const chassis = res.data.find(c=>c.id===chassisId);
+            if (!chassis) return;
+            const promises = (chassis.slots||[]).map(s =>
+                fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
+            );
+            Promise.all(promises).then(()=>{ selectStation(currentStationId); });
+        });
+}
+
+function toggleAllSlots(chassisId, enable) {
+    fetch(`/api/stations/${currentStationId}/chassis`)
+        .then(r=>r.json()).then(res=>{
+            if (res.code !== 0) return;
+            const chassis = res.data.find(c=>c.id===chassisId);
+            if (!chassis) return;
+            const promises = (chassis.slots||[]).map(s =>
+                fetch(`/api/stations/slots/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: enable ? 'idle' : 'disabled'}) })
+            );
+            Promise.all(promises).then(()=>{ selectStation(currentStationId); });
+        });
+}
+
+function scanTest(slotId, stationId) {
+    selectSlot(slotId, stationId);
+    document.getElementById('barcode-input').focus();
+}
+
+function loadBoard(slotId) {
+    fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle'}) })
+        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+}
+
+function stopSlotTest(slotId) {
+    if (!confirm('确定停止该槽位的测试？')) return;
+    fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
+        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+}
+
+function slotResults(slotId) {
+    // 跳转到日志页并查询该槽位相关结果
+    window.location.href = '/logs?slot_id=' + slotId;
+}
+
+function forceRestartSlot(slotId) {
+    if (!confirm('确定强制重启该槽位？')) return;
+    fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle', current_batch_id:null}) })
+        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+}
+
+function toggleSlot(slotId, disable) {
+    fetch(`/api/stations/slots/${slotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: disable ? 'disabled' : 'idle'}) })
+        .then(()=>{ if (currentStationId) selectStation(currentStationId); });
+}
+
+function statusLabel(st) {
+    const map = {idle:'空闲',testing:'测试中',pass:'通过',fail:'失败',disabled:'禁用'};
+    return map[st] || st;
+}
+
+function selectSlot(slotId, stationId) {
+    currentSlotId = slotId;
+    currentStationId = stationId;
+    // 获取工站名称
+    fetch(`/api/stations/${stationId}`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.code !== 0) return;
+            document.getElementById('exec-station').textContent = res.data.name || '';
+        });
+    // 获取槽位详细信息
+    document.getElementById('exec-chassis').textContent = '';
+    document.getElementById('exec-slot').textContent = `槽位 ${slotId}`;
+    // 填充操作员
+    fetch('/api/auth/me').then(r=>r.json()).then(res=>{
+        if(res.code===0) document.getElementById('operator-display').textContent = res.data.display_name;
+    });
+    switchView('test-exec-view');
+    document.getElementById('barcode-input').focus();
+}
+
+function goBackToStations() {
+    switchView('station-view');
+    currentSlotId = null;
+    currentRunId = null;
+}
+
+function switchView(viewId) {
+    document.getElementById('station-view').classList.toggle('d-none', viewId !== 'station-view');
+    document.getElementById('test-exec-view').classList.toggle('d-none', viewId !== 'test-exec-view');
+}
+
+function openStationSettings(stationId) {
+    window.location.href = `/station-settings/${stationId}`;
+}
+
+// ==================== 测试执行 ====================
+
+function startTestRun() {
+    const serial = document.getElementById('barcode-input').value.trim();
+    if (!serial) return;
+    const data = { operator: document.getElementById('operator-display').textContent, serial_number: serial };
+
+    document.getElementById('barcode-form').querySelector('button[type=submit]').classList.add('d-none');
+    document.getElementById('stop-btn').classList.remove('d-none');
+    addLog('正在启动测试...', 'info');
+
+    fetch('/api/tests/runs', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+        .then(r=>r.json())
+        .then(res=>{
+            if (res.code !== 0) throw new Error(res.message);
+            currentRunId = res.data.id;
+            currentBatchId = res.data.batch_id;
+            document.getElementById('batch-id').textContent = currentBatchId;
+
+            // 更新槽位状态
+            if (currentSlotId) {
+                fetch(`/api/stations/slots/${currentSlotId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'testing', current_batch_id:currentBatchId}) });
+            }
+            loadTestItems();
+        })
+        .catch(err=>{ addLog('启动失败: '+err.message, 'error'); resetTestUI(); });
+}
+
+function loadTestItems() {
+    fetch('/api/tests/items')
+        .then(r=>r.json())
+        .then(res=>{
             if (res.code === 0) {
-                currentRunId = res.data.id;
-                currentBatchId = res.data.batch_id;
-                document.getElementById('batch-id').textContent = currentBatchId;
-                loadTestItems();
-            } else {
-                throw new Error(res.message);
-            }
-        })
-        .catch(err => {
-            addLog('启动失败: ' + err.message, 'error');
-            document.getElementById('start-btn').classList.remove('d-none');
-            document.getElementById('stop-btn').classList.add('d-none');
-        });
-    }
-
-    function stopTestRun() {
-        if (!currentBatchId) return;
-        fetch(`/api/tests/runs/${currentBatchId}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({status: 'failed'}),
-        })
-        .then(r => r.json())
-        .then(res => {
-            addLog('测试已手动停止', 'warning');
-            document.getElementById('start-btn').classList.remove('d-none');
-            document.getElementById('stop-btn').classList.add('d-none');
-        });
-    }
-
-    function loadTestItems() {
-        fetch('/api/tests/items')
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0) {
-                    testItems = res.data;
-                    currentItemIndex = 0;
-                    renderItems();
-                    if (testItems.length > 0) {
-                        promptForValue(0);
-                    }
-                }
-            });
-    }
-
-    function renderItems() {
-        const tbody = document.getElementById('test-items-body');
-        if (testItems.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无测试项</td></tr>';
-            return;
-        }
-        tbody.innerHTML = testItems.map((item, idx) => `
-            <tr id="item-row-${item.id}" class="${idx === currentItemIndex ? 'table-active' : ''}">
-                <td>${idx + 1}</td>
-                <td>${item.name}</td>
-                <td>${item.expected_value}</td>
-                <td>${item.min_value}</td>
-                <td>${item.max_value}</td>
-                <td>${item.unit}</td>
-                <td id="val-${item.id}">-</td>
-                <td id="result-${item.id}">
-                    <span class="badge bg-secondary">待测</span>
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="promptForValue(${idx})"
-                            ${idx !== currentItemIndex ? 'disabled' : ''}>
-                        输入
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    function promptForValue(index) {
-        const item = testItems[index];
-        if (!item) return;
-        currentItemIndex = index;
-        document.getElementById('modal-item-id').value = item.id;
-        document.getElementById('modal-item-name').textContent = `${item.name} (${item.min_value} ~ ${item.max_value} ${item.unit})`;
-        document.getElementById('modal-unit').textContent = item.unit;
-        document.getElementById('modal-value').value = '';
-        document.getElementById('modal-remark').value = '';
-        new bootstrap.Modal(document.getElementById('valueModal')).show();
-        setTimeout(() => document.getElementById('modal-value').focus(), 500);
-    }
-
-    function submitModalValue() {
-        const itemId = parseInt(document.getElementById('modal-item-id').value);
-        const value = parseFloat(document.getElementById('modal-value').value);
-        const remark = document.getElementById('modal-remark').value.trim();
-
-        if (isNaN(value)) {
-            alert('请输入有效的数值');
-            return;
-        }
-
-        const item = testItems.find(i => i.id === itemId);
-        const passed = value >= item.min_value && value <= item.max_value;
-
-        document.getElementById(`val-${itemId}`).textContent = value;
-        document.getElementById(`result-${itemId}`).innerHTML =
-            `<span class="badge bg-${passed ? 'success' : 'danger'}">${passed ? 'PASS' : 'FAIL'}</span>`;
-        document.getElementById(`item-row-${itemId}`).classList.add(passed ? 'table-success' : 'table-danger');
-
-        fetch(`/api/tests/runs/${currentRunId}/results`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({test_item_id: itemId, actual_value: value, remark: remark}),
-        })
-        .then(r => r.json())
-        .then(res => {
-            if (res.code !== 0) {
-                addLog(`提交失败: ${res.message}`, 'error');
+                testItems = res.data;
+                currentItemIndex = 0;
+                document.getElementById('items-count').textContent = testItems.length + ' 项';
+                renderTestItems();
+                if (testItems.length > 0) setTimeout(()=>promptForValue(0), 500);
             }
         });
+}
 
-        bootstrap.Modal.getInstance(document.getElementById('valueModal')).hide();
+function renderTestItems() {
+    const tbody = document.getElementById('test-items-body');
+    if (!testItems.length) { tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">暂无测试项</td></tr>'; return; }
+    tbody.innerHTML = testItems.map((item, i) => `
+        <tr id="row-${item.id}">
+            <td>${i+1}</td>
+            <td>${item.name}${item.description ? '<br><small class="text-muted">'+item.description+'</small>' : ''}</td>
+            <td>${item.expected_value}</td>
+            <td>${item.min_value}</td>
+            <td>${item.max_value}</td>
+            <td>${item.unit}</td>
+            <td id="val-${item.id}">-</td>
+            <td id="res-${item.id}"><span class="badge bg-secondary">待测</span></td>
+            <td><button class="btn btn-sm btn-outline-primary" onclick="promptForValue(${i})">输入</button></td>
+        </tr>
+    `).join('');
+}
 
-        const nextIndex = currentItemIndex + 1;
-        if (nextIndex < testItems.length) {
-            setTimeout(() => promptForValue(nextIndex), 300);
-        } else {
-            addLog('所有测试项已完成', 'success');
-            fetch(`/api/tests/runs/${currentBatchId}`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({status: 'completed'}),
-            });
-            document.getElementById('start-btn').classList.remove('d-none');
-            document.getElementById('stop-btn').classList.add('d-none');
-        }
+function promptForValue(index) {
+    const item = testItems[index];
+    if (!item) return;
+    currentItemIndex = index;
+    document.getElementById('modal-item-id').value = item.id;
+    document.getElementById('modal-title').textContent = item.name;
+    document.getElementById('modal-range').textContent = `合格范围: ${item.min_value} ~ ${item.max_value} ${item.unit}`;
+    document.getElementById('modal-unit').textContent = item.unit;
+    document.getElementById('modal-value').value = '';
+    new bootstrap.Modal(document.getElementById('valueModal')).show();
+    setTimeout(()=>document.getElementById('modal-value').focus(), 300);
+}
+
+function submitModalValue() {
+    const id = parseInt(document.getElementById('modal-item-id').value);
+    const val = parseFloat(document.getElementById('modal-value').value);
+    if (isNaN(val)) { alert('请输入有效数值'); return; }
+    const item = testItems.find(i=>i.id===id);
+    if (!item) return;
+    const passed = val >= item.min_value && val <= item.max_value;
+    document.getElementById(`val-${id}`).textContent = val;
+    document.getElementById(`res-${id}`).innerHTML = `<span class="badge bg-${passed?'success':'danger'}">${passed?'PASS':'FAIL'}</span>`;
+    document.getElementById(`row-${id}`).classList.add(passed?'table-success':'table-danger');
+    fetch(`/api/tests/runs/${currentRunId}/results`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({test_item_id:id, actual_value:val}) });
+    bootstrap.Modal.getInstance(document.getElementById('valueModal')).hide();
+    if (currentItemIndex + 1 < testItems.length) {
+        setTimeout(()=>promptForValue(currentItemIndex + 1), 300);
+    } else {
+        addLog('所有测试项已完成', 'success');
+        fetch(`/api/tests/runs/${currentBatchId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'completed'}) });
+        if (currentSlotId) fetch(`/api/stations/slots/${currentSlotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle'}) });
+        resetTestUI();
     }
+}
 
-    function updateProgress(data) {
-        document.getElementById('pass-count').textContent = data.passed_count || 0;
-        document.getElementById('fail-count').textContent = data.failed_count || 0;
-        document.getElementById('total-count').textContent = data.total || 0;
-        const total = data.total || 1;
-        document.getElementById('progress-pass').style.width = ((data.passed_count || 0) / total * 100) + '%';
-        document.getElementById('progress-fail').style.width = ((data.failed_count || 0) / total * 100) + '%';
-    }
+function stopTestRun() {
+    if (!currentBatchId) return;
+    fetch(`/api/tests/runs/${currentBatchId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'failed'}) })
+        .then(()=>{ addLog('测试已手动停止', 'warning'); if(currentSlotId) fetch(`/api/stations/slots/${currentSlotId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'idle'}) }); resetTestUI(); });
+}
 
-    function addLog(msg, type) {
-        const div = document.getElementById('process-log');
-        const time = new Date().toLocaleTimeString();
-        const colors = {info: '#0d6efd', pass: '#198754', fail: '#dc3545', success: '#198754', error: '#dc3545', warning: '#ffc107'};
-        const p = document.createElement('p');
-        p.className = 'mb-1 small';
-        p.innerHTML = `<span class="text-muted">[${time}]</span> <span style="color: ${colors[type] || '#333'}">${msg}</span>`;
-        div.appendChild(p);
-        div.scrollTop = div.scrollHeight;
-    }
+function resetTestUI() {
+    document.getElementById('barcode-form').querySelector('button[type=submit]').classList.remove('d-none');
+    document.getElementById('stop-btn').classList.add('d-none');
+    currentRunId = null; currentBatchId = null; currentItemIndex = 0; testItems = [];
+    document.getElementById('test-items-body').innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">扫描条码开始测试</td></tr>';
+    document.getElementById('progress-pass').style.width = '0%'; document.getElementById('progress-fail').style.width = '0%';
+    document.getElementById('pass-count').textContent = '0'; document.getElementById('fail-count').textContent = '0'; document.getElementById('total-count').textContent = '0';
+    document.getElementById('barcode-input').value = ''; document.getElementById('barcode-input').focus();
+}
+
+function updateProgress(d) {
+    document.getElementById('pass-count').textContent = d.passed_count||0;
+    document.getElementById('fail-count').textContent = d.failed_count||0;
+    document.getElementById('total-count').textContent = d.total||0;
+    const t = d.total||1;
+    document.getElementById('progress-pass').style.width = ((d.passed_count||0)/t*100)+'%';
+    document.getElementById('progress-fail').style.width = ((d.failed_count||0)/t*100)+'%';
+}
+
+function addLog(msg, type) {
+    const div = document.getElementById('process-log');
+    const time = new Date().toLocaleTimeString();
+    const colors = {info:'#0d6efd', pass:'#198754', fail:'#dc3545', success:'#198754', error:'#dc3545', warning:'#ffc107'};
+    const p = document.createElement('p'); p.className = 'mb-1 small';
+    p.innerHTML = `<span class="text-muted">[${time}]</span> <span style="color:${colors[type]||'#333'}">${msg}</span>`;
+    div.appendChild(p); div.scrollTop = div.scrollHeight;
+}
 </script>
 {% endblock %}

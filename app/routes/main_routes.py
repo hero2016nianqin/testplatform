@@ -39,3 +39,9 @@ def settings_page():
 def init_page():
     """系统初始化页面 - 初始化示例数据、重置系统、导入默认配置"""
     return render_template('initialization.html')
+
+
+@main_bp.route('/station-settings/<int:station_id>')
+def station_settings_page(station_id):
+    """工站设置页面 - 装备/硬件/软件/场景参数配置"""
+    return render_template('station_settings.html')

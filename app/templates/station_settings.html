@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}工站设置{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-gear-wide-connected"></i> <span id="station-name">工站设置</span></h5>
+            <a href="/test" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回测试</a>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="settingTabs">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-equipment">装备参数</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hardware">硬件参数</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-software">软件参数</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scenario">场景参数</button></li>
+</ul>
+
+<div class="tab-content">
+    <!-- ========== 装备参数 ========== -->
+    <div class="tab-pane fade show active" id="tab-equipment">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="border-bottom pb-2">公共属性</h6>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="eq-auto-load">
+                            <label class="form-check-label">自动上板模式</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="eq-debug-mode">
+                            <label class="form-check-label">本地调试模式</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="eq-process-control">
+                            <label class="form-check-label">工序管控</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <label class="form-label small">装备 IP</label>
+                            <input type="text" class="form-control form-control-sm" id="eq-ip">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">装备服务地址</label>
+                            <input type="text" class="form-control form-control-sm" id="eq-service-addr">
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="border-bottom pb-2 mt-4">通用属性</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label small">测试模式</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="eq-mode-normal" checked>
+                            <label class="form-check-label">正常测试</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="eq-mode-verify">
+                            <label class="form-check-label">验证测试</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="eq-mode-cal">
+                            <label class="form-check-label">校准测试</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="eq-barcode-verify" checked>
+                            <label class="form-check-label">条码校验</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button class="btn btn-primary" onclick="saveEquipment()"><i class="bi bi-check-lg"></i> 保存装备参数</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 硬件参数 ========== -->
+    <div class="tab-pane fade" id="tab-hardware">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-cpu"></i> 硬件参数</span>
+                <button class="btn btn-sm btn-primary" onclick="addHardware()"><i class="bi bi-plus-lg"></i> 新增参数</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="hw-table">
+                        <thead><tr><th style="width:40%">参数名（文件名）</th><th style="width:40%">参数值</th><th style="width:15%">分组</th><th style="width:5%">操作</th></tr></thead>
+                        <tbody id="hw-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 软件参数 ========== -->
+    <div class="tab-pane fade" id="tab-software">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="border-bottom pb-2">被测物版本信息</h6>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label small">软件版本</label>
+                        <input type="text" class="form-control" id="sw-dut-version">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">固件版本</label>
+                        <input type="text" class="form-control" id="sw-firmware-version">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">硬件版本</label>
+                        <input type="text" class="form-control" id="sw-hardware-version">
+                    </div>
+                </div>
+
+                <h6 class="border-bottom pb-2 mt-4">测试项目集合（可勾选）</h6>
+                <div class="mb-2">
+                    <button class="btn btn-sm btn-outline-primary" onclick="$('#sw-items-body input').prop('checked', true)">全选</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="$('#sw-items-body input').prop('checked', false)">全不选</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead><tr><th style="width:40px">选择</th><th>测试项目</th><th>标准值</th><th>下限</th><th>上限</th><th>单位</th></tr></thead>
+                        <tbody id="sw-items-body"></tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-primary" onclick="saveSoftware()"><i class="bi bi-check-lg"></i> 保存软件参数</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 场景参数 ========== -->
+    <div class="tab-pane fade" id="tab-scenario">
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted">场景参数以 JSON 格式存储，支持灵活扩展。</p>
+                <div class="mb-3">
+                    <label class="form-label">场景配置 (JSON)</label>
+                    <textarea class="form-control font-monospace" id="scenario-data" rows="10"></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="saveScenario()"><i class="bi bi-check-lg"></i> 保存场景参数</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let stationId = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 从 URL 获取工站 ID
+    const m = window.location.pathname.match(/\/station-settings\/(\d+)/);
+    if (m) stationId = parseInt(m[1]);
+
+    // 权限检查
+    fetch('/api/auth/me').then(r=>r.json()).then(res=>{
+        if (res.code !== 0 || res.data.role !== 'process') { window.location.href = '/'; }
+    });
+
+    if (stationId) {
+        loadStationInfo();
+        loadEquipment();
+        loadHardware();
+        loadSoftware();
+        loadScenario();
+    }
+});
+
+function loadStationInfo() {
+    fetch(`/api/stations/${stationId}`).then(r=>r.json()).then(res=>{
+        if (res.code === 0) document.getElementById('station-name').textContent = res.data.name + ' - 设置';
+    });
+}
+
+// ========== 装备参数 ==========
+function loadEquipment() {
+    fetch(`/api/stations/${stationId}/equipment`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const d = res.data;
+        document.getElementById('eq-auto-load').checked = d.auto_load_enabled;
+        document.getElementById('eq-debug-mode').checked = d.debug_mode_enabled;
+        document.getElementById('eq-process-control').checked = d.process_control_enabled;
+        document.getElementById('eq-ip').value = d.equipment_ip || '';
+        document.getElementById('eq-service-addr').value = d.equipment_service_address || '';
+        document.getElementById('eq-mode-normal').checked = d.test_mode_normal;
+        document.getElementById('eq-mode-verify').checked = d.test_mode_verify;
+        document.getElementById('eq-mode-cal').checked = d.test_mode_calibration;
+        document.getElementById('eq-barcode-verify').checked = d.barcode_verify_enabled;
+    });
+}
+
+function saveEquipment() {
+    const data = {
+        auto_load_enabled: document.getElementById('eq-auto-load').checked,
+        debug_mode_enabled: document.getElementById('eq-debug-mode').checked,
+        process_control_enabled: document.getElementById('eq-process-control').checked,
+        equipment_ip: document.getElementById('eq-ip').value.trim(),
+        equipment_service_address: document.getElementById('eq-service-addr').value.trim(),
+        test_mode_normal: document.getElementById('eq-mode-normal').checked,
+        test_mode_verify: document.getElementById('eq-mode-verify').checked,
+        test_mode_calibration: document.getElementById('eq-mode-cal').checked,
+        barcode_verify_enabled: document.getElementById('eq-barcode-verify').checked,
+    };
+    fetch(`/api/stations/${stationId}/equipment`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+        .then(r=>r.json()).then(res=>{
+            alert(res.code === 0 ? '保存成功' : '保存失败: ' + res.message);
+        });
+}
+
+// ========== 硬件参数 ==========
+function loadHardware() {
+    fetch(`/api/stations/${stationId}/hardware`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const tbody = document.getElementById('hw-body');
+        const items = res.data.items || [];
+        if (!items.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无硬件参数</td></tr>'; return; }
+        tbody.innerHTML = items.map(p => `
+            <tr>
+                <td><input type="text" class="form-control form-control-sm" value="${p.param_name}" id="hw-name-${p.id}" onchange="updateHardware(${p.id})"></td>
+                <td><input type="text" class="form-control form-control-sm" value="${p.param_value}" id="hw-val-${p.id}" onchange="updateHardware(${p.id})"></td>
+                <td><input type="text" class="form-control form-control-sm" value="${p.group_name}" id="hw-group-${p.id}" onchange="updateHardware(${p.id})"></td>
+                <td><button class="btn btn-sm btn-outline-danger" onclick="deleteHardware(${p.id})"><i class="bi bi-trash"></i></button></td>
+            </tr>
+        `).join('');
+    });
+}
+
+function addHardware() {
+    const data = { param_name: '新参数', param_value: '', group_name: 'default' };
+    fetch(`/api/stations/${stationId}/hardware`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+        .then(r=>r.json()).then(res=>{ if(res.code===0) loadHardware(); });
+}
+
+function updateHardware(id) {
+    const data = {
+        param_name: document.getElementById(`hw-name-${id}`).value,
+        param_value: document.getElementById(`hw-val-${id}`).value,
+        group_name: document.getElementById(`hw-group-${id}`).value,
+    };
+    fetch(`/api/stations/hardware/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+}
+
+function deleteHardware(id) {
+    if (!confirm('确定删除此参数？')) return;
+    fetch(`/api/stations/hardware/${id}`, {method:'DELETE'})
+        .then(r=>r.json()).then(res=>{ if(res.code===0) loadHardware(); });
+}
+
+// ========== 软件参数 ==========
+function loadSoftware() {
+    fetch(`/api/stations/${stationId}/software`).then(r=>r.json()).then(res=>{
+        if (res.code !== 0) return;
+        const d = res.data;
+        document.getElementById('sw-dut-version').value = d.dut_version || '';
+        document.getElementById('sw-firmware-version').value = d.dut_firmware_version || '';
+        document.getElementById('sw-hardware-version').value = d.dut_hardware_version || '';
+        const selected = d.selected_test_item_ids || [];
+        const items = d.all_test_items || [];
+        const tbody = document.getElementById('sw-items-body');
+        tbody.innerHTML = items.map(item => `
+            <tr>
+                <td><input class="form-check-input" type="checkbox" value="${item.id}" ${selected.includes(item.id) ? 'checked' : ''}></td>
+                <td>${item.name}</td>
+                <td>${item.expected_value}</td>
+                <td>${item.min_value}</td>
+                <td>${item.max_value}</td>
+                <td>${item.unit}</td>
+            </tr>
+        `).join('');
+    });
+}
+
+function saveSoftware() {
+    const selected = [];
+    document.querySelectorAll('#sw-items-body input:checked').forEach(cb => selected.push(parseInt(cb.value)));
+    const data = {
+        dut_version: document.getElementById('sw-dut-version').value.trim(),
+        dut_firmware_version: document.getElementById('sw-firmware-version').value.trim(),
+        dut_hardware_version: document.getElementById('sw-hardware-version').value.trim(),
+        selected_test_item_ids: selected,
+    };
+    fetch(`/api/stations/${stationId}/software`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+        .then(r=>r.json()).then(res=>{ alert(res.code===0 ? '保存成功' : '保存失败: ' + res.message); });
+}
+
+// ========== 场景参数 ==========
+function loadScenario() {
+    fetch(`/api/stations/${stationId}/scenario`).then(r=>r.json()).then(res=>{
+        if (res.code === 0) {
+            document.getElementById('scenario-data').value = JSON.stringify(res.data.scenario_data, null, 2);
+        }
+    });
+}
+
+function saveScenario() {
+    let scenarioData;
+    try { scenarioData = JSON.parse(document.getElementById('scenario-data').value); }
+    catch(e) { alert('JSON 格式不正确'); return; }
+    fetch(`/api/stations/${stationId}/scenario`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scenario_data: scenarioData})})
+        .then(r=>r.json()).then(res=>{ alert(res.code===0 ? '保存成功' : '保存失败: ' + res.message); });
+}
+</script>
+{% endblock %}

@@ -54,14 +54,22 @@ def create_app(config_object=None):
 
     # 导入数据模型（确保它们在 SQLAlchemy 中注册），然后自动建表
     from app.models import TestItem, TestResult, TestConfig, TestRun, User
+    from app.models.station import (
+        TestStation, TestChassis, TestSlot,
+        EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
+    )
     with app.app_context():
         db.create_all()
         # 如果没有用户数据，创建默认账号
         from app.routes.auth_routes import seed_default_users
         seed_default_users()
+        # 如果没有工站数据，创建默认示例工站
+        from app.routes.station_routes import seed_sample_stations
+        seed_sample_stations()
 
     # 注册各功能模块的路由蓝图，每个蓝图有独立的 URL 前缀
     from app.routes.auth_routes import auth_bp
+    from app.routes.station_routes import station_bp
     from app.routes.test_routes import test_bp
     from app.routes.config_routes import config_bp
     from app.routes.log_routes import log_bp
@@ -69,6 +77,8 @@ def create_app(config_object=None):
 
     # 认证相关路由（登录页 + API）
     app.register_blueprint(auth_bp)
+    # 工站相关 API
+    app.register_blueprint(station_bp, url_prefix='/api/stations')
     # API 路由组
     app.register_blueprint(test_bp, url_prefix='/api/tests')
     app.register_blueprint(config_bp, url_prefix='/api/configs')
