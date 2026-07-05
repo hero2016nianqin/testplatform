@@ -18,6 +18,7 @@ from app.models.station import (
     EquipmentDefinition,
 )
 from app.models import TestItem
+from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
 from app.auth import process_required, login_required, get_current_user
 
 station_bp = Blueprint('stations', __name__)
@@ -707,6 +708,8 @@ def update_software_config(station_id):
                   'dut_hardware_version', 'project_name']:
         if field in data:
             setattr(config, field, data[field])
+    if 'sequence_id' in data:
+        config.sequence_id = int(data['sequence_id']) or 0
     if 'selected_test_item_ids' in data:
         config.selected_test_item_ids = json.dumps(
             data['selected_test_item_ids'], ensure_ascii=False)
@@ -753,6 +756,7 @@ def update_scenario_config(station_id):
 def seed_sample_stations():
     """初始化示例厂区/线体/工站数据（启动时自动调用）"""
     if Factory.query.count() > 0:
+        seed_templates_and_sequences()
         return
 
     # 创建示例厂区
@@ -827,7 +831,37 @@ def seed_sample_stations():
     db.session.flush()
     _create_station_full(station3)
 
+    seed_templates_and_sequences()
     db.session.commit()
+
+
+def seed_templates_and_sequences():
+    if TestItemTemplate.query.count() > 0:
+        return
+    tpls = [
+        ('电压测试', 'http://service-test:5001/test/voltage', True, 30, '电气'),
+        ('电流测试', 'http://service-test:5001/test/current', False, 30, '电气'),
+        ('频率测试', 'http://service-test:5001/test/frequency', False, 60, '射频'),
+        ('温度测量', 'http://service-test:5001/test/temperature', True, 120, '环境'),
+        ('绝缘测试', 'http://service-test:5001/test/insulation', True, 60, '安规'),
+        ('噪声测试', 'http://service-test:5001/test/noise', False, 30, '声学'),
+    ]
+    for i, (name, addr, critical, timeout, cat) in enumerate(tpls):
+        db.session.add(TestItemTemplate(
+            name=name, service_address=addr,
+            is_critical=critical, timeout_seconds=timeout,
+            category=cat, sort_order=i,
+        ))
+    db.session.flush()
+    all_tpls = TestItemTemplate.query.order_by(TestItemTemplate.sort_order).all()
+    seq = TestSequence(name='FCT 标准测试序列', description='功能测试标准流程', version='1.0')
+    db.session.add(seq)
+    db.session.flush()
+    for i, t in enumerate(all_tpls):
+        db.session.add(TestSequenceStep(
+            sequence_id=seq.id, template_id=t.id,
+            step_order=i, timeout_seconds=t.timeout_seconds,
+        ))
 
 
 def _create_station_full(station):

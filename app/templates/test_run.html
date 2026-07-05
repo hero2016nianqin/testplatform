@@ -774,55 +774,114 @@ function submitBarcodeTest() {
     document.getElementById('barcode-progress-text').textContent = '启动中...';
     // 先获取该装备的软件配置（获取已选测试项），再获取测试项列表
     fetch(`/api/stations/${stationId}/software`).then(r=>r.json()).then(softRes => {
-        const selectedIds = (softRes.code === 0 && softRes.data) ? (softRes.data.selected_test_item_ids || []) : [];
-        addLogEntry('info', `装备软件配置: ${selectedIds.length} 个已选测试项`);
-        fetch('/api/tests/items?active_only=true').then(r=>r.json()).then(itemRes => {
-            let items = itemRes.data || [];
-            // 如果有已选测试项 ID，则只执行这些项
-            if (selectedIds.length > 0) {
-                items = items.filter(item => selectedIds.includes(item.id));
-                addLogEntry('info', `根据版本配置过滤后: ${items.length} 个测试项`);
+        const softwareConfig = (softRes.code === 0 && softRes.data) ? softRes.data : null;
+        const selectedIds = softwareConfig ? (softwareConfig.selected_test_item_ids || []) : [];
+        const sequenceId = softwareConfig ? (softwareConfig.sequence_id || 0) : 0;
+        const sequenceData = softwareConfig ? (softwareConfig.sequence_data || '') : '';
+        addLogEntry('info', `装备软件配置: ${selectedIds.length} 个已选测试项, sequence_id=${sequenceId}`);
+        // Check for archived sequence snapshot first
+        let parsedSeqSteps = [];
+        if (sequenceData) {
+            try { parsedSeqSteps = JSON.parse(sequenceData); } catch(e) {}
+            if (parsedSeqSteps.length) {
+                addLogEntry('info', `使用版本归档序列快照: ${parsedSeqSteps.length} 步`);
+                startRunWithSteps(parsedSeqSteps, sequenceId, barcode, slotId, stationId);
+                return;
             }
-            if (!items.length) { addLogEntry('error', '没有可用的测试项'); alert('没有可用的测试项'); return; }
-            addLogEntry('info', `获取到 ${items.length} 个测试项`);
-        // 调用测试批次启动 API
-        fetch(`/api/tests/runs`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
+        }
+        const loadItems = sequenceId
+            ? fetch(`/api/tests/sequences/${sequenceId}`).then(r => r.json())
+            : fetch('/api/tests/items?active_only=true').then(r => r.json());
+        loadItems.then(itemRes => {
+            let items = [];
+            let steps = [];
+            if (sequenceId && itemRes.code === 0 && itemRes.data && itemRes.data.steps) {
+                steps = itemRes.data.steps || [];
+                addLogEntry('info', `使用测试序列: ${itemRes.data.name}, ${steps.length} 步`);
+                if (!steps.length) { addLogEntry('error', '测试序列没有步骤'); alert('测试序列没有步骤'); return; }
+            } else {
+                items = itemRes.data || [];
+                if (selectedIds.length > 0) {
+                    items = items.filter(item => selectedIds.includes(item.id));
+                    addLogEntry('info', `根据版本配置过滤后: ${items.length} 个测试项`);
+                }
+                if (!items.length) { addLogEntry('error', '没有可用的测试项'); alert('没有可用的测试项'); return; }
+                addLogEntry('info', `获取到 ${items.length} 个测试项`);
+            }
+            const runBody = {
                 serial_number: barcode,
                 slot_id: parseInt(slotId),
                 station_id: parseInt(stationId),
                 operator: '操作员',
-            }),
-        }).then(r => r.json()).then(res => {
-            if (res.code !== 0) { addLogEntry('error', '测试启动失败: ' + (res.message || '')); alert(res.message || '测试启动失败'); return; }
-            const run = res.data;
-            const batchId = run.batch_id;
-            addLogEntry('info', `测试批次创建成功 - ID: ${run.id}, batch_id: ${batchId}`);
-            // 更新槽位状态
-            if (slotId) {
-                fetch(`/api/stations/slots/${slotId}`, {
-                    method:'PUT', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({status:'testing', current_batch_id: batchId})
-                });
-                addLogEntry('info', '槽位状态已更新为测试中');
+            };
+            if (sequenceId) {
+                const seqData = itemRes.data;
+                runBody.sequence_id = sequenceId;
+                runBody.sequence_name = seqData ? seqData.name : '';
             }
-            // 关闭弹窗，然后逐个执行测试项
-            bootstrap.Modal.getInstance(document.getElementById('barcodeModal')).hide();
-            // 逐个执行测试项（模拟自动测试）
-            executeTestItems(run.id, run.batch_id, items, slotId, stationId);
-        }).catch(() => { addLogEntry('error', '测试启动请求失败'); alert('请求失败'); });
+            fetch(`/api/tests/runs`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(runBody),
+            }).then(r => r.json()).then(res => {
+                if (res.code !== 0) { addLogEntry('error', '测试启动失败: ' + (res.message || '')); alert(res.message || '测试启动失败'); return; }
+                const run = res.data;
+                const batchId = run.batch_id;
+                addLogEntry('info', `测试批次创建成功 - ID: ${run.id}, batch_id: ${batchId}`);
+                if (slotId) {
+                    fetch(`/api/stations/slots/${slotId}`, {
+                        method:'PUT', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({status:'testing', current_batch_id: batchId})
+                    });
+                    addLogEntry('info', '槽位状态已更新为测试中');
+                }
+                bootstrap.Modal.getInstance(document.getElementById('barcodeModal')).hide();
+                if (steps.length) {
+                    executeTestItems(run.id, run.batch_id, items, slotId, stationId, 0, false, steps);
+                } else {
+                    executeTestItems(run.id, run.batch_id, items, slotId, stationId);
+                }
+            }).catch(() => { addLogEntry('error', '测试启动请求失败'); alert('请求失败'); });
+        });
     });
-});
 }
-function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFailed) {
+function startRunWithSteps(steps, sequenceId, barcode, slotId, stationId) {
+    const seqName = steps.length && steps[0].sequence_name ? steps[0].sequence_name : ('seq-' + sequenceId);
+    const runBody = {
+        serial_number: barcode,
+        slot_id: parseInt(slotId),
+        station_id: parseInt(stationId),
+        operator: '操作员',
+        sequence_id: parseInt(sequenceId),
+        sequence_name: seqName,
+    };
+    fetch(`/api/tests/runs`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(runBody),
+    }).then(r => r.json()).then(res => {
+        if (res.code !== 0) { addLogEntry('error', '测试启动失败: ' + (res.message || '')); alert(res.message || '测试启动失败'); return; }
+        const run = res.data;
+        const batchId = run.batch_id;
+        addLogEntry('info', `测试批次创建成功 - ID: ${run.id}, batch_id: ${batchId}`);
+        if (slotId) {
+            fetch(`/api/stations/slots/${slotId}`, {
+                method:'PUT', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({status:'testing', current_batch_id: batchId})
+            });
+            addLogEntry('info', '槽位状态已更新为测试中');
+        }
+        bootstrap.Modal.getInstance(document.getElementById('barcodeModal')).hide();
+        executeTestItems(run.id, run.batch_id, [], slotId, stationId, 0, false, steps);
+    }).catch(() => { addLogEntry('error', '测试启动请求失败'); alert('请求失败'); });
+}
+function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFailed, steps) {
     if (!index) index = 0;
     if (hasFailed === undefined) hasFailed = false;
-    if (index >= items.length) {
+    const total = steps ? steps.length : items.length;
+    if (index >= total) {
         const finalPassed = !hasFailed;
         addLogEntry('info', `批次 ${batchId} 全部测试项执行完成，结果：${finalPassed ? '通过' : '失败'}`);
-        // 更新槽位状态
         const newStatus = finalPassed ? 'pass' : 'fail';
         fetch(`/api/stations/slots/${slotId}`, {
             method:'PUT', headers:{'Content-Type':'application/json'},
@@ -832,13 +891,11 @@ function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFa
             method: 'PUT', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({status: 'completed'})
         });
-        // 更新 slot 填充条：100% + 最终颜色
         const fillEl = document.getElementById('slot-fill-' + slotId);
         if (fillEl) {
             fillEl.style.background = finalPassed ? '#a3cfbb' : '#f1aeb5';
             fillEl.style.height = '100%';
         }
-        // 更新槽位状态文字
         const slotEl = document.getElementById('slot-' + slotId);
         if (slotEl) {
             const labelEl = slotEl.querySelector('.slot-content div:last-child');
@@ -846,31 +903,98 @@ function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFa
         }
         return;
     }
-    const item = items[index];
-    const baseValue = parseFloat(item.expected_value) || 0;
-    const minVal = parseFloat(item.min_value) || (baseValue - 1);
-    const maxVal = parseFloat(item.max_value) || (baseValue + 1);
-    const range = maxVal - minVal;
-    const inRange = Math.random() < 0.9;
-    const actual = inRange
-        ? minVal + Math.random() * range
-        : (Math.random() < 0.5 ? minVal - Math.random() * 0.5 : maxVal + Math.random() * 0.5);
-    const passed = !inRange ? false : true;
-    if (!passed) hasFailed = true;
-    addLogEntry(passed ? 'info' : 'error', `测试项 ${index+1}/${items.length} - ${item.name}: ${Math.round(actual * 100) / 100} (${passed ? '通过' : '失败'})`);
-    // 更新 slot 进度条（从下往上填充）
-    const fillEl = document.getElementById('slot-fill-' + slotId);
-    if (fillEl) {
-        const pct = Math.round((index + 1) / items.length * 100);
-        fillEl.style.background = '#9eeaf9';
-        fillEl.style.height = pct + '%';
+    if (steps) {
+        // Sequence mode
+        const step = steps[index];
+        const itemName = step.template_name;
+        const isCritical = step.template_is_critical;
+        const serviceAddr = step.template_service_address;
+        const timeoutMs = (step.timeout_seconds || 60) * 1000;
+        addLogEntry('info', `步骤 ${index+1}/${total} - ${itemName}${isCritical ? ' [关键项]' : ''}${serviceAddr ? ' → ' + serviceAddr : ''}`);
+        const runStep = (actual, passed) => {
+            if (!passed) hasFailed = true;
+            addLogEntry(passed ? 'info' : 'error', `测试项 ${index+1}/${total} - ${itemName}: ${actual} (${passed ? '通过' : '失败'})${!passed && isCritical ? ' [关键项失败，停止后续]' : ''}`);
+            const fillEl = document.getElementById('slot-fill-' + slotId);
+            if (fillEl) {
+                const pct = Math.round((index + 1) / total * 100);
+                fillEl.style.background = '#9eeaf9';
+                fillEl.style.height = pct + '%';
+            }
+            const stop = !passed && isCritical;
+            fetch(`/api/tests/runs/${runId}/results`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({test_item_id: step.template_id, actual_value: actual, is_critical: isCritical, passed: passed}),
+            }).then(r => r.json()).then(res => {
+                if (stop) {
+                    addLogEntry('error', `关键项 ${itemName} 测试失败，批次终止`);
+                    executeTestItems(runId, batchId, items, slotId, stationId, total, true, steps);
+                } else {
+                    setTimeout(() => executeTestItems(runId, batchId, items, slotId, stationId, index + 1, hasFailed, steps), 500);
+                }
+            });
+        };
+        if (serviceAddr) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            fetch(serviceAddr, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    serial_number: document.getElementById('barcode-input-modal')?.value || '',
+                    template_id: step.template_id,
+                    template_name: itemName,
+                }),
+                signal: controller.signal,
+            }).then(r => {
+                clearTimeout(timer);
+                return r.ok ? r.json().catch(() => ({})) : {};
+            }).then(data => {
+                const actual = parseFloat(data.actual_value);
+                if (!isNaN(actual)) {
+                    // Backend will evaluate pass/fail based on archived params
+                    runStep(isNaN(actual) ? 0 : actual, data.passed !== false);
+                } else {
+                    throw new Error('invalid response');
+                }
+            }).catch(err => {
+                addLogEntry('warn', `微服务调用失败 (${serviceAddr}): ${err.message}，使用随机值替代`);
+                const actual = Math.round((Math.random() * 5 + 3) * 100) / 100;
+                const passed = Math.random() < 0.9;
+                runStep(actual, passed);
+            });
+        } else {
+            // No service address - use fallback random value
+            const actual = Math.round((Math.random() * 5 + 3) * 100) / 100;
+            const passed = Math.random() < 0.9;
+            runStep(actual, passed);
+        }
+    } else {
+        // Traditional mode
+        const item = items[index];
+        const baseValue = parseFloat(item.expected_value) || 0;
+        const minVal = parseFloat(item.min_value) || (baseValue - 1);
+        const maxVal = parseFloat(item.max_value) || (baseValue + 1);
+        const range = maxVal - minVal;
+        const inRange = Math.random() < 0.9;
+        const actual = inRange
+            ? minVal + Math.random() * range
+            : (Math.random() < 0.5 ? minVal - Math.random() * 0.5 : maxVal + Math.random() * 0.5);
+        const passed = !!inRange;
+        if (!passed) hasFailed = true;
+        addLogEntry(passed ? 'info' : 'error', `测试项 ${index+1}/${total} - ${item.name}: ${Math.round(actual * 100) / 100} (${passed ? '通过' : '失败'})`);
+        const fillEl = document.getElementById('slot-fill-' + slotId);
+        if (fillEl) {
+            const pct = Math.round((index + 1) / total * 100);
+            fillEl.style.background = '#9eeaf9';
+            fillEl.style.height = pct + '%';
+        }
+        fetch(`/api/tests/runs/${runId}/results`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({test_item_id: item.id, actual_value: Math.round(actual * 100) / 100}),
+        }).then(r => r.json()).then(() => {
+            setTimeout(() => executeTestItems(runId, batchId, items, slotId, stationId, index + 1, hasFailed, steps), 500);
+        });
     }
-    fetch(`/api/tests/runs/${runId}/results`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({test_item_id: item.id, actual_value: Math.round(actual * 100) / 100}),
-    }).then(r => r.json()).then(() => {
-        setTimeout(() => executeTestItems(runId, batchId, items, slotId, stationId, index + 1, hasFailed), 500);
-    });
 }
 
 // ==================== 参数设置弹窗 ====================

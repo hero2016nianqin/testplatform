@@ -43,6 +43,9 @@ class TestRun(db.Model):
                            nullable=True, index=True)
     slot_id = db.Column(db.Integer, db.ForeignKey('test_slots.id'),
                         nullable=True, index=True)
+    # 关联的测试序列 ID 和名称
+    sequence_id = db.Column(db.Integer, default=0)
+    sequence_name = db.Column(db.String(200), default='')
     # 记录创建时间
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -68,6 +71,8 @@ class TestRun(db.Model):
                         if self.ended_at else None,
             'created_at': self.created_at.isoformat()
                           if self.created_at else None,
+            'sequence_id': self.sequence_id or 0,
+            'sequence_name': self.sequence_name or '',
         }
 
     def __repr__(self):

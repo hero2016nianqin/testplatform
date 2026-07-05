@@ -54,7 +54,10 @@ def create_app(config_object=None):
     cors.init_app(app)
 
     # 导入数据模型（确保它们在 SQLAlchemy 中注册），然后自动建表
-    from app.models import TestItem, TestResult, TestConfig, TestRun, User
+    from app.models import (
+        TestItem, TestResult, TestConfig, TestRun, User,
+        TestItemTemplate, TestSequence, TestSequenceStep,
+    )
     from app.models.station import (
         Factory, ProductionLine,
         TestStation, TestChassis, TestSlot,
@@ -67,11 +70,23 @@ def create_app(config_object=None):
         try:
             db.session.execute(text('ALTER TABLE test_versions ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
         except Exception:
-            pass  # column already exists
+            pass
         try:
             db.session.execute(text('ALTER TABLE software_configs ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
         except Exception:
-            pass  # column already exists
+            pass
+        try:
+            db.session.execute(text('ALTER TABLE test_runs ADD COLUMN sequence_id INTEGER DEFAULT 0'))
+        except Exception:
+            pass
+        try:
+            db.session.execute(text('ALTER TABLE test_runs ADD COLUMN sequence_name VARCHAR(200) DEFAULT ""'))
+        except Exception:
+            pass
+        try:
+            db.session.execute(text('ALTER TABLE software_configs ADD COLUMN sequence_id INTEGER DEFAULT 0'))
+        except Exception:
+            pass
         # Migration: remove UNIQUE constraint on version from test_versions if present
         try:
             tbl_info = db.session.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='test_versions'")).scalar()
@@ -95,6 +110,14 @@ def create_app(config_object=None):
                 db.session.execute(text('PRAGMA foreign_keys=on'))
         except Exception:
             db.session.execute(text('PRAGMA foreign_keys=on'))
+        try:
+            db.session.execute(text('ALTER TABLE software_configs ADD COLUMN sequence_data TEXT DEFAULT ""'))
+        except Exception:
+            pass
+        try:
+            db.session.execute(text("ALTER TABLE test_versions ADD COLUMN sequence_id INTEGER DEFAULT 0"))
+        except Exception:
+            pass
         db.session.commit()
         # 如果没有用户数据，创建默认账号
         from app.routes.auth_routes import seed_default_users

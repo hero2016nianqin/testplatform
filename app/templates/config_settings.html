@@ -34,6 +34,11 @@
                     <i class="bi bi-building"></i> 厂区线体
                 </button>
             </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#sequence-tab">
+                    <i class="bi bi-diagram-3"></i> 测试序列
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -242,7 +247,184 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 测试序列管理 -->
+            <div class="tab-pane fade" id="sequence-tab">
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-file-text"></i> 测试项模板</span>
+                                <button class="btn btn-sm btn-primary" onclick="showTemplateModal()">
+                                    <i class="bi bi-plus-lg"></i> 新增模板
+                                </button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="max-height:500px">
+                                    <table class="table table-hover mb-0 table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>名称</th>
+                                                <th>服务地址</th>
+                                                <th>超时(s)</th>
+                                                <th>关键项</th>
+                                                <th>状态</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="templates-table-body">
+                                            {% for t in templates %}
+                                            <tr>
+                                                <td>{{ t.name }} <span class="badge bg-secondary bg-opacity-10 text-dark">{{ t.category }}</span></td>
+                                                <td style="font-size:.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ t.service_address or '-' }}">{{ t.service_address or '-' }}</td>
+                                                <td>{{ t.timeout_seconds }}s</td>
+                                                <td>{% if t.is_critical %}<span class="badge bg-danger">关键</span>{% else %}<span class="badge bg-secondary">否</span>{% endif %}</td>
+                                                <td>{% if t.is_active %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editTemplate({{ t.id }})"><i class="bi bi-pencil"></i></button>
+                                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteTemplate({{ t.id }})"><i class="bi bi-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr><td colspan="6" class="text-muted text-center">暂无模板</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-diagram-3"></i> 测试序列</span>
+                                <button class="btn btn-sm btn-success" onclick="showSequenceModal()">
+                                    <i class="bi bi-plus-lg"></i> 新增序列
+                                </button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="max-height:500px">
+                                    <table class="table table-hover mb-0 table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>名称</th>
+                                                <th>版本</th>
+                                                <th>步骤数</th>
+                                                <th>状态</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sequences-table-body">
+                                            {% for s in sequences %}
+                                            <tr>
+                                                <td><strong>{{ s.name }}</strong></td>
+                                                <td>{{ s.version }}</td>
+                                                <td>{{ s.steps.count() }} 步</td>
+                                                <td>{% if s.is_active %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editSequence({{ s.id }})"><i class="bi bi-pencil"></i></button>
+                                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteSequence({{ s.id }})"><i class="bi bi-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr><td colspan="5" class="text-muted text-center">暂无序列</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- 模板编辑弹窗 -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">测试项模板</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="tpl-id">
+                <div class="mb-2">
+                    <label class="form-label small">名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="tpl-name">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">描述</label>
+                    <textarea class="form-control form-control-sm" id="tpl-description" rows="2"></textarea>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">微服务地址 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="tpl-service-address" placeholder="http://localhost:5001/test/xxx">
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">超时时间（秒）</label>
+                        <input type="number" class="form-control form-control-sm" id="tpl-timeout" value="60" min="1">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">分类</label>
+                        <input type="text" class="form-control form-control-sm" id="tpl-category" placeholder="general">
+                    </div>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="tpl-is-critical">
+                    <label class="form-check-label small">关键测试项（失败时停止后续测试）</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveTemplate()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 序列编辑弹窗 -->
+<div class="modal fade" id="sequenceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">测试序列</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="seq-id">
+                <div class="mb-2">
+                    <label class="form-label small">名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="seq-name">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">描述</label>
+                    <textarea class="form-control form-control-sm" id="seq-description" rows="2"></textarea>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">步骤列表 <span class="text-danger">*</span> <span class="text-muted fw-normal">（从下方模板列表中点击添加）</span></label>
+                    <div id="seq-steps-container" class="border rounded p-2 bg-light" style="min-height:80px">
+                        <p class="text-muted small mb-0 text-center">暂无步骤，请从下方模板列表添加</p>
+                    </div>
+                </div>
+                <hr class="my-2">
+                <div class="mb-1">
+                    <label class="form-label small">可用模板</label>
+                    <div id="seq-template-pool" style="max-height:200px;overflow-y:auto">
+                        <p class="text-muted small">加载中...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveSequence()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
     </div>
 </div>
 
@@ -1267,10 +1449,262 @@
     document.addEventListener('DOMContentLoaded', function() {
         loadFactories();
         loadDefinitions();
-        // 切换 tab 时刷新定义列表
+        // 预加载序列数据（立即，避免用户点击时无响应）
+        loadTemplates();
+        loadSequences();
         document.querySelector('[data-bs-target="#definition-tab"]')?.addEventListener('click', function() {
             setTimeout(loadDefinitions, 100);
         });
+        // 测试序列 tab 切换时加载（双重保障）
+        document.querySelector('[data-bs-target="#sequence-tab"]')?.addEventListener('shown.bs.tab', function() {
+            loadTemplates();
+            loadSequences();
+        });
+        document.querySelector('[data-bs-target="#sequence-tab"]')?.addEventListener('click', function() {
+            loadTemplates();
+            loadSequences();
+        });
     });
+
+    // ==================== 测试项模板 ====================
+
+    function loadTemplates() {
+        const tbody = document.getElementById('templates-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</td></tr>';
+        fetch('/api/tests/templates?active_only=false')
+            .then(r => r.json()).then(res => {
+                if (res.code !== 0) { tbody.innerHTML = '<tr><td colspan="6" class="text-muted">加载失败</td></tr>'; return; }
+                const list = res.data || [];
+                if (!list.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-muted">暂无模板</td></tr>'; return; }
+                let html = '';
+                for (let i = 0; i < list.length; i++) {
+                    const t = list[i];
+                    const addr = (t.service_address || '-').replace(/"/g, '&quot;');
+                    html += '<tr>' +
+                        '<td>' + t.name + ' <span class="badge bg-secondary bg-opacity-10 text-dark">' + t.category + '</span></td>' +
+                        '<td style="font-size:.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + addr + '">' + (t.service_address || '-') + '</td>' +
+                        '<td>' + t.timeout_seconds + 's</td>' +
+                        '<td>' + (t.is_critical ? '<span class="badge bg-danger">关键</span>' : '<span class="badge bg-secondary">否</span>') + '</td>' +
+                        '<td>' + (t.is_active ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>') + '</td>' +
+                        '<td>' +
+                            '<button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editTemplate(' + t.id + ')"><i class="bi bi-pencil"></i></button> ' +
+                            '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteTemplate(' + t.id + ')"><i class="bi bi-trash"></i></button>' +
+                        '</td>' +
+                    '</tr>';
+                }
+                tbody.innerHTML = html;
+                loadTemplatePool();
+            }).catch(() => {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted">网络错误</td></tr>';
+            });
+    }
+
+    function loadTemplatePool() {
+        fetch('/api/tests/templates?active_only=true')
+            .then(r => r.json()).then(res => {
+                const pool = document.getElementById('seq-template-pool');
+                if (res.code !== 0 || !res.data || !res.data.length) {
+                    pool.innerHTML = '<p class="text-muted small mb-0">暂无可用模板</p>'; return;
+                }
+                pool.innerHTML = res.data.map(t => `
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-1 px-1 template-pool-item" data-id="${t.id}" data-critical="${t.is_critical}" data-timeout="${t.timeout_seconds}" data-name="${t.name.replace(/"/g, '&quot;')}">
+                        <span class="small">${t.name} ${t.is_critical ? '<span class="badge bg-danger" style="font-size:.6rem">关键</span>' : ''}</span>
+                        <button class="btn btn-sm btn-outline-success py-0 px-1" onclick="addStepFromPool(this)">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
+                `).join('');
+            });
+    }
+
+    function showTemplateModal() {
+        document.getElementById('tpl-id').value = '';
+        document.getElementById('tpl-name').value = '';
+        document.getElementById('tpl-description').value = '';
+        document.getElementById('tpl-service-address').value = '';
+        document.getElementById('tpl-timeout').value = 60;
+        document.getElementById('tpl-category').value = 'general';
+        document.getElementById('tpl-is-critical').checked = false;
+        new bootstrap.Modal(document.getElementById('templateModal')).show();
+    }
+
+    function editTemplate(id) {
+        fetch('/api/tests/templates?active_only=false').then(r => r.json()).then(res => {
+            const t = (res.data || []).find(x => x.id === id);
+            if (!t) return;
+            document.getElementById('tpl-id').value = t.id;
+            document.getElementById('tpl-name').value = t.name;
+            document.getElementById('tpl-description').value = t.description;
+            document.getElementById('tpl-service-address').value = t.service_address;
+            document.getElementById('tpl-timeout').value = t.timeout_seconds;
+            document.getElementById('tpl-category').value = t.category;
+            document.getElementById('tpl-is-critical').checked = t.is_critical;
+            new bootstrap.Modal(document.getElementById('templateModal')).show();
+        });
+    }
+
+    function saveTemplate() {
+        const id = document.getElementById('tpl-id').value;
+        const name = document.getElementById('tpl-name').value.trim();
+        if (!name) { alert('名称不能为空'); return; }
+        const data = {
+            name,
+            description: document.getElementById('tpl-description').value.trim(),
+            service_address: document.getElementById('tpl-service-address').value.trim(),
+            timeout_seconds: parseInt(document.getElementById('tpl-timeout').value) || 60,
+            category: document.getElementById('tpl-category').value.trim() || 'general',
+            is_critical: document.getElementById('tpl-is-critical').checked,
+        };
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/tests/templates/${id}` : '/api/tests/templates';
+        fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide();
+                    loadTemplates();
+                } else { alert(res.message); }
+            });
+    }
+
+    function deleteTemplate(id) {
+        if (!confirm('确定删除此模板？')) return;
+        fetch(`/api/tests/templates/${id}`, {method:'DELETE'})
+            .then(r => r.json()).then(res => { if(res.code===0) loadTemplates(); });
+    }
+
+    // ==================== 测试序列 ====================
+
+    function loadSequences() {
+        const tbody = document.getElementById('sequences-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center"><span class="spinner-border spinner-border-sm me-1"></span>加载中...</td></tr>';
+        fetch('/api/tests/sequences?active_only=false')
+            .then(r => r.json()).then(res => {
+                if (res.code !== 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-muted">加载失败</td></tr>'; return; }
+                const list = res.data || [];
+                if (!list.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-muted">暂无序列</td></tr>'; return; }
+                let html = '';
+                for (let i = 0; i < list.length; i++) {
+                    const s = list[i];
+                    html += '<tr>' +
+                        '<td><strong>' + s.name + '</strong></td>' +
+                        '<td>' + s.version + '</td>' +
+                        '<td>' + s.step_count + ' 步</td>' +
+                        '<td>' + (s.is_active ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>') + '</td>' +
+                        '<td>' +
+                            '<button class="btn btn-sm btn-outline-primary py-0 px-1" onclick="editSequence(' + s.id + ')"><i class="bi bi-pencil"></i></button> ' +
+                            '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteSequence(' + s.id + ')"><i class="bi bi-trash"></i></button>' +
+                        '</td>' +
+                    '</tr>';
+                }
+                tbody.innerHTML = html;
+            }).catch(() => {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">网络错误</td></tr>';
+            });
+    }
+
+    let seqSteps = [];
+
+    function showSequenceModal() {
+        document.getElementById('seq-id').value = '';
+        document.getElementById('seq-name').value = '';
+        document.getElementById('seq-description').value = '';
+        seqSteps = [];
+        renderSeqSteps();
+        new bootstrap.Modal(document.getElementById('sequenceModal')).show();
+    }
+
+    function editSequence(id) {
+        fetch(`/api/tests/sequences/${id}`).then(r => r.json()).then(res => {
+            if (res.code !== 0) return;
+            const s = res.data;
+            document.getElementById('seq-id').value = s.id;
+            document.getElementById('seq-name').value = s.name;
+            document.getElementById('seq-description').value = s.description;
+            seqSteps = (s.steps || []).map(st => ({
+                template_id: st.template_id,
+                name: st.template_name,
+                is_critical: st.template_is_critical,
+                timeout: st.timeout_seconds,
+            }));
+            renderSeqSteps();
+            new bootstrap.Modal(document.getElementById('sequenceModal')).show();
+        });
+    }
+
+    function addStepFromPool(btn) {
+        const item = btn.closest('.template-pool-item');
+        const templateId = parseInt(item.dataset.id);
+        if (seqSteps.some(s => s.template_id === templateId)) {
+            alert('该模板已在序列中'); return;
+        }
+        seqSteps.push({
+            template_id: templateId,
+            name: item.dataset.name,
+            timeout: parseInt(item.dataset.timeout) || 60,
+            is_critical: item.dataset.critical === 'true',
+        });
+        renderSeqSteps();
+    }
+
+    function removeSeqStep(index) {
+        seqSteps.splice(index, 1);
+        renderSeqSteps();
+    }
+
+    function moveSeqStep(index, dir) {
+        const target = index + dir;
+        if (target < 0 || target >= seqSteps.length) return;
+        [seqSteps[index], seqSteps[target]] = [seqSteps[target], seqSteps[index]];
+        renderSeqSteps();
+    }
+
+    function renderSeqSteps() {
+        const container = document.getElementById('seq-steps-container');
+        if (!seqSteps.length) {
+            container.innerHTML = '<p class="text-muted small mb-0 text-center">暂无步骤，请从下方模板列表添加</p>';
+            return;
+        }
+        container.innerHTML = seqSteps.map((s, i) => `
+            <div class="d-flex align-items-center gap-2 border rounded bg-white p-1 mb-1">
+                <span class="badge bg-secondary">${i+1}</span>
+                <span class="small flex-grow-1">${s.name} ${s.is_critical ? '<span class="badge bg-danger" style="font-size:.6rem">关键</span>' : ''}</span>
+                <input type="number" class="form-control form-control-sm" style="width:65px" value="${s.timeout}" min="1" step="1"
+                    onchange="seqSteps[${i}].timeout = parseInt(this.value) || 60" title="超时(秒)">
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="moveSeqStep(${i},-1)" ${i===0?'disabled':''}><i class="bi bi-arrow-up"></i></button>
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="moveSeqStep(${i},1)" ${i===seqSteps.length-1?'disabled':''}><i class="bi bi-arrow-down"></i></button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSeqStep(${i})"><i class="bi bi-x"></i></button>
+            </div>
+        `).join('');
+    }
+
+    function saveSequence() {
+        const id = document.getElementById('seq-id').value;
+        const name = document.getElementById('seq-name').value.trim();
+        if (!name) { alert('名称不能为空'); return; }
+        if (!seqSteps.length) { alert('请至少添加一个步骤'); return; }
+        const data = {
+            name,
+            description: document.getElementById('seq-description').value.trim(),
+            steps: seqSteps.map(s => ({template_id: s.template_id, timeout_seconds: s.timeout})),
+        };
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/tests/sequences/${id}` : '/api/tests/sequences';
+        fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+            .then(r => r.json()).then(res => {
+                if (res.code === 0) {
+                    bootstrap.Modal.getInstance(document.getElementById('sequenceModal')).hide();
+                    loadSequences();
+                } else { alert(res.message); }
+            });
+    }
+
+    function deleteSequence(id) {
+        if (!confirm('确定删除此序列？')) return;
+        fetch(`/api/tests/sequences/${id}`, {method:'DELETE'})
+            .then(r => r.json()).then(res => { if(res.code===0) loadSequences(); });
+    }
+
 </script>
 {% endblock %}

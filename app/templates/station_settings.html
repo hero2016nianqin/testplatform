@@ -112,6 +112,12 @@
                             <option value="">-- 选择版本 --</option>
                         </select>
                     </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">选择测试序列</label>
+                        <select class="form-select form-select-sm" id="sw-sequence-select" onchange="onSequenceChange(this.value)">
+                            <option value="0">-- 不选（使用传统测试项） --</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="deployed-version-info" class="text-muted small">加载中...</div>
             </div>
@@ -290,7 +296,30 @@ function loadSoftware() {
             sel.innerHTML += '<option value="" disabled>暂无已发行版本</option>';
         }
     });
+    // Load test sequences
+    fetch('/api/tests/sequences?active_only=true').then(r => r.json()).then(res => {
+        const sel = document.getElementById('sw-sequence-select');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="0">-- 不选（使用传统测试项） --</option>';
+        if (res.code === 0 && (res.data || []).length) {
+            (res.data || []).forEach(s => {
+                sel.innerHTML += `<option value="${s.id}">${s.name} (v${s.version})</option>`;
+            });
+        }
+        // Restore saved value after load
+        fetch(`/api/stations/${stationId}/software`).then(r => r.json()).then(r2 => {
+            if (r2.code === 0 && r2.data.sequence_id) {
+                sel.value = r2.data.sequence_id;
+            } else {
+                sel.value = cur || '0';
+            }
+        });
+    });
     loadSoftwareConfig('');
+}
+
+function onSequenceChange(seqId) {
+    // sequence selection is saved together with other software params
 }
 
 function loadSoftwareConfig(projectName) {
@@ -381,6 +410,7 @@ function saveSoftware() {
         dut_firmware_version: document.getElementById('sw-firmware-version').value.trim(),
         dut_hardware_version: document.getElementById('sw-hardware-version').value.trim(),
         selected_test_item_ids: selected,
+        sequence_id: parseInt(document.getElementById('sw-sequence-select').value) || 0,
     };
     fetch(`/api/stations/${stationId}/software`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
         .then(r=>r.json()).then(res=>{ alert(res.code===0 ? '保存成功' : '保存失败: ' + res.message); });

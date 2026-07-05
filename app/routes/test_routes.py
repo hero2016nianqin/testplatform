@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify
 
 from app import db
 from app.models import TestItem, TestResult, TestRun, TestStation
+from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
 from app.auth import login_required, process_required
 from app.services.test_executor import TestExecutor
 
@@ -136,6 +137,8 @@ def start_test_run():
         serial_number: 序列号（可选）
         product_type: 产品型号（可选）
         config_id: 配置方案 ID（可选）
+        sequence_id: 测试序列 ID（可选）
+        sequence_name: 测试序列名称（可选）
     """
     data = request.get_json() or {}
     operator = data.get('operator', 'default')
@@ -145,6 +148,8 @@ def start_test_run():
     station_id = data.get('station_id')
     slot_id = data.get('slot_id')
     task_order = data.get('task_order', '')
+    sequence_id = data.get('sequence_id', 0)
+    sequence_name = data.get('sequence_name', '')
 
     executor = TestExecutor(
         operator=operator,
@@ -156,6 +161,10 @@ def start_test_run():
         task_order=task_order,
     )
     run = executor.start_run()
+    if sequence_id:
+        run.sequence_id = int(sequence_id)
+        run.sequence_name = sequence_name
+        db.session.commit()
     return jsonify({
         'code': 0,
         'data': run.to_dict(),
@@ -169,8 +178,9 @@ def submit_result(run_id):
     """
     提交单个测试项的测试结果。
     请求体:
-        test_item_id: 测试项 ID
+        test_item_id: 测试项 ID (支持 TestItem 或 TestItemTemplate)
         actual_value: 实测值
+        is_critical: 是否关键项（可选）
         duration_ms: 耗时（毫秒，可选）
         remark: 备注（可选）
     """
@@ -181,17 +191,30 @@ def submit_result(run_id):
     data = request.get_json()
     test_item_id = data.get('test_item_id')
     actual_value = data.get('actual_value')
+    is_critical = data.get('is_critical', False)
+    client_passed = data.get('passed')
 
     if not test_item_id or actual_value is None:
         return jsonify({'code': 1, 'message': 'test_item_id and actual_value required'}), 400
 
     item = TestItem.query.get(test_item_id)
-    if not item:
-        return jsonify({'code': 1, 'message': 'Test item not found'}), 404
-
-    # 判定合格性
-    passed = item.min_value <= float(actual_value) <= item.max_value
-    deviation = float(actual_value) - item.expected_value
+    item_name = ''
+    if item:
+        passed = item.min_value <= float(actual_value) <= item.max_value
+        deviation = float(actual_value) - item.expected_value
+        item_name = item.name
+    else:
+        # Try TestItemTemplate
+        tmpl = TestItemTemplate.query.get(test_item_id)
+        if not tmpl:
+            return jsonify({'code': 1, 'message': 'Test item not found'}), 404
+        item_name = tmpl.name
+        # Template items: use client-provided passed flag, or eval from archived params
+        if client_passed is not None:
+            passed = bool(client_passed)
+        else:
+            passed = False
+        deviation = float(actual_value) if passed else 0.0
 
     result = TestResult(
         test_item_id=test_item_id,
@@ -207,7 +230,6 @@ def submit_result(run_id):
     )
     db.session.add(result)
 
-    # 更新批次统计
     run.total_items += 1
     if passed:
         run.passed_items += 1
@@ -215,10 +237,18 @@ def submit_result(run_id):
         run.failed_items += 1
     db.session.commit()
 
+    stop = is_critical and not passed
+    if stop:
+        run.status = 'failed'
+        run.ended_at = datetime.utcnow()
+        db.session.commit()
+
     return jsonify({
         'code': 0,
         'data': result.to_dict(),
         'message': 'PASS' if passed else 'FAIL',
+        'is_critical': is_critical,
+        'stop': stop,
     })
 
 
@@ -338,3 +368,146 @@ def list_categories():
         'code': 0,
         'data': [c[0] for c in categories if c[0]],
     })
+
+
+# ==================== 测试项模板管理 ====================
+
+@test_bp.route('/templates', methods=['GET'])
+@login_required
+def list_templates():
+    category = request.args.get('category')
+    active_only = request.args.get('active_only', 'true').lower() == 'true'
+    q = TestItemTemplate.query
+    if active_only:
+        q = q.filter_by(is_active=True)
+    if category:
+        q = q.filter_by(category=category)
+    items = q.order_by(TestItemTemplate.sort_order).all()
+    return jsonify({'code': 0, 'data': [t.to_dict() for t in items]})
+
+
+@test_bp.route('/templates', methods=['POST'])
+@process_required
+def create_template():
+    data = request.get_json() or {}
+    if not data.get('name'):
+        return jsonify({'code': 1, 'message': 'name is required'}), 400
+    t = TestItemTemplate(
+        name=data['name'],
+        description=data.get('description', ''),
+        service_address=data.get('service_address', ''),
+        is_critical=data.get('is_critical', False),
+        timeout_seconds=data.get('timeout_seconds', 60),
+        category=data.get('category', 'general'),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(t)
+    db.session.commit()
+    return jsonify({'code': 0, 'data': t.to_dict()})
+
+
+@test_bp.route('/templates/<int:template_id>', methods=['PUT'])
+@process_required
+def update_template(template_id):
+    t = TestItemTemplate.query.get_or_404(template_id)
+    data = request.get_json() or {}
+    for field in ['name', 'description', 'service_address', 'category']:
+        if field in data:
+            setattr(t, field, data[field])
+    for field in ['is_critical', 'is_active']:
+        if field in data:
+            setattr(t, field, bool(data[field]))
+    for field in ['timeout_seconds', 'sort_order']:
+        if field in data:
+            setattr(t, field, int(data[field]))
+    t.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'code': 0, 'data': t.to_dict()})
+
+
+@test_bp.route('/templates/<int:template_id>', methods=['DELETE'])
+@process_required
+def delete_template(template_id):
+    t = TestItemTemplate.query.get_or_404(template_id)
+    db.session.delete(t)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': 'deleted'})
+
+
+# ==================== 测试序列管理 ====================
+
+@test_bp.route('/sequences', methods=['GET'])
+@login_required
+def list_sequences():
+    active_only = request.args.get('active_only', 'false').lower() == 'true'
+    q = TestSequence.query.order_by(TestSequence.updated_at.desc())
+    if active_only:
+        q = q.filter_by(is_active=True)
+    seqs = q.all()
+    return jsonify({'code': 0, 'data': [s.to_dict() for s in seqs]})
+
+
+@test_bp.route('/sequences', methods=['POST'])
+@process_required
+def create_sequence():
+    data = request.get_json() or {}
+    if not data.get('name'):
+        return jsonify({'code': 1, 'message': 'name is required'}), 400
+    seq = TestSequence(
+        name=data['name'],
+        description=data.get('description', ''),
+        created_by=data.get('created_by', ''),
+    )
+    db.session.add(seq)
+    db.session.flush()
+    steps = data.get('steps', [])
+    for i, s in enumerate(steps):
+        db.session.add(TestSequenceStep(
+            sequence_id=seq.id,
+            template_id=s.get('template_id'),
+            step_order=i,
+            timeout_seconds=s.get('timeout_seconds', 60),
+        ))
+    db.session.commit()
+    return jsonify({'code': 0, 'data': seq.to_dict_with_steps()})
+
+
+@test_bp.route('/sequences/<int:sequence_id>', methods=['GET'])
+@login_required
+def get_sequence(sequence_id):
+    seq = TestSequence.query.get_or_404(sequence_id)
+    return jsonify({'code': 0, 'data': seq.to_dict_with_steps()})
+
+
+@test_bp.route('/sequences/<int:sequence_id>', methods=['PUT'])
+@process_required
+def update_sequence(sequence_id):
+    seq = TestSequence.query.get_or_404(sequence_id)
+    data = request.get_json() or {}
+    for field in ['name', 'description']:
+        if field in data:
+            setattr(seq, field, data[field])
+    if 'is_active' in data:
+        seq.is_active = bool(data['is_active'])
+    if 'steps' in data:
+        TestSequenceStep.query.filter_by(sequence_id=seq.id).delete()
+        db.session.flush()
+        for i, s in enumerate(data['steps']):
+            db.session.add(TestSequenceStep(
+                sequence_id=seq.id,
+                template_id=s.get('template_id'),
+                step_order=i,
+                timeout_seconds=s.get('timeout_seconds', 60),
+            ))
+    seq.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'code': 0, 'data': seq.to_dict_with_steps()})
+
+
+@test_bp.route('/sequences/<int:sequence_id>', methods=['DELETE'])
+@process_required
+def delete_sequence(sequence_id):
+    seq = TestSequence.query.get_or_404(sequence_id)
+    db.session.delete(seq)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': 'deleted'})

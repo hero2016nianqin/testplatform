@@ -11,6 +11,7 @@ class TestVersion(db.Model):
     description = db.Column(db.Text, default='')
     status = db.Column(db.String(30), default='draft', index=True)
     created_by = db.Column(db.String(100), default='')
+    sequence_id = db.Column(db.Integer, default=0, comment='关联测试序列 ID')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -29,6 +30,7 @@ class TestVersion(db.Model):
             'description': self.description,
             'status': self.status,
             'created_by': self.created_by,
+            'sequence_id': self.sequence_id or 0,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

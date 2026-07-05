@@ -6,6 +6,7 @@ from app import db
 from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment
 from app.models import TestItem, TestConfig, User
 from app.models.station import TestStation, SoftwareConfig
+from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
 from app.auth import login_required
 
 version_bp = Blueprint('versions', __name__)
@@ -13,6 +14,23 @@ version_bp = Blueprint('versions', __name__)
 
 def _current_user():
     return session.get('display_name', '')
+
+
+def _load_archive_sequence_steps(version_id):
+    """从版本归档中加载序列步骤快照"""
+    items = VersionArchiveItem.query.filter_by(
+        version_id=version_id, type='sequence_step'
+    ).order_by(VersionArchiveItem.id).all()
+    steps = []
+    for a in items:
+        snap = a.data_snapshot
+        if isinstance(snap, str):
+            try:
+                snap = json.loads(snap)
+            except (json.JSONDecodeError, TypeError):
+                snap = {}
+        steps.append(snap)
+    return steps
 
 
 @version_bp.route('/versions', methods=['GET'])
@@ -59,9 +77,11 @@ def create_version():
     description = data.get('description', '')
     archive_items = data.get('archive_items', [])
     steps_config = data.get('steps_config', {})
+    sequence_id = data.get('sequence_id', 0)
     v = TestVersion(version=version, project_name=project_name,
                     description=description, status='draft',
-                    created_by=_current_user())
+                    created_by=_current_user(),
+                    sequence_id=int(sequence_id) if sequence_id else 0)
     db.session.add(v)
     db.session.flush()
     stage1_configs = [
@@ -76,6 +96,26 @@ def create_version():
         db.session.add(VersionArchiveItem(version_id=v.id, type=ai.get('type', ''),
                                            item_id=ai.get('item_id'),
                                            data_snapshot=ai.get('data_snapshot', '{}')))
+    # Snapshot sequence steps if sequence_id is given
+    if v.sequence_id:
+        seq = TestSequence.query.get(v.sequence_id)
+        if seq:
+            for step in seq.steps.order_by(TestSequenceStep.step_order).all():
+                t = step.template
+                db.session.add(VersionArchiveItem(
+                    version_id=v.id, type='sequence_step',
+                    item_id=step.id,
+                    data_snapshot=json.dumps({
+                        'step_order': step.step_order,
+                        'timeout_seconds': step.timeout_seconds,
+                        'template_id': t.id if t else 0,
+                        'template_name': t.name if t else '',
+                        'template_service_address': t.service_address if t else '',
+                        'template_is_critical': t.is_critical if t else False,
+                        'template_category': t.category if t else '',
+                        'sequence_name': seq.name,
+                        'sequence_version': seq.version,
+                    }, ensure_ascii=False)))
     db.session.commit()
     return jsonify({'code': 0, 'data': v.to_dict()})
 
@@ -197,6 +237,21 @@ def _push_version_to_station(station, v):
     archive_items = VersionArchiveItem.query.filter_by(version_id=v.id, type='test_item').all()
     if archive_items:
         soft.selected_test_item_ids = json.dumps([a.item_id for a in archive_items], ensure_ascii=False)
+    # Push sequence data
+    seq_snapshots = VersionArchiveItem.query.filter_by(version_id=v.id, type='sequence_step').order_by(
+        VersionArchiveItem.id).all()
+    if seq_snapshots:
+        soft.sequence_id = v.sequence_id
+        steps_data = []
+        for a in seq_snapshots:
+            snap = a.data_snapshot
+            if isinstance(snap, str):
+                try:
+                    snap = json.loads(snap)
+                except (json.JSONDecodeError, TypeError):
+                    snap = {}
+            steps_data.append(snap)
+        soft.sequence_data = json.dumps(steps_data, ensure_ascii=False)
 
 
 @version_bp.route('/deployments/<int:dep_id>/execute', methods=['POST'])
@@ -265,6 +320,7 @@ def get_station_deployed_version(station_id):
                     'max_value': snap.get('max_value', ''),
                     'unit': snap.get('unit', ''),
                 })
+            seq_steps = _load_archive_sequence_steps(v.id)
             return jsonify({'code': 0, 'data': {
                 'version_id': v.id,
                 'version': v.version,
@@ -272,6 +328,7 @@ def get_station_deployed_version(station_id):
                 'description': v.description,
                 'deployed_at': dep.deployed_at.isoformat() if dep.deployed_at else None,
                 'test_items': test_items,
+                'sequence_data': json.dumps(seq_steps, ensure_ascii=False),
                 'factory_name': dep.factory_name,
                 'line_name': dep.line_name,
                 'station_name': dep.station_name,
@@ -298,6 +355,7 @@ def get_station_deployed_version(station_id):
                 ).order_by(TestVersion.updated_at.desc()).first()
         # Get archived test items if version found
         test_items = []
+        seq_steps = []
         if v:
             archive_items = VersionArchiveItem.query.filter_by(version_id=v.id, type='test_item').all()
             for item in archive_items:
@@ -315,6 +373,7 @@ def get_station_deployed_version(station_id):
                     'max_value': snap.get('max_value', ''),
                     'unit': snap.get('unit', ''),
                 })
+            seq_steps = _load_archive_sequence_steps(v.id)
         return jsonify({'code': 0, 'data': {
             'version_id': v.id if v else 0,
             'version': station.deployed_version,
@@ -322,6 +381,7 @@ def get_station_deployed_version(station_id):
             'description': v.description if v else '',
             'deployed_at': None,
             'test_items': test_items,
+            'sequence_data': json.dumps(seq_steps, ensure_ascii=False),
             'factory_name': '',
             'line_name': '',
             'station_name': station.name,

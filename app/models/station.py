@@ -379,6 +379,10 @@ class SoftwareConfig(db.Model):
     dut_hardware_version = db.Column(db.String(100), default='')
     # 可勾选的测试项目 ID 集合 (JSON 数组)
     selected_test_item_ids = db.Column(db.Text, default='[]')
+    # 关联的测试序列 ID
+    sequence_id = db.Column(db.Integer, default=0)
+    # 发行版本下发的序列快照（JSON，含步骤+模板数据）
+    sequence_data = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                            onupdate=datetime.utcnow)
@@ -394,6 +398,8 @@ class SoftwareConfig(db.Model):
             'dut_hardware_version': self.dut_hardware_version,
             'selected_test_item_ids': json.loads(
                 self.selected_test_item_ids or '[]'),
+            'sequence_id': self.sequence_id or 0,
+            'sequence_data': self.sequence_data or '',
         }
 
 

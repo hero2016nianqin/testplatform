@@ -64,6 +64,10 @@
                                 </div>
                             </div>
                             <div class="mb-2">
+                                <label class="form-label">测试序列（可选，归档后冻结快照）</label>
+                                <select class="form-select" id="new-sequence-select"><option value="0">-- 不选 --</option></select>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label">测试经理</label>
                                 <select class="form-select" id="step-test-manager"><option value="">-- 选择 --</option></select>
                             </div>
@@ -175,6 +179,17 @@ document.addEventListener('DOMContentLoaded', function() {
     loadUsers();
     loadDeployVersions();
     loadFactories();
+    // Load test sequences into version creation form
+    apiFetch('/api/tests/sequences?active_only=true').then(res => {
+        const sel = document.getElementById('new-sequence-select');
+        if (res.code === 0 && res.data) {
+            res.data.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id; opt.textContent = `${s.name} (v${s.version})`;
+                sel.appendChild(opt);
+            });
+        }
+    });
     // Auto-reload when switching tabs
     document.querySelectorAll('#releaseTabs .nav-link').forEach(tab => {
         tab.addEventListener('shown.bs.tab', function(e) {
@@ -387,10 +402,11 @@ function createVersion() {
         test_manager: document.getElementById('step-test-manager').value,
         project_manager: document.getElementById('step-project-manager').value,
     };
+    const sequence_id = parseInt(document.getElementById('new-sequence-select').value) || 0;
     apiFetch('/api/versions', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({version, project_name, description, archive_items, steps_config}),
+        body: JSON.stringify({version, project_name, description, archive_items, steps_config, sequence_id}),
     }).then(res => {
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-archive"></i> 创建归档';
         if (res.code !== 0) { alert(res.message); return; }
