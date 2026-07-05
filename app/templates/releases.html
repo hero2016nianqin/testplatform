@@ -43,12 +43,15 @@
                     <div class="card-body">
                         <form id="create-version-form">
                             <div class="mb-2">
-                                <label class="form-label">版本号 <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="new-version" placeholder="如 v1.0.0" required>
+                                <label class="form-label">工程名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="new-project-name" placeholder="如 ProjectA" required oninput="onProjectNameInput(this.value)">
                             </div>
                             <div class="mb-2">
-                                <label class="form-label">工程名称</label>
-                                <input type="text" class="form-control" id="new-project-name" placeholder="如 ProjectA">
+                                <label class="form-label">版本号 <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="new-version" placeholder="自动生成或手动输入" required>
+                                    <span class="input-group-text bg-light text-muted small" id="new-version-hint" style="font-size:.75rem"></span>
+                                </div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label">描述</label>
@@ -183,6 +186,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    document.getElementById('new-version').addEventListener('input', function() {
+        this.dataset.autofilled = '';
+    });
+
     document.getElementById('create-version-form').addEventListener('submit', function(e) {
         e.preventDefault();
         createVersion();
@@ -271,7 +278,7 @@ function loadVersionList() {
         if (!list.length) { container.innerHTML = '<p class="text-muted text-center py-3">暂无版本</p>'; return; }
         let html = `<div class="table-responsive"><table class="table table-hover table-bordered">
             <thead class="table-light">
-                <tr><th>版本号</th><th>工程名称</th><th>描述</th><th>状态</th><th>发布进度</th><th>发行进度</th><th>发行厂区</th><th>创建人</th><th>创建时间</th><th>操作</th></tr>
+                <tr><th>工程名称</th><th>版本号</th><th>描述</th><th>状态</th><th>发布进度</th><th>发行进度</th><th>发行厂区</th><th>创建人</th><th>创建时间</th><th>操作</th></tr>
             </thead><tbody>`;
         list.forEach(v => {
             const stMap = {draft:'草稿',released:'已发布',deployed:'已发行',delisted:'已下架'};
@@ -280,8 +287,8 @@ function loadVersionList() {
             const canDelete = v.status === 'draft' || v.status === 'delisted';
             const isDelisted = v.status === 'delisted';
             html += `<tr>
-                <td><strong>${v.version}</strong></td>
                 <td><span class="badge bg-info bg-opacity-10 text-dark">${v.project_name || '-'}</span></td>
+                <td><strong>${v.version}</strong></td>
                 <td>${v.description || '-'}</td>
                 <td><span class="badge bg-${clMap[v.status] || 'secondary'}">${stMap[v.status] || v.status}</span></td>
                 <td>${v.step_progress}</td>
@@ -346,12 +353,31 @@ function loadArchiveConfigs() {
     });
 }
 
+function onProjectNameInput(value) {
+    const hint = document.getElementById('new-version-hint');
+    const verInput = document.getElementById('new-version');
+    if (!value.trim()) { hint.textContent = ''; return; }
+    // Only auto-suggest if version field is empty or was previously auto-filled
+    apiFetch('/api/next-version?project=' + encodeURIComponent(value.trim())).then(res => {
+        if (res.code !== 0) return;
+        const d = res.data;
+        if (d.version) {
+            hint.textContent = d.is_new ? '新建工程' : '建议: ' + d.version;
+            if (!verInput.value || verInput.dataset.autofilled === 'true') {
+                verInput.value = d.version;
+                verInput.dataset.autofilled = 'true';
+            }
+        }
+    });
+}
+
 function createVersion() {
+    const project_name = document.getElementById('new-project-name').value.trim();
     const version = document.getElementById('new-version').value.trim();
+    if (!project_name) { alert('请输入工程名称'); return; }
     if (!version) { alert('请输入版本号'); return; }
     const btn = document.querySelector('#create-version-form button[type="submit"]');
     btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
-    const project_name = document.getElementById('new-project-name').value.trim();
     const description = document.getElementById('new-description').value.trim();
     const archive_items = [];
     document.querySelectorAll('.archive-item:checked').forEach(cb => {

@@ -107,9 +107,9 @@
                 <h6 class="border-bottom pb-2">版本发布信息 <span class="text-muted small fw-normal">（从版本发行系统同步）</span></h6>
                 <div class="row mb-2">
                     <div class="col-md-6">
-                        <label class="form-label small">选择工程</label>
-                        <select class="form-select form-select-sm" id="sw-project-select" onchange="onProjectChange(this.value)">
-                            <option value="">-- 选择工程 --</option>
+                        <label class="form-label small">选择版本</label>
+                        <select class="form-select form-select-sm" id="sw-version-select" onchange="onVersionChange(this.value)">
+                            <option value="">-- 选择版本 --</option>
                         </select>
                     </div>
                 </div>
@@ -278,25 +278,16 @@ function deleteHardware(id) {
 let deployedVersionsForStation = [];
 
 function loadSoftware() {
-    // Load all deployed versions grouped by project for this station
-    fetch(`/api/stations/${stationId}/deployed-version`).then(r=>r.json()).then(res => {
-        if (res.code === 0) {
-            deployedVersionsForStation = [];
-            const sel = document.getElementById('sw-project-select');
-            sel.innerHTML = '<option value="">-- 选择工程 --</option>';
-            // Collect unique projects from all deployed versions for this station
-            const projects = new Set();
-            const d = res.data;
-            if (d && d.project_name) projects.add(d.project_name);
-            // Also check if there are additional deployed versions via station.deployed_version
-            projects.forEach(p => {
-                deployedVersionsForStation.push(p);
-                sel.innerHTML += `<option value="${p}">${p}</option>`;
+    fetch(`/api/stations/${stationId}/deployed-versions`).then(r=>r.json()).then(res => {
+        const sel = document.getElementById('sw-version-select');
+        sel.innerHTML = '<option value="">-- 选择版本 --</option>';
+        if (res.code === 0 && (res.data || []).length) {
+            deployedVersionsForStation = res.data || [];
+            deployedVersionsForStation.forEach(v => {
+                sel.innerHTML += `<option value="${v.version_id}">${v.project_name} / ${v.version}</option>`;
             });
-            if (projects.size === 0) {
-                sel.innerHTML += '<option value="" disabled>暂无已发行工程</option>';
-            }
-            const softRes = res;
+        } else {
+            sel.innerHTML += '<option value="" disabled>暂无已发行版本</option>';
         }
     });
     loadSoftwareConfig('');
@@ -353,18 +344,22 @@ function loadDeployedVersionInfo(projectName) {
     });
 }
 
-function onProjectChange(projectName) {
-    if (!projectName) {
-        document.getElementById('deployed-version-info').innerHTML = '<span class="text-muted">请选择工程</span>';
+function onVersionChange(versionId) {
+    if (!versionId) {
+        document.getElementById('deployed-version-info').innerHTML = '<span class="text-muted">请选择版本</span>';
         loadSoftwareConfig('');
         return;
     }
-    loadDeployedVersionInfo(projectName);
-    loadSoftwareConfig(projectName);
+    const v = deployedVersionsForStation.find(x => x.version_id == versionId);
+    loadDeployedVersionInfo(v ? v.project_name : '');
+    loadSoftwareConfig(v ? v.project_name : '');
 }
 
 function loadItemsFromDeployedVersion() {
-    const projectName = document.getElementById('sw-project-select').value;
+    const versionId = document.getElementById('sw-version-select').value;
+    if (!versionId) { alert('请先选择一个版本'); return; }
+    const v = deployedVersionsForStation.find(x => x.version_id == versionId);
+    const projectName = v ? v.project_name : '';
     const url = projectName ? `/api/stations/${stationId}/deployed-version?project=${encodeURIComponent(projectName)}` : `/api/stations/${stationId}/deployed-version`;
     fetch(url).then(r=>r.json()).then(res=>{
         if (res.code !== 0 || !res.data) { alert('暂无已发行版本'); return; }

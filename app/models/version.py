@@ -6,7 +6,7 @@ class TestVersion(db.Model):
     __tablename__ = 'test_versions'
 
     id = db.Column(db.Integer, primary_key=True)
-    version = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    version = db.Column(db.String(50), nullable=False, index=True)
     project_name = db.Column(db.String(200), default='', index=True)
     description = db.Column(db.Text, default='')
     status = db.Column(db.String(30), default='draft', index=True)

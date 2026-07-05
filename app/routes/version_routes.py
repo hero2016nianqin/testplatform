@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session
 from app import db
@@ -43,15 +44,21 @@ def list_versions():
 @login_required
 def create_version():
     data = request.get_json()
-    if not data or not data.get('version'):
-        return jsonify({'code': 1, 'message': 'version is required'}), 400
-    version = data['version'].strip()
-    if TestVersion.query.filter_by(version=version).first():
-        return jsonify({'code': 1, 'message': '版本号已存在'}), 400
+    if not data:
+        return jsonify({'code': 1, 'message': '请求数据为空'}), 400
+    version = (data.get('version') or '').strip()
+    project_name = (data.get('project_name') or '').strip()
+    if not version:
+        return jsonify({'code': 1, 'message': '版本号不能为空'}), 400
+    if not project_name:
+        return jsonify({'code': 1, 'message': '工程名称不能为空'}), 400
+    # Check (project_name, version) uniqueness
+    existing = TestVersion.query.filter_by(project_name=project_name, version=version).first()
+    if existing:
+        return jsonify({'code': 1, 'message': f'工程"{project_name}"的版本"{version}"已存在'}), 400
     description = data.get('description', '')
     archive_items = data.get('archive_items', [])
     steps_config = data.get('steps_config', {})
-    project_name = data.get('project_name', '')
     v = TestVersion(version=version, project_name=project_name,
                     description=description, status='draft',
                     created_by=_current_user())
@@ -150,6 +157,7 @@ def create_deployments(version_id):
             assigned_to=(te_engineer if t.get('assign_te') else '') or te_engineer,
         )
         db.session.add(dep)
+        db.session.flush()
         created.append(dep.to_dict())
     v.updated_at = datetime.utcnow()
     db.session.commit()
@@ -270,23 +278,24 @@ def get_station_deployed_version(station_id):
             }})
     # Fallback: check station.deployed_version field directly
     station = TestStation.query.get(station_id)
-    if station and station.deployed_version and station.deployed_version not in ('', '1.0.0'):
-        vq = TestVersion.query
+    if station and station.deployed_version and station.deployed_version not in ('',):
         if project_filter:
-            vq = vq.filter_by(project_name=project_filter)
-        v = vq.filter_by(version=station.deployed_version).first()
-        if not v:
-            v = TestVersion.query.filter(
-                TestVersion.deployments.any(
-                    db.and_(
-                        ReleaseDeployment.station_id == station_id,
-                        ReleaseDeployment.status == 'deployed'
-                    )
-                )
-            )
-            if project_filter:
-                v = v.filter(TestVersion.project_name == project_filter)
-            v = v.order_by(TestVersion.updated_at.desc()).first()
+            # When a project filter is given, try to find the version by project+version
+            v = TestVersion.query.filter_by(
+                project_name=project_filter,
+                version=station.deployed_version
+            ).first()
+            if not v:
+                v = TestVersion.query.filter(
+                    TestVersion.project_name == project_filter,
+                    TestVersion.status.in_(['released', 'deployed'])
+                ).order_by(TestVersion.updated_at.desc()).first()
+        else:
+            v = TestVersion.query.filter_by(version=station.deployed_version).first()
+            if not v:
+                v = TestVersion.query.filter(
+                    TestVersion.status.in_(['released', 'deployed'])
+                ).order_by(TestVersion.updated_at.desc()).first()
         # Get archived test items if version found
         test_items = []
         if v:
@@ -318,6 +327,45 @@ def get_station_deployed_version(station_id):
             'station_name': station.name,
         }})
     return jsonify({'code': 0, 'data': None})
+
+
+@version_bp.route('/stations/<int:station_id>/deployed-versions', methods=['GET'])
+@login_required
+def list_station_deployed_versions(station_id):
+    """返回某装备所有可用的已发行版本列表（含版本ID、工程名、版本号、描述）"""
+    # 1. From ReleaseDeployment records
+    deps = ReleaseDeployment.query.filter_by(
+        station_id=station_id, status='deployed'
+    ).order_by(ReleaseDeployment.deployed_at.desc()).all()
+    seen = set()
+    result = []
+    for dep in deps:
+        v = TestVersion.query.get(dep.version_id)
+        if v:
+            key = (v.project_name, v.version)
+            if key not in seen:
+                seen.add(key)
+                result.append({
+                    'version_id': v.id,
+                    'version': v.version,
+                    'project_name': v.project_name,
+                    'description': v.description,
+                })
+    # 2. Also include all released/deployed versions (so dropdown always has options)
+    versions = TestVersion.query.filter(
+        TestVersion.status.in_(['released', 'deployed'])
+    ).order_by(TestVersion.updated_at.desc()).all()
+    for v in versions:
+        key = (v.project_name, v.version)
+        if key not in seen:
+            seen.add(key)
+            result.append({
+                'version_id': v.id,
+                'version': v.version,
+                'project_name': v.project_name,
+                'description': v.description,
+            })
+    return jsonify({'code': 0, 'data': result})
 
 
 @version_bp.route('/versions/<int:version_id>/delist', methods=['POST'])
@@ -380,6 +428,34 @@ def get_pending_approvals():
                 'dep_id': d.id,
             })
     return jsonify({'code': 0, 'data': result})
+
+
+@version_bp.route('/next-version', methods=['GET'])
+@login_required
+def get_next_version():
+    project_name = request.args.get('project', '').strip()
+    if not project_name:
+        return jsonify({'code': 0, 'data': {'version': '', 'is_new': True}})
+    last = TestVersion.query.filter_by(project_name=project_name)\
+        .order_by(TestVersion.created_at.desc()).first()
+    if not last:
+        return jsonify({'code': 0, 'data': {'version': '1.0.0', 'is_new': True}})
+    # Try to extract numeric prefix and increment
+    v = last.version
+    m = re.match(r'^(\D*)(\d+(?:\.\d+)*)', v)
+    if m:
+        prefix = m.group(1)
+        num_part = m.group(2)
+        parts = num_part.split('.')
+        if len(parts) == 1:
+            next_ver = prefix + str(int(parts[0]) + 1)
+        elif len(parts) == 2:
+            next_ver = prefix + f'{int(parts[0]) + 1}.0'
+        else:
+            next_ver = prefix + f'{int(parts[0]) + 1}.' + '.'.join(parts[1:])
+    else:
+        next_ver = '1.0.0'
+    return jsonify({'code': 0, 'data': {'version': next_ver, 'is_new': False}})
 
 
 @version_bp.route('/all-users', methods=['GET'])

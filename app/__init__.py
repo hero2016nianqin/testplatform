@@ -72,6 +72,29 @@ def create_app(config_object=None):
             db.session.execute(text('ALTER TABLE software_configs ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
         except Exception:
             pass  # column already exists
+        # Migration: remove UNIQUE constraint on version from test_versions if present
+        try:
+            tbl_info = db.session.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='test_versions'")).scalar()
+            if tbl_info and 'UNIQUE' in tbl_info.upper():
+                db.session.execute(text('PRAGMA foreign_keys=off'))
+                db.session.execute(text('''
+                    CREATE TABLE test_versions_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        version VARCHAR(50) NOT NULL,
+                        project_name VARCHAR(200) DEFAULT '',
+                        description TEXT DEFAULT '',
+                        status VARCHAR(30) DEFAULT 'draft',
+                        created_by VARCHAR(100) DEFAULT '',
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                '''))
+                db.session.execute(text('INSERT INTO test_versions_new SELECT * FROM test_versions'))
+                db.session.execute(text('DROP TABLE test_versions'))
+                db.session.execute(text('ALTER TABLE test_versions_new RENAME TO test_versions'))
+                db.session.execute(text('PRAGMA foreign_keys=on'))
+        except Exception:
+            db.session.execute(text('PRAGMA foreign_keys=on'))
         db.session.commit()
         # 如果没有用户数据，创建默认账号
         from app.routes.auth_routes import seed_default_users
