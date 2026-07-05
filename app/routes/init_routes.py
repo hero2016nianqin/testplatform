@@ -57,28 +57,26 @@ def init_sample_data():
                        'Use reset if you want to re-initialize.'
         }), 400
 
-    # 预定义的示例测试项，覆盖电气、信号、热学、安全、声学等类别
+    # 预定义的示例测试项，覆盖电气、射频、环境、安规、声学等类别
     sample_items = [
-        TestItem(name='Voltage Output', description='Output voltage test',
+        TestItem(name='电压测试', description='输出电压测试',
                  expected_value=5.0, min_value=4.8, max_value=5.2,
-                 unit='V', category='electrical', sort_order=1),
-        TestItem(name='Current Draw', description='Current consumption test',
+                 unit='V', category='电气', sort_order=1),
+        TestItem(name='电流测试', description='工作电流测试',
                  expected_value=1.0, min_value=0.9, max_value=1.1,
-                 unit='A', category='electrical', sort_order=2),
-        TestItem(name='Frequency', description='Signal frequency test',
+                 unit='A', category='电气', sort_order=2),
+        TestItem(name='频率测试', description='信号频率测试',
                  expected_value=60.0, min_value=59.5, max_value=60.5,
-                 unit='Hz', category='signal', sort_order=3),
-        TestItem(name='Temperature Rise',
-                 description='Temperature rise after 30min operation',
+                 unit='Hz', category='射频', sort_order=3),
+        TestItem(name='温度测量', description='运行温升测试',
                  expected_value=45.0, min_value=0, max_value=65.0,
-                 unit='°C', category='thermal', sort_order=4),
-        TestItem(name='Insulation Resistance',
-                 description='Insulation resistance test',
+                 unit='°C', category='环境', sort_order=4),
+        TestItem(name='绝缘测试', description='绝缘电阻测试',
                  expected_value=100.0, min_value=50.0, max_value=500.0,
-                 unit='MΩ', category='safety', sort_order=5),
-        TestItem(name='Noise Level', description='Acoustic noise test',
+                 unit='MΩ', category='安规', sort_order=5),
+        TestItem(name='噪声测试', description='噪声水平测试',
                  expected_value=30.0, min_value=0, max_value=45.0,
-                 unit='dB', category='acoustic', sort_order=6),
+                 unit='dB', category='声学', sort_order=6),
     ]
 
     for item in sample_items:
