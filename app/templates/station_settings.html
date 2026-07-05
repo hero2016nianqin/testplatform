@@ -14,6 +14,7 @@
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-equipment">装备参数</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hardware">硬件参数</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-software">软件参数</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-property-page">属性页</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scenario">场景参数</button></li>
 </ul>
 
@@ -160,6 +161,28 @@
         </div>
     </div>
 
+    <!-- ========== 属性页（可见，可现场修改，key-value 展示） ========== -->
+    <div class="tab-pane fade" id="tab-property-page">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="border-bottom pb-2">装备属性页 <span class="text-muted small fw-normal">（可见于产线，现场工程师可修改）</span></h6>
+                <p class="small text-muted">属性页内容会显示在装备测试界面，供现场人员查看和修改。<strong>Key</strong> 不可修改，<strong>Value</strong> 可编辑。</p>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered align-middle" id="property-page-table">
+                        <thead class="table-light"><tr><th style="width:35%">属性名 (Key)</th><th style="width:50%">属性值 (Value)</th><th style="width:15%">操作</th></tr></thead>
+                        <tbody id="property-page-body">
+                            <tr><td colspan="3" class="text-center text-muted">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mb-3">
+                    <button class="btn btn-sm btn-outline-primary" onclick="addPropertyPageRow()"><i class="bi bi-plus-lg"></i> 添加属性</button>
+                </div>
+                <button class="btn btn-primary" onclick="savePropertyPage()"><i class="bi bi-check-lg"></i> 保存属性页</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 场景参数 ========== -->
     <div class="tab-pane fade" id="tab-scenario">
         <div class="card">
@@ -195,8 +218,16 @@ document.addEventListener('DOMContentLoaded', function() {
         loadEquipment();
         loadHardware();
         loadSoftware();
+        loadPropertyPage();
         loadScenario();
     }
+    // Lazy load tabs on first show
+    document.querySelectorAll('#settingTabs .nav-link').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const id = e.target.getAttribute('data-bs-target');
+            if (id === '#tab-property-page') loadPropertyPage();
+        });
+    });
 });
 
 function loadStationInfo() {
@@ -413,6 +444,59 @@ function saveSoftware() {
         sequence_id: parseInt(document.getElementById('sw-sequence-select').value) || 0,
     };
     fetch(`/api/stations/${stationId}/software`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})
+        .then(r=>r.json()).then(res=>{ alert(res.code===0 ? '保存成功' : '保存失败: ' + res.message); });
+}
+
+// ========== 属性页（key-value 展示） ==========
+function loadPropertyPage() {
+    fetch(`/api/stations/${stationId}/property-page`).then(r=>r.json()).then(res=>{
+        if (res.code === 0) {
+            renderPropertyPageTable(res.data.page_data || {});
+        }
+    });
+}
+
+function renderPropertyPageTable(data) {
+    const tbody = document.getElementById('property-page-body');
+    const entries = Object.entries(data);
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">暂无属性，点击下方"添加属性"按钮添加</td></tr>';
+        return;
+    }
+    tbody.innerHTML = entries.map(([k, v], i) => `
+        <tr>
+            <td><span class="badge bg-secondary bg-opacity-10 text-dark py-2 px-3 w-100 text-start fw-semibold prop-key-display">${escHtml(k)}</span></td>
+            <td><input type="text" class="form-control form-control-sm prop-val" value="${escHtml(String(v))}" placeholder="Value"></td>
+            <td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()" title="删除属性"><i class="bi bi-trash"></i></button></td>
+        </tr>
+    `).join('');
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addPropertyPageRow() {
+    const tbody = document.getElementById('property-page-body');
+    const emptyRow = tbody.querySelector('tr td[colspan]');
+    if (emptyRow) tbody.innerHTML = '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="text" class="form-control form-control-sm prop-key" placeholder="新建 Key"></td><td><input type="text" class="form-control form-control-sm prop-val" placeholder="Value"></td><td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest(\'tr\').remove()" title="删除"><i class="bi bi-trash"></i></button></td>';
+    tbody.appendChild(tr);
+}
+
+function savePropertyPage() {
+    const pageData = {};
+    document.querySelectorAll('#property-page-body tr').forEach(tr => {
+        const keyInput = tr.querySelector('.prop-key');
+        const keyDisplay = tr.querySelector('.prop-key-display');
+        const valInput = tr.querySelector('.prop-val');
+        const key = keyInput ? keyInput.value.trim() : (keyDisplay ? keyDisplay.textContent.trim() : '');
+        if (key && valInput) {
+            pageData[key] = valInput.value.trim();
+        }
+    });
+    fetch(`/api/stations/${stationId}/property-page`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({page_data: pageData})})
         .then(r=>r.json()).then(res=>{ alert(res.code===0 ? '保存成功' : '保存失败: ' + res.message); });
 }
 

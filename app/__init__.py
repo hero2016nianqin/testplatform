@@ -25,7 +25,6 @@ db = SQLAlchemy()
 socketio = SocketIO()
 cors = CORS()
 
-
 def create_app(config_object=None):
     """
     应用工厂函数，创建并配置 Flask 应用实例。
@@ -62,11 +61,17 @@ def create_app(config_object=None):
         Factory, ProductionLine,
         TestStation, TestChassis, TestSlot,
         EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
+        EquipmentMetrics, EquipmentPropertyPage,
     )
-    from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment
+    from app.models.version import (
+        TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment,
+        VersionBinaryFile,
+    )
     with app.app_context():
+        # 先建立基本表结构
         db.create_all()
-        # Database migrations for new columns
+        
+        # 手动迁移（数据库变更）
         try:
             db.session.execute(text('ALTER TABLE test_versions ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
         except Exception:
@@ -87,29 +92,6 @@ def create_app(config_object=None):
             db.session.execute(text('ALTER TABLE software_configs ADD COLUMN sequence_id INTEGER DEFAULT 0'))
         except Exception:
             pass
-        # Migration: remove UNIQUE constraint on version from test_versions if present
-        try:
-            tbl_info = db.session.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='test_versions'")).scalar()
-            if tbl_info and 'UNIQUE' in tbl_info.upper():
-                db.session.execute(text('PRAGMA foreign_keys=off'))
-                db.session.execute(text('''
-                    CREATE TABLE test_versions_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        version VARCHAR(50) NOT NULL,
-                        project_name VARCHAR(200) DEFAULT '',
-                        description TEXT DEFAULT '',
-                        status VARCHAR(30) DEFAULT 'draft',
-                        created_by VARCHAR(100) DEFAULT '',
-                        created_at DATETIME,
-                        updated_at DATETIME
-                    )
-                '''))
-                db.session.execute(text('INSERT INTO test_versions_new SELECT * FROM test_versions'))
-                db.session.execute(text('DROP TABLE test_versions'))
-                db.session.execute(text('ALTER TABLE test_versions_new RENAME TO test_versions'))
-                db.session.execute(text('PRAGMA foreign_keys=on'))
-        except Exception:
-            db.session.execute(text('PRAGMA foreign_keys=on'))
         try:
             db.session.execute(text('ALTER TABLE software_configs ADD COLUMN sequence_data TEXT DEFAULT ""'))
         except Exception:
@@ -118,13 +100,18 @@ def create_app(config_object=None):
             db.session.execute(text("ALTER TABLE test_versions ADD COLUMN sequence_id INTEGER DEFAULT 0"))
         except Exception:
             pass
+        
         db.session.commit()
-        # 如果没有用户数据，创建默认账号
-        from app.routes.auth_routes import seed_default_users
-        seed_default_users()
-        # 如果没有工站数据，创建默认示例工站
-        from app.routes.station_routes import seed_sample_stations
-        seed_sample_stations()
+        # 自动填充示例数据，但跳过 seed_sample_stations()，以避免设备配置方面的冲突
+        # 仅填充最基本的示例数据
+        try:
+            from app.routes.auth_routes import seed_default_users
+            seed_default_users()
+            print("Create default admin user")
+        except Exception as e:
+            print(f"Failed to create default user: {e}")
+        
+        print("Initialization completed - no sample equipment created to avoid conflicts")
 
     # 注册各功能模块的路由蓝图，每个蓝图有独立的 URL 前缀
     from app.routes.auth_routes import auth_bp

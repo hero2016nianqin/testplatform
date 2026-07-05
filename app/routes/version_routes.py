@@ -1,11 +1,12 @@
+import os
 import json
 import re
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from app import db
-from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment
+from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile
 from app.models import TestItem, TestConfig, User
-from app.models.station import TestStation, SoftwareConfig
+from app.models.station import TestStation, SoftwareConfig, EquipmentMetrics, EquipmentPropertyPage
 from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
 from app.auth import login_required
 
@@ -74,14 +75,20 @@ def create_version():
     existing = TestVersion.query.filter_by(project_name=project_name, version=version).first()
     if existing:
         return jsonify({'code': 1, 'message': f'工程"{project_name}"的版本"{version}"已存在'}), 400
+    sequence_id = data.get('sequence_id', 0) or 0
+    try:
+        sequence_id = int(sequence_id)
+    except (ValueError, TypeError):
+        sequence_id = 0
+    if not sequence_id:
+        return jsonify({'code': 1, 'message': '必须选择测试序列（sequence_id）'}), 400
     description = data.get('description', '')
     archive_items = data.get('archive_items', [])
     steps_config = data.get('steps_config', {})
-    sequence_id = data.get('sequence_id', 0)
     v = TestVersion(version=version, project_name=project_name,
                     description=description, status='draft',
                     created_by=_current_user(),
-                    sequence_id=int(sequence_id) if sequence_id else 0)
+                    sequence_id=sequence_id)
     db.session.add(v)
     db.session.flush()
     stage1_configs = [
@@ -128,6 +135,7 @@ def get_version(version_id):
     d['steps'] = [s.to_dict() for s in v.steps]
     d['archive_items'] = [a.to_dict() for a in v.archive_items]
     d['deployments'] = [dep.to_dict() for dep in v.deployments]
+    d['binary_count'] = VersionBinaryFile.query.filter_by(version_id=version_id).count()
     return jsonify({'code': 0, 'data': d})
 
 
@@ -234,10 +242,78 @@ def _push_version_to_station(station, v):
         db.session.add(soft)
     soft.dut_version = v.version
     soft.project_name = v.project_name or ''
+
+    # ---- 1. Test items -> EquipmentMetrics (per-equipment instantiation) ----
     archive_items = VersionArchiveItem.query.filter_by(version_id=v.id, type='test_item').all()
     if archive_items:
         soft.selected_test_item_ids = json.dumps([a.item_id for a in archive_items], ensure_ascii=False)
-    # Push sequence data
+        # Instantiate per-equipment metrics from test item snapshots
+        metrics_list = []
+        for a in archive_items:
+            snap = a.data_snapshot
+            if isinstance(snap, str):
+                try:
+                    snap = json.loads(snap)
+                except (json.JSONDecodeError, TypeError):
+                    snap = {}
+            metrics_list.append({
+                'name': snap.get('name', f'Item {a.item_id}'),
+                'expected_value': snap.get('expected_value', 0),
+                'min_value': snap.get('min_value', 0),
+                'max_value': snap.get('max_value', 0),
+                'unit': snap.get('unit', ''),
+                'category': snap.get('category', ''),
+                'sort_order': snap.get('sort_order', 0),
+                'item_id': a.item_id,
+            })
+        eq_metrics = EquipmentMetrics.query.filter_by(station_id=station.id).first()
+        if not eq_metrics:
+            eq_metrics = EquipmentMetrics(station_id=station.id)
+            db.session.add(eq_metrics)
+        eq_metrics.metrics_json = json.dumps(metrics_list, ensure_ascii=False)
+
+    # ---- 1b. metrics_json archive -> EquipmentMetrics (fallback if no test_item archives) ----
+    if not archive_items:
+        metrics_archives = (
+            VersionArchiveItem.query.filter_by(version_id=v.id, type='metrics_json').all()
+            +
+            VersionArchiveItem.query.filter_by(version_id=v.id, type='metrics_ini').all()
+        )
+        if metrics_archives:
+            merged_metrics = []
+            for a in metrics_archives:
+                raw = a.data_snapshot
+                if not isinstance(raw, str):
+                    continue
+                # Write to station directory as file
+                station_dir = os.path.join(
+                    current_app.config.get('UPLOAD_FOLDER', 'uploads'),
+                    'stations', str(station.id), 'metrics'
+                )
+                os.makedirs(station_dir, exist_ok=True)
+                # Determine file extension from archive type
+                ext = '.json' if a.type == 'metrics_json' else '.ini'
+                filepath = os.path.join(station_dir, f'metrics{ext}')
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(raw)
+                # Also try to parse JSON for in-memory use
+                if a.type == 'metrics_json':
+                    try:
+                        parsed = json.loads(raw)
+                        if isinstance(parsed, list):
+                            merged_metrics.extend(parsed)
+                        elif isinstance(parsed, dict):
+                            merged_metrics.append(parsed)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            if merged_metrics:
+                eq_metrics = EquipmentMetrics.query.filter_by(station_id=station.id).first()
+                if not eq_metrics:
+                    eq_metrics = EquipmentMetrics(station_id=station.id)
+                    db.session.add(eq_metrics)
+                eq_metrics.metrics_json = json.dumps(merged_metrics, ensure_ascii=False)
+
+    # ---- 2. Sequence data (existing) ----
     seq_snapshots = VersionArchiveItem.query.filter_by(version_id=v.id, type='sequence_step').order_by(
         VersionArchiveItem.id).all()
     if seq_snapshots:
@@ -252,6 +328,69 @@ def _push_version_to_station(station, v):
                     snap = {}
             steps_data.append(snap)
         soft.sequence_data = json.dumps(steps_data, ensure_ascii=False)
+
+    # ---- 2b. Hardware params -> write to disk ----
+    hw_archives = VersionArchiveItem.query.filter_by(
+        version_id=v.id, type='hardware_params'
+    ).all()
+    if hw_archives:
+        station_dir = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', 'uploads'),
+            'stations', str(station.id), 'config'
+        )
+        os.makedirs(station_dir, exist_ok=True)
+        for a in hw_archives:
+            filepath = os.path.join(station_dir, 'hardware_params.json')
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(a.data_snapshot if isinstance(a.data_snapshot, str) else '{}')
+
+    # ---- 3. Property page -> EquipmentPropertyPage (visible, editable) ----
+    prop_archives = VersionArchiveItem.query.filter_by(
+        version_id=v.id, type='property_page'
+    ).all()
+    if prop_archives:
+        # Merge multiple property page archives
+        merged = {}
+        for a in prop_archives:
+            snap = a.data_snapshot
+            if isinstance(snap, str):
+                try:
+                    snap = json.loads(snap)
+                except (json.JSONDecodeError, TypeError):
+                    snap = {}
+            if isinstance(snap, dict):
+                merged.update(snap)
+        # Write raw file to station directory
+        station_dir = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', 'uploads'),
+            'stations', str(station.id), 'config'
+        )
+        os.makedirs(station_dir, exist_ok=True)
+        filepath = os.path.join(station_dir, 'property_page.json')
+        # Use last archive's content for the file
+        last_snap = prop_archives[-1].data_snapshot if prop_archives else '{}'
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(last_snap if isinstance(last_snap, str) else '{}')
+        eq_pp = EquipmentPropertyPage.query.filter_by(station_id=station.id).first()
+        if not eq_pp:
+            eq_pp = EquipmentPropertyPage(station_id=station.id)
+            db.session.add(eq_pp)
+        eq_pp.page_json = json.dumps(merged, ensure_ascii=False)
+
+    # ---- 4. Binary files - copy to station-specific directory ----
+    binaries = VersionBinaryFile.query.filter_by(version_id=v.id).all()
+    if binaries:
+        station_dir = os.path.join(
+            current_app.config.get('UPLOAD_FOLDER', 'uploads'),
+            'stations', str(station.id), 'binaries'
+        )
+        os.makedirs(station_dir, exist_ok=True)
+        for bf in binaries:
+            src = bf.file_path
+            if os.path.exists(src):
+                dst = os.path.join(station_dir, bf.filename)
+                import shutil
+                shutil.copy2(src, dst)
 
 
 @version_bp.route('/deployments/<int:dep_id>/execute', methods=['POST'])
@@ -321,6 +460,7 @@ def get_station_deployed_version(station_id):
                     'unit': snap.get('unit', ''),
                 })
             seq_steps = _load_archive_sequence_steps(v.id)
+            binary_count = VersionBinaryFile.query.filter_by(version_id=v.id).count()
             return jsonify({'code': 0, 'data': {
                 'version_id': v.id,
                 'version': v.version,
@@ -329,6 +469,7 @@ def get_station_deployed_version(station_id):
                 'deployed_at': dep.deployed_at.isoformat() if dep.deployed_at else None,
                 'test_items': test_items,
                 'sequence_data': json.dumps(seq_steps, ensure_ascii=False),
+                'binary_count': binary_count,
                 'factory_name': dep.factory_name,
                 'line_name': dep.line_name,
                 'station_name': dep.station_name,
@@ -537,3 +678,56 @@ def get_archive_configs():
             'configs': [c.to_dict() for c in configs],
         }
     })
+
+
+@version_bp.route('/versions/<int:version_id>/binaries', methods=['POST'])
+@login_required
+def upload_version_binary(version_id):
+    """上传版本二进制文件 (multipart)"""
+    v = TestVersion.query.get_or_404(version_id)
+    if 'file' not in request.files:
+        return jsonify({'code': 1, 'message': '未选择文件'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'code': 1, 'message': '文件名为空'}), 400
+    description = request.form.get('description', '')
+    upload_dir = os.path.join(
+        current_app.config.get('UPLOAD_FOLDER', 'uploads'),
+        'versions', str(version_id), 'binaries'
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_name = file.filename
+    filepath = os.path.join(upload_dir, safe_name)
+    file.save(filepath)
+    file_size = os.path.getsize(filepath)
+    bf = VersionBinaryFile(
+        version_id=version_id,
+        filename=safe_name,
+        file_path=filepath,
+        file_size=file_size,
+        description=description,
+    )
+    db.session.add(bf)
+    db.session.commit()
+    return jsonify({'code': 0, 'data': bf.to_dict(), 'message': f'已上传 {safe_name}'})
+
+
+@version_bp.route('/versions/<int:version_id>/binaries', methods=['GET'])
+@login_required
+def list_version_binaries(version_id):
+    """列出版本已上传的二进制文件"""
+    files = VersionBinaryFile.query.filter_by(version_id=version_id).order_by(
+        VersionBinaryFile.created_at.desc()).all()
+    return jsonify({'code': 0, 'data': [f.to_dict() for f in files]})
+
+
+@version_bp.route('/versions/<int:version_id>/binaries/<int:file_id>', methods=['DELETE'])
+@login_required
+def delete_version_binary(version_id, file_id):
+    """删除版本二进制文件"""
+    bf = VersionBinaryFile.query.filter_by(id=file_id, version_id=version_id).first_or_404()
+    if os.path.exists(bf.file_path):
+        os.remove(bf.file_path)
+    db.session.delete(bf)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': '已删除'})

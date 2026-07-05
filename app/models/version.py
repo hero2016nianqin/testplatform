@@ -86,6 +86,30 @@ class VersionArchiveItem(db.Model):
         }
 
 
+class VersionBinaryFile(db.Model):
+    """版本二进制文件 - 存储固件等二进制文件"""
+    __tablename__ = 'version_binary_files'
+
+    id = db.Column(db.Integer, primary_key=True)
+    version_id = db.Column(db.Integer, db.ForeignKey('test_versions.id'),
+                           nullable=False, index=True)
+    filename = db.Column(db.String(200), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer, default=0)
+    description = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'version_id': self.version_id,
+            'filename': self.filename,
+            'file_path': self.file_path,
+            'file_size': self.file_size,
+            'description': self.description,
+        }
+
+
 class ReleaseDeployment(db.Model):
     __tablename__ = 'release_deployments'
 

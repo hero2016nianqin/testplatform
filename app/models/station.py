@@ -201,6 +201,50 @@ class TestStation(db.Model):
         return f'<TestStation {self.name}>'
 
 
+class EquipmentMetrics(db.Model):
+    """装备级指标配置 - 发布时从 TestItem 模版实例化，每个装备独立可修改"""
+    __tablename__ = 'equipment_metrics'
+
+    id = db.Column(db.Integer, primary_key=True)
+    station_id = db.Column(db.Integer, db.ForeignKey('test_stations.id'),
+                           nullable=False, unique=True)
+    # JSON 数组: [{name, expected_value, min_value, max_value, unit, category, sort_order}, ...]
+    metrics_json = db.Column(db.Text, default='[]')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow,
+                           onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'station_id': self.station_id,
+            'metrics': json.loads(self.metrics_json or '[]'),
+        }
+
+
+class EquipmentPropertyPage(db.Model):
+    """装备级属性页 - 可见，可现场修改，存储为 JSON"""
+    __tablename__ = 'equipment_property_pages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    station_id = db.Column(db.Integer, db.ForeignKey('test_stations.id'),
+                           nullable=False, unique=True)
+    # JSON 对象: 属性页的键值对
+    page_json = db.Column(db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow,
+                           onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        import json
+        return {
+            'id': self.id,
+            'station_id': self.station_id,
+            'page_data': json.loads(self.page_json or '{}'),
+        }
+
+
 class Cabinet(db.Model):
     """机柜 - 属于工站（一个工站一个机柜），包含多个机框"""
     __tablename__ = 'cabinets'

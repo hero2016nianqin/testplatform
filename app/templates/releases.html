@@ -57,15 +57,52 @@
                                 <label class="form-label">描述</label>
                                 <input type="text" class="form-control" id="new-description" placeholder="版本描述">
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label">归档内容</label>
-                                <div id="archive-items-container" class="border rounded p-2" style="max-height:200px;overflow-y:auto;font-size:.85rem">
-                                    <p class="text-muted text-center mb-0 small">加载配置项中...</p>
+                            <!-- 测试序列 -->
+                            <div class="mb-3 p-3 border rounded bg-light bg-opacity-25">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-primary me-2">1</span>
+                                    <strong>测试序列 <span class="text-danger">*</span></strong>
+                                    <span class="ms-2 text-muted small">选择后将冻结序列快照</span>
+                                </div>
+                                <select class="form-select" id="new-sequence-select" onchange="onNewSequenceChange(this.value)">
+                                    <option value="">-- 请选择测试序列（必选） --</option>
+                                </select>
+                                <div id="new-sequence-steps" class="mt-1 small" style="display:none"></div>
+                            </div>
+                            <!-- 硬件参数 -->
+                            <div class="mb-3 p-3 border rounded bg-light bg-opacity-25">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-success me-2">2</span>
+                                    <strong>硬件参数</strong>
+                                    <span class="ms-2 text-muted small">JSON 格式，仅一个文件，归档后发布到装备目录</span>
+                                </div>
+                                <input type="file" class="form-control form-control-sm" id="hardware-params-file-input" accept=".json">
+                            </div>
+                            <!-- 软件参数 -->
+                            <div class="mb-3 p-3 border rounded bg-light bg-opacity-25">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-warning text-dark me-2">3</span>
+                                    <strong>软件参数</strong>
+                                    <span class="ms-2 text-muted small">指标文件（INI/JSON）+ 二进制文件，可添加多个</span>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small text-muted mb-1">指标文件 <small>（发布到装备工程目录，测试代码加载）</small></label>
+                                    <input type="file" class="form-control form-control-sm" id="software-metrics-file-input" accept=".json,.ini" multiple>
+                                </div>
+                                <div>
+                                    <label class="form-label small text-muted mb-1">二进制文件 <small>（固件/驱动等）</small></label>
+                                    <div id="binary-files-list" class="mb-1"><p class="text-muted small mb-0">暂无文件</p></div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="handleBinaryUpload()"><i class="bi bi-upload"></i> 上传二进制文件</button>
                                 </div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label">测试序列（可选，归档后冻结快照）</label>
-                                <select class="form-select" id="new-sequence-select"><option value="0">-- 不选 --</option></select>
+                            <!-- 属性页 -->
+                            <div class="mb-3 p-3 border rounded bg-light bg-opacity-25">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-info me-2">4</span>
+                                    <strong>属性页</strong>
+                                    <span class="ms-2 text-muted small">JSON 格式，仅一个文件，发布到装备目录，现场可修改</span>
+                                </div>
+                                <input type="file" class="form-control form-control-sm" id="property-page-file-input" accept=".json">
                             </div>
                             <div class="mb-2">
                                 <label class="form-label">测试经理</label>
@@ -173,15 +210,15 @@ let currentVersionId = null;
 let pendingTargets = [];
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Load all data
+    //     Load all data
     loadVersionList();
-    loadArchiveConfigs();
     loadUsers();
     loadDeployVersions();
     loadFactories();
-    // Load test sequences into version creation form
+    // Load test sequences into version creation form (required)
     apiFetch('/api/tests/sequences?active_only=true').then(res => {
         const sel = document.getElementById('new-sequence-select');
+        sel.innerHTML = '<option value="">-- 请选择测试序列（必选） --</option>';
         if (res.code === 0 && res.data) {
             res.data.forEach(s => {
                 const opt = document.createElement('option');
@@ -337,34 +374,22 @@ function switchToDeploy(vid) {
 
 // ==================== Tab 2: 版本发布 ====================
 
-function loadArchiveConfigs() {
-    apiFetch('/api/archive-configs').then(res => {
-        const container = document.getElementById('archive-items-container');
-        if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center mb-0 small">加载失败</p>'; return; }
-        const data = res.data || {};
-        const items = data.test_items || [];
-        const configs = data.configs || [];
-        let html = '';
-        if (items.length) {
-            html += `<div class="mb-1"><small><strong>测试项目</strong></small></div>`;
-            items.forEach(it => {
-                html += `<div class="form-check">
-                    <input class="form-check-input archive-item" type="checkbox" value='{"type":"test_item","item_id":${it.id},"data_snapshot":${JSON.stringify(JSON.stringify(it))}}'>
-                    <label class="form-check-label small">${it.name}</label>
-                </div>`;
-            });
+
+
+function onNewSequenceChange(seqId) {
+    const stepsContainer = document.getElementById('new-sequence-steps');
+    if (!seqId) { stepsContainer.style.display = 'none'; return; }
+    apiFetch(`/api/tests/sequences/${seqId}`).then(res => {
+        if (res.code !== 0 || !res.data) { stepsContainer.style.display = 'none'; return; }
+        const steps = res.data.steps || [];
+        if (steps.length) {
+            stepsContainer.style.display = 'block';
+            stepsContainer.innerHTML = `<strong>序列步骤：</strong> ` + steps.map(s =>
+                `<span class="badge bg-light text-dark me-1">${s.step_order+1}. ${s.template_name}</span>`
+            ).join('');
+        } else {
+            stepsContainer.style.display = 'none';
         }
-        if (configs.length) {
-            html += `<div class="mb-1 mt-2"><small><strong>配置方案</strong></small></div>`;
-            configs.forEach(c => {
-                html += `<div class="form-check">
-                    <input class="form-check-input archive-item" type="checkbox" value='{"type":"config","item_id":${c.id},"data_snapshot":${JSON.stringify(JSON.stringify(c))}}'>
-                    <label class="form-check-label small">${c.name} v${c.version}</label>
-                </div>`;
-            });
-        }
-        if (!items.length && !configs.length) html = '<p class="text-muted text-center mb-0 small">无可归档项</p>';
-        container.innerHTML = html;
     });
 }
 
@@ -386,44 +411,142 @@ function onProjectNameInput(value) {
     });
 }
 
+let versionBinaryFiles = [];
+
 function createVersion() {
     const project_name = document.getElementById('new-project-name').value.trim();
     const version = document.getElementById('new-version').value.trim();
+    const sequence_id = parseInt(document.getElementById('new-sequence-select').value) || 0;
     if (!project_name) { alert('请输入工程名称'); return; }
     if (!version) { alert('请输入版本号'); return; }
+    if (!sequence_id) { alert('请选择测试序列（必选）'); return; }
     const btn = document.querySelector('#create-version-form button[type="submit"]');
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 读取文件中...';
     const description = document.getElementById('new-description').value.trim();
-    const archive_items = [];
-    document.querySelectorAll('.archive-item:checked').forEach(cb => {
-        try { archive_items.push(JSON.parse(cb.value)); } catch(e) {}
-    });
     const steps_config = {
         test_manager: document.getElementById('step-test-manager').value,
         project_manager: document.getElementById('step-project-manager').value,
     };
-    const sequence_id = parseInt(document.getElementById('new-sequence-select').value) || 0;
-    apiFetch('/api/versions', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({version, project_name, description, archive_items, steps_config, sequence_id}),
+    // Collect files to read
+    const hwFile = document.getElementById('hardware-params-file-input').files[0];
+    const swFiles = document.getElementById('software-metrics-file-input').files;
+    const propFile = document.getElementById('property-page-file-input').files[0];
+    const readFile = (file) => new Promise((resolve, reject) => {
+        if (!file) { resolve(null); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+    });
+    // Read all files concurrently
+    const readTasks = [];
+    readTasks.push(readFile(hwFile));
+    for (let i = 0; i < swFiles.length; i++) readTasks.push(readFile(swFiles[i]));
+    readTasks.push(readFile(propFile));
+    Promise.all(readTasks).then(results => {
+        const archive_items = [];
+        let idx = 0;
+        // Hardware params (single JSON)
+        const hwContent = results[idx++];
+        if (hwContent && hwContent.trim()) {
+            archive_items.push({type: 'hardware_params', item_id: 0, data_snapshot: hwContent.trim()});
+        }
+        // Software metrics (multiple files)
+        for (let i = 0; i < swFiles.length; i++) {
+            const swContent = results[idx++];
+            if (swContent && swContent.trim()) {
+                const isIni = swFiles[i].name.toLowerCase().endsWith('.ini');
+                archive_items.push({
+                    type: isIni ? 'metrics_ini' : 'metrics_json',
+                    item_id: 0,
+                    data_snapshot: swContent.trim()
+                });
+            }
+        }
+        // Property page (single JSON)
+        const propContent = results[idx];
+        if (propContent && propContent.trim()) {
+            archive_items.push({type: 'property_page', item_id: 0, data_snapshot: propContent.trim()});
+        }
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+        return apiFetch('/api/versions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({version, project_name, description, archive_items, steps_config, sequence_id}),
+        });
     }).then(res => {
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-archive"></i> 创建归档';
-        if (res.code !== 0) { alert(res.message); return; }
+        if (!res || res.code !== 0) { alert((res && res.message) || '创建失败'); return; }
+        // Upload binary files if any
+        const vid = res.data.id;
+        if (versionBinaryFiles.length > 0) {
+            uploadBinariesSequentially(vid, 0);
+        }
         document.getElementById('create-version-form').reset();
-        document.querySelectorAll('.archive-item').forEach(cb => cb.checked = false);
-        currentVersionId = res.data.id;
+        document.getElementById('hardware-params-file-input').value = '';
+        document.getElementById('software-metrics-file-input').value = '';
+        document.getElementById('property-page-file-input').value = '';
+        document.getElementById('new-sequence-steps').style.display = 'none';
+        versionBinaryFiles = [];
+        document.getElementById('binary-files-list').innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
+        currentVersionId = vid;
         saveState();
         loadVersionList();
         loadDeployVersions();
-        // Switch to release tab and show workflow
         document.querySelector('#tab-release').click();
         setTimeout(() => {
-            showReleaseWorkflow(res.data.id);
+            showReleaseWorkflow(vid);
             const wf = document.getElementById('release-workflow-container');
             wf.scrollIntoView({behavior:'smooth', block:'start'});
         }, 150);
+    }).catch(err => {
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-archive"></i> 创建归档';
+        alert('读取文件失败: ' + (err.message || err));
     });
+}
+
+function uploadBinariesSequentially(vid, idx) {
+    if (idx >= versionBinaryFiles.length) return;
+    const file = versionBinaryFiles[idx];
+    const formData = new FormData();
+    formData.append('file', file);
+    apiFetch('/api/versions/' + vid + '/binaries', {
+        method: 'POST',
+        body: formData,
+    }).then(res => {
+        if (res.code === 0) {
+            uploadBinariesSequentially(vid, idx + 1);
+        }
+    });
+}
+
+function handleBinaryUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = function() {
+        for (const f of input.files) versionBinaryFiles.push(f);
+        renderBinaryFiles();
+    };
+    input.click();
+}
+
+function renderBinaryFiles() {
+    const container = document.getElementById('binary-files-list');
+    if (!versionBinaryFiles.length) {
+        container.innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
+        return;
+    }
+    let html = '<div style="max-height:120px;overflow-y:auto">';
+    versionBinaryFiles.forEach((f, i) => {
+        html += `<div class="d-flex justify-content-between align-items-center mb-1">
+            <small><i class="bi bi-file-earmark"></i> ${f.name} (${(f.size/1024).toFixed(1)} KB)</small>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="versionBinaryFiles.splice(${i},1);renderBinaryFiles()"><i class="bi bi-x"></i></button>
+        </div>`;
+    });
+    html += '</div>';
+    html += `<button class="btn btn-outline-primary btn-sm w-100 mt-1" onclick="handleBinaryUpload()"><i class="bi bi-plus"></i> 添加文件</button>`;
+    container.innerHTML = html;
 }
 
 function showReleaseWorkflow(versionId) {
@@ -455,8 +578,15 @@ function renderReleaseWorkflow(v) {
         <div class="mb-3">
             <p class="mb-1 small"><strong>归档内容：</strong></p>
             ${v.archive_items && v.archive_items.length ? v.archive_items.map(a => {
-                try { const snap = JSON.parse(a.data_snapshot || '{}'); return `<span class="badge bg-light text-dark me-1">${snap.name || a.type}</span>`; } catch(e) { return ''; }
+                try {
+                    const snap = JSON.parse(a.data_snapshot || '{}');
+                    const name = snap.name || '';
+                    if (name) return `<span class="badge bg-light text-dark me-1">${name}</span>`;
+                    const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤', config:'配置方案'};
+                    return `<span class="badge bg-light text-dark me-1">${typeLabels[a.type] || a.type}</span>`;
+                } catch(e) { return ''; }
             }).join('') : '<span class="text-muted small">无</span>'}
+            ${v.binary_count ? `<span class="badge bg-info text-dark me-1">二进制文件 ${v.binary_count} 个</span>` : ''}
         </div>
         <p class="small text-muted mb-2"><strong>发布流程（${steps.length} 步）</strong></p>`;
     steps.forEach((s, i) => {
@@ -699,6 +829,19 @@ function renderDeployWorkflow(v) {
             <h6 class="mb-0">${v.version} <span class="badge bg-${v.status==='deployed'?'primary':'secondary'}">${v.status==='deployed'?'已发行':(v.status==='released'?'已发布':'草稿')}</span> ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${v.project_name}</span>` : ''}</h6>
             <small class="text-muted">${v.description || ''}</small>
         </div>
+        <div class="mb-2">
+            <p class="mb-1 small"><strong>归档内容：</strong></p>
+            ${v.archive_items && v.archive_items.length ? v.archive_items.map(a => {
+                try {
+                    const snap = JSON.parse(a.data_snapshot || '{}');
+                    const name = snap.name || '';
+                    if (name) return `<span class="badge bg-light text-dark me-1">${name}</span>`;
+                    const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤', config:'配置方案'};
+                    return `<span class="badge bg-light text-dark me-1">${typeLabels[a.type] || a.type}</span>`;
+                } catch(e) { return ''; }
+            }).join('') : '<span class="text-muted small">无</span>'}
+            ${v.binary_count ? `<span class="badge bg-info text-dark me-1">二进制文件 ${v.binary_count} 个</span>` : ''}
+        </div>
         <p class="small text-muted mb-2"><strong>发行流程（${steps.length} 步）</strong></p>`;
     if (steps.length === 0) {
         html += `<p class="text-muted small">尚未创建发行步骤，请提交发行目标</p>`;
@@ -853,8 +996,15 @@ function showVersionDetail(vid) {
         html += `<div class="mb-3"><h6>归档内容</h6>`;
         if (items.length) {
             html += items.map(a => {
-                try { const snap = JSON.parse(a.data_snapshot || '{}'); return `<span class="badge bg-light text-dark me-1 mb-1">${snap.name || a.type||a.type}</span>`; } catch(e) { return `<span class="badge bg-light text-dark me-1 mb-1">${a.type}</span>`; }
+                try {
+                    const snap = JSON.parse(a.data_snapshot || '{}');
+                    const name = snap.name || '';
+                    if (name) return `<span class="badge bg-light text-dark me-1 mb-1">${name}</span>`;
+                    const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤', config:'配置方案'};
+                    return `<span class="badge bg-light text-dark me-1 mb-1">${typeLabels[a.type] || a.type}</span>`;
+                } catch(e) { return `<span class="badge bg-light text-dark me-1 mb-1">${a.type}</span>`; }
             }).join('');
+            if (v.binary_count) html += `<span class="badge bg-info text-dark me-1 mb-1">二进制文件 ${v.binary_count} 个</span>`;
         } else {
             html += '<p class="text-muted small">无</p>';
         }

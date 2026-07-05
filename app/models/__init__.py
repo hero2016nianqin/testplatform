@@ -32,13 +32,16 @@ from .test_run import TestRun
 from .station import (
     TestStation, TestChassis, TestSlot,
     EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
+    EquipmentMetrics, EquipmentPropertyPage,
 )
-from .version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment
+from .version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile
 
 __all__ = [
     'User', 'TestItem', 'TestItemTemplate', 'TestSequence', 'TestSequenceStep',
     'TestResult', 'TestConfig', 'TestRun',
     'TestStation', 'TestChassis', 'TestSlot',
     'EquipmentConfig', 'HardwareParam', 'SoftwareConfig', 'ScenarioConfig',
+    'EquipmentMetrics', 'EquipmentPropertyPage',
     'TestVersion', 'ReleaseStep', 'VersionArchiveItem', 'ReleaseDeployment',
+    'VersionBinaryFile',
 ]

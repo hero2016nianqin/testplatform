@@ -16,6 +16,7 @@ from app.models.station import (
     TestStation, TestChassis, TestSlot, Cabinet,
     EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
     EquipmentDefinition,
+    EquipmentMetrics, EquipmentPropertyPage,
 )
 from app.models import TestItem
 from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
@@ -717,6 +718,68 @@ def update_software_config(station_id):
     db.session.commit()
     return jsonify({'code': 0, 'data': config.to_dict(),
                     'message': '软件参数已更新'})
+
+
+# ==================== 装备级指标配置 ====================
+
+@station_bp.route('/<int:station_id>/metrics', methods=['GET'])
+@login_required
+def get_equipment_metrics(station_id):
+    """获取装备级指标配置（发布时从版本实例化，不可见于产线，开发人员专用）"""
+    eq_metrics = EquipmentMetrics.query.filter_by(station_id=station_id).first()
+    if not eq_metrics:
+        eq_metrics = EquipmentMetrics(station_id=station_id)
+        db.session.add(eq_metrics)
+        db.session.commit()
+    return jsonify({'code': 0, 'data': eq_metrics.to_dict()})
+
+
+@station_bp.route('/<int:station_id>/metrics', methods=['PUT'])
+@login_required
+def update_equipment_metrics(station_id):
+    """更新装备级指标配置（每个装备独立修改，互不影响）"""
+    data = request.get_json() or {}
+    metrics = data.get('metrics', [])
+    eq_metrics = EquipmentMetrics.query.filter_by(station_id=station_id).first()
+    if not eq_metrics:
+        eq_metrics = EquipmentMetrics(station_id=station_id)
+        db.session.add(eq_metrics)
+    eq_metrics.metrics_json = json.dumps(metrics, ensure_ascii=False)
+    eq_metrics.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'code': 0, 'data': eq_metrics.to_dict(),
+                    'message': '指标配置已更新'})
+
+
+# ==================== 装备级属性页（可见，可现场修改） ====================
+
+@station_bp.route('/<int:station_id>/property-page', methods=['GET'])
+@login_required
+def get_equipment_property_page(station_id):
+    """获取装备级属性页（可见于产线，可现场修改）"""
+    pp = EquipmentPropertyPage.query.filter_by(station_id=station_id).first()
+    if not pp:
+        pp = EquipmentPropertyPage(station_id=station_id)
+        db.session.add(pp)
+        db.session.commit()
+    return jsonify({'code': 0, 'data': pp.to_dict()})
+
+
+@station_bp.route('/<int:station_id>/property-page', methods=['PUT'])
+@login_required
+def update_equipment_property_page(station_id):
+    """更新装备级属性页（现场工程师可修改）"""
+    data = request.get_json() or {}
+    page_data = data.get('page_data', {})
+    pp = EquipmentPropertyPage.query.filter_by(station_id=station_id).first()
+    if not pp:
+        pp = EquipmentPropertyPage(station_id=station_id)
+        db.session.add(pp)
+    pp.page_json = json.dumps(page_data, ensure_ascii=False)
+    pp.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'code': 0, 'data': pp.to_dict(),
+                    'message': '属性页已更新'})
 
 
 # ==================== 场景参数配置 ====================
