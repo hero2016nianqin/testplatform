@@ -18,6 +18,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO
 from flask_cors import CORS
+from sqlalchemy import text
 
 # 全局扩展实例，供 models 和 services 模块引用
 db = SQLAlchemy()
@@ -59,8 +60,19 @@ def create_app(config_object=None):
         TestStation, TestChassis, TestSlot,
         EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
     )
+    from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment
     with app.app_context():
         db.create_all()
+        # Database migrations for new columns
+        try:
+            db.session.execute(text('ALTER TABLE test_versions ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
+        except Exception:
+            pass  # column already exists
+        try:
+            db.session.execute(text('ALTER TABLE software_configs ADD COLUMN project_name VARCHAR(200) DEFAULT ""'))
+        except Exception:
+            pass  # column already exists
+        db.session.commit()
         # 如果没有用户数据，创建默认账号
         from app.routes.auth_routes import seed_default_users
         seed_default_users()
@@ -75,6 +87,7 @@ def create_app(config_object=None):
     from app.routes.config_routes import config_bp
     from app.routes.log_routes import log_bp
     from app.routes.init_routes import init_bp
+    from app.routes.version_routes import version_bp
 
     # 认证相关路由（登录页 + API）
     app.register_blueprint(auth_bp)
@@ -85,6 +98,7 @@ def create_app(config_object=None):
     app.register_blueprint(config_bp, url_prefix='/api/configs')
     app.register_blueprint(log_bp, url_prefix='/api/logs')
     app.register_blueprint(init_bp, url_prefix='/api/init')
+    app.register_blueprint(version_bp, url_prefix='/api')
 
     # 前端页面路由（渲染 HTML 模板）
     from app.routes.main_routes import main_bp

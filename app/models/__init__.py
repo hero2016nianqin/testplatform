@@ -14,6 +14,10 @@
 - HardwareParam:   硬件参数
 - SoftwareConfig:  软件参数配置
 - ScenarioConfig:  场景参数配置
+- TestVersion:     版本归档
+- ReleaseStep:     发布审批步骤
+- VersionArchiveItem: 归档内容条目
+- ReleaseDeployment:  发行目标
 """
 
 from .user import User

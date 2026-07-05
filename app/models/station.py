@@ -371,7 +371,8 @@ class SoftwareConfig(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     station_id = db.Column(db.Integer, db.ForeignKey('test_stations.id'),
-                           nullable=False, unique=True)
+                           nullable=False)
+    project_name = db.Column(db.String(200), default='', comment='关联工程名称')
     # 被测物版本信息
     dut_version = db.Column(db.String(100), default='')
     dut_firmware_version = db.Column(db.String(100), default='')
@@ -387,6 +388,7 @@ class SoftwareConfig(db.Model):
         return {
             'id': self.id,
             'station_id': self.station_id,
+            'project_name': self.project_name or '',
             'dut_version': self.dut_version,
             'dut_firmware_version': self.dut_firmware_version,
             'dut_hardware_version': self.dut_hardware_version,

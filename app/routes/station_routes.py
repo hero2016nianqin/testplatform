@@ -670,9 +670,14 @@ def delete_hardware_param(param_id):
 @login_required
 def get_software_config(station_id):
     """获取软件参数"""
-    config = SoftwareConfig.query.filter_by(station_id=station_id).first()
+    project_filter = request.args.get('project', '').strip()
+    q = SoftwareConfig.query.filter_by(station_id=station_id)
+    if project_filter:
+        config = q.filter_by(project_name=project_filter).first()
+    else:
+        config = q.first()
     if not config:
-        config = SoftwareConfig(station_id=station_id)
+        config = SoftwareConfig(station_id=station_id, project_name=project_filter or '')
         db.session.add(config)
         db.session.commit()
 
@@ -688,13 +693,18 @@ def get_software_config(station_id):
 @process_required
 def update_software_config(station_id):
     """更新软件参数"""
-    config = SoftwareConfig.query.filter_by(station_id=station_id).first()
-    if not config:
-        config = SoftwareConfig(station_id=station_id)
-        db.session.add(config)
     data = request.get_json() or {}
+    project_name = data.get('project_name', '').strip()
+    config = SoftwareConfig.query.filter_by(station_id=station_id)
+    if project_name:
+        config = config.filter_by(project_name=project_name).first()
+    else:
+        config = config.first()
+    if not config:
+        config = SoftwareConfig(station_id=station_id, project_name=project_name)
+        db.session.add(config)
     for field in ['dut_version', 'dut_firmware_version',
-                  'dut_hardware_version']:
+                  'dut_hardware_version', 'project_name']:
         if field in data:
             setattr(config, field, data[field])
     if 'selected_test_item_ids' in data:

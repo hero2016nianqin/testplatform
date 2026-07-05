@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+{% block title %}版本归档 - 测试平台{% endblock %}
+{% block content %}
+<style>
+.stage-card { border-left: 4px solid #0d6efd; }
+.stage-card.stage-2 { border-left-color: #198754; }
+.step-item { padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; background: #f8f9fa; border-left: 3px solid #dee2e6; }
+.step-item.approved { background: #d1e7dd; border-left-color: #198754; }
+.step-item.rejected { background: #f8d7da; border-left-color: #dc3545; }
+.step-item.pending-current { border-left-color: #0d6efd; background: #cfe2ff; }
+.deployment-row td { vertical-align: middle; }
+.approval-comment { font-size: .82rem; color: #6c757d; margin-top: 2px; }
+.target-list { max-height: 300px; overflow-y: auto; }
+</style>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-box-seam"></i> 版本归档与发布</h5>
+            <span id="pending-badge" class="badge bg-warning" style="display:none;cursor:pointer" onclick="showPendingApprovals()">待办</span>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="releaseTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" id="tab-list" data-bs-toggle="tab" data-bs-target="#panel-list" type="button">版本列表</button></li>
+    <li class="nav-item"><button class="nav-link" id="tab-release" data-bs-toggle="tab" data-bs-target="#panel-release" type="button">版本发布</button></li>
+    <li class="nav-item"><button class="nav-link" id="tab-deploy" data-bs-toggle="tab" data-bs-target="#panel-deploy" type="button">版本发行</button></li>
+</ul>
+
+<div class="tab-content">
+    <!-- ========== Tab 1: 版本列表 ========== -->
+    <div class="tab-pane fade show active" id="panel-list">
+        <div id="version-list-container"><p class="text-muted text-center py-3">加载中...</p></div>
+    </div>
+
+    <!-- ========== Tab 2: 版本发布 ========== -->
+    <div class="tab-pane fade" id="panel-release">
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card mb-3">
+                    <div class="card-header"><strong>新建归档</strong></div>
+                    <div class="card-body">
+                        <form id="create-version-form">
+                            <div class="mb-2">
+                                <label class="form-label">版本号 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="new-version" placeholder="如 v1.0.0" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">工程名称</label>
+                                <input type="text" class="form-control" id="new-project-name" placeholder="如 ProjectA">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">描述</label>
+                                <input type="text" class="form-control" id="new-description" placeholder="版本描述">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">归档内容</label>
+                                <div id="archive-items-container" class="border rounded p-2" style="max-height:200px;overflow-y:auto;font-size:.85rem">
+                                    <p class="text-muted text-center mb-0 small">加载配置项中...</p>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">测试经理</label>
+                                <select class="form-select" id="step-test-manager"><option value="">-- 选择 --</option></select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">项目经理</label>
+                                <select class="form-select" id="step-project-manager"><option value="">-- 选择 --</option></select>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-archive"></i> 创建归档</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><strong>发布流程</strong></span>
+                        <span id="release-version-selector"></span>
+                    </div>
+                    <div class="card-body" id="release-workflow-container">
+                        <p class="text-muted text-center mb-0">请先选择或创建一个版本</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== Tab 3: 版本发行 ========== -->
+    <div class="tab-pane fade" id="panel-deploy">
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card mb-3">
+                    <div class="card-header"><strong>发行目标</strong></div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label">选择版本</label>
+                            <input type="text" class="form-control form-control-sm mb-1" id="deploy-version-search" placeholder="搜索版本号..." oninput="filterDeployVersions(this.value)">
+                            <select class="form-select" id="deploy-version-select" size="6" style="font-size:.85rem"><option value="">-- 请选择版本 --</option></select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">厂区（多选）</label>
+                            <div id="factory-checkboxes" class="border rounded p-2" style="max-height:150px;overflow-y:auto;font-size:.85rem">
+                                <p class="text-muted mb-0 small">加载中...</p>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">线体（可选）</label>
+                            <select class="form-select" id="deploy-line-select"><option value="">所有线体</option></select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">装备（可选）</label>
+                            <select class="form-select" id="deploy-station-select"><option value="">所有装备</option></select>
+                        </div>
+                        <hr>
+                        <div class="mb-2">
+                            <label class="form-label">TE工程师 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="deploy-te"><option value="">-- 选择 --</option></select>
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="addDeployTargets()"><i class="bi bi-plus"></i> 添加发行目标</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><strong>已添加目标</strong></div>
+                    <div class="card-body p-0" id="pending-targets" style="max-height:250px;overflow-y:auto"><p class="text-muted text-center mb-0 small py-2">暂无</p></div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header"><strong>发行流程</strong></div>
+                    <div class="card-body" id="deploy-workflow-container">
+                        <p class="text-muted text-center mb-0">请先选择版本并添加发行目标</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 版本详情弹窗 -->
+<div class="modal fade" id="version-detail-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="bi bi-info-circle"></i> 版本详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body" id="version-detail-body"><p class="text-muted mb-0">加载中...</p></div>
+        </div>
+    </div>
+</div>
+
+<!-- 待办弹窗 -->
+<div class="modal fade" id="pending-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">待办审批</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body" id="pending-list"><p class="text-muted mb-0">暂无待办</p></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentVersionId = null;
+let pendingTargets = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load all data
+    loadVersionList();
+    loadArchiveConfigs();
+    loadUsers();
+    loadDeployVersions();
+    loadFactories();
+    // Auto-reload when switching tabs
+    document.querySelectorAll('#releaseTabs .nav-link').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const id = e.target.id;
+            saveState();
+            if (id === 'tab-list') loadVersionList();
+            if (id === 'tab-release' && currentVersionId) showReleaseWorkflow(currentVersionId);
+            if (id === 'tab-deploy' && currentVersionId) showDeployWorkflow(currentVersionId);
+        });
+    });
+
+    document.getElementById('create-version-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        createVersion();
+    });
+
+    document.getElementById('deploy-version-select').addEventListener('change', function() {
+        if (this.value) { currentVersionId = parseInt(this.value); showDeployWorkflow(this.value); saveState(); }
+        else document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
+    });
+    document.getElementById('deploy-version-search').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            const sel = document.getElementById('deploy-version-select');
+            const first = [...sel.options].find(o => o.value && !o.hidden);
+            if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change')); }
+        }
+    });
+    // Click on search input focuses the select for arrow navigation
+    document.getElementById('deploy-version-search').addEventListener('focus', function() {
+        // keep focus on search but allow tab to select
+    });
+
+    // Restore last viewed version state from sessionStorage
+    restoreState();
+});
+
+// ==================== 状态持久化（跨页面导航） ====================
+
+function saveState() {
+    try {
+        if (currentVersionId) sessionStorage.setItem('rel_vid', currentVersionId);
+        const activeTab = document.querySelector('#releaseTabs .nav-link.active');
+        if (activeTab) sessionStorage.setItem('rel_tab', activeTab.id);
+    } catch(e) {}
+}
+
+function restoreState() {
+    try {
+        const vid = sessionStorage.getItem('rel_vid');
+        const tab = sessionStorage.getItem('rel_tab') || 'tab-list';
+        if (vid) {
+            currentVersionId = parseInt(vid);
+            if (tab === 'tab-deploy') {
+                const sel = document.getElementById('deploy-version-select');
+                if (sel) sel.value = vid;
+                // After deploys and factories have loaded, show workflow
+                setTimeout(() => showDeployWorkflow(parseInt(vid)), 500);
+            } else if (tab === 'tab-release') {
+                setTimeout(() => showReleaseWorkflow(parseInt(vid)), 500);
+            }
+        }
+    } catch(e) {}
+}
+
+// Helper: fetch with JSON parse and error logging
+function apiFetch(url, options) {
+    return fetch(url, options)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .catch(err => { console.error('API Error:', url, err); return {code: 1, message: err.message}; });
+}
+
+// ==================== 用户列表 ====================
+
+let allUsers = [];
+
+function loadUsers() {
+    const deployTe = document.getElementById('deploy-te'); if (deployTe) deployTe.innerHTML = '<option value="">加载中...</option>';
+    apiFetch('/api/all-users').then(res => {
+        if (res.code !== 0) return;
+        allUsers = res.data || [];
+        const opts = allUsers.map(u => `<option value="${u.display_name}">${u.display_name}</option>`).join('');
+        ['step-test-manager','step-project-manager','deploy-te'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<option value="">-- 选择 --</option>' + opts;
+        });
+    });
+}
+
+// ==================== Tab 1: 版本列表 ====================
+
+function loadVersionList() {
+    const container = document.getElementById('version-list-container');
+    container.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载中...</p>';
+    apiFetch('/api/versions').then(res => {
+        if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center py-3">加载失败: ' + (res.message||'') + ' <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadVersionList()">重试</button></p>'; return; }
+        const list = res.data || [];
+        if (!list.length) { container.innerHTML = '<p class="text-muted text-center py-3">暂无版本</p>'; return; }
+        let html = `<div class="table-responsive"><table class="table table-hover table-bordered">
+            <thead class="table-light">
+                <tr><th>版本号</th><th>工程名称</th><th>描述</th><th>状态</th><th>发布进度</th><th>发行进度</th><th>发行厂区</th><th>创建人</th><th>创建时间</th><th>操作</th></tr>
+            </thead><tbody>`;
+        list.forEach(v => {
+            const stMap = {draft:'草稿',released:'已发布',deployed:'已发行',delisted:'已下架'};
+            const clMap = {draft:'secondary',released:'success',deployed:'primary',delisted:'dark'};
+            const canDelist = v.status === 'draft' || v.status === 'released' || v.status === 'deployed';
+            const canDelete = v.status === 'draft' || v.status === 'delisted';
+            const isDelisted = v.status === 'delisted';
+            html += `<tr>
+                <td><strong>${v.version}</strong></td>
+                <td><span class="badge bg-info bg-opacity-10 text-dark">${v.project_name || '-'}</span></td>
+                <td>${v.description || '-'}</td>
+                <td><span class="badge bg-${clMap[v.status] || 'secondary'}">${stMap[v.status] || v.status}</span></td>
+                <td>${v.step_progress}</td>
+                <td>${v.deploy_progress}</td>
+                <td>${(v.deploy_factories||[]).length ? v.deploy_factories.map(f => `<span class="badge bg-info bg-opacity-25 text-dark me-1">${f}</span>`).join('') : '-'}</td>
+                <td>${v.created_by || '-'}</td>
+                <td style="font-size:.8rem">${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</td>
+                <td>
+                    <button class="btn btn-outline-primary btn-sm" onclick="switchToRelease(${v.id})"><i class="bi bi-send"></i> 发布</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="switchToDeploy(${v.id})"><i class="bi bi-rocket"></i> 发行</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="showVersionDetail(${v.id})"><i class="bi bi-info-circle"></i> 详情</button>
+                    ${canDelist ? `<button class="btn btn-outline-dark btn-sm" onclick="delistVersion(${v.id})"><i class="bi bi-archive"></i> 下架</button>` : ''}
+                    ${isDelisted ? `<button class="btn btn-outline-info btn-sm" onclick="restoreVersion(${v.id})"><i class="bi bi-arrow-up-circle"></i> 上架</button>` : ''}
+                    ${canDelete ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id})"><i class="bi bi-trash"></i> 删除</button>` : ''}
+                </td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+    });
+}
+
+function switchToRelease(vid) { currentVersionId = vid; saveState(); showReleaseWorkflow(vid); document.querySelector('#tab-release').click(); }
+function switchToDeploy(vid) {
+    currentVersionId = vid;
+    document.getElementById('deploy-version-select').value = vid;
+    saveState();
+    showDeployWorkflow(vid);
+    document.querySelector('#tab-deploy').click();
+}
+
+// ==================== Tab 2: 版本发布 ====================
+
+function loadArchiveConfigs() {
+    apiFetch('/api/archive-configs').then(res => {
+        const container = document.getElementById('archive-items-container');
+        if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center mb-0 small">加载失败</p>'; return; }
+        const data = res.data || {};
+        const items = data.test_items || [];
+        const configs = data.configs || [];
+        let html = '';
+        if (items.length) {
+            html += `<div class="mb-1"><small><strong>测试项目</strong></small></div>`;
+            items.forEach(it => {
+                html += `<div class="form-check">
+                    <input class="form-check-input archive-item" type="checkbox" value='{"type":"test_item","item_id":${it.id},"data_snapshot":${JSON.stringify(JSON.stringify(it))}}'>
+                    <label class="form-check-label small">${it.name}</label>
+                </div>`;
+            });
+        }
+        if (configs.length) {
+            html += `<div class="mb-1 mt-2"><small><strong>配置方案</strong></small></div>`;
+            configs.forEach(c => {
+                html += `<div class="form-check">
+                    <input class="form-check-input archive-item" type="checkbox" value='{"type":"config","item_id":${c.id},"data_snapshot":${JSON.stringify(JSON.stringify(c))}}'>
+                    <label class="form-check-label small">${c.name} v${c.version}</label>
+                </div>`;
+            });
+        }
+        if (!items.length && !configs.length) html = '<p class="text-muted text-center mb-0 small">无可归档项</p>';
+        container.innerHTML = html;
+    });
+}
+
+function createVersion() {
+    const version = document.getElementById('new-version').value.trim();
+    if (!version) { alert('请输入版本号'); return; }
+    const btn = document.querySelector('#create-version-form button[type="submit"]');
+    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+    const project_name = document.getElementById('new-project-name').value.trim();
+    const description = document.getElementById('new-description').value.trim();
+    const archive_items = [];
+    document.querySelectorAll('.archive-item:checked').forEach(cb => {
+        try { archive_items.push(JSON.parse(cb.value)); } catch(e) {}
+    });
+    const steps_config = {
+        test_manager: document.getElementById('step-test-manager').value,
+        project_manager: document.getElementById('step-project-manager').value,
+    };
+    apiFetch('/api/versions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({version, project_name, description, archive_items, steps_config}),
+    }).then(res => {
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-archive"></i> 创建归档';
+        if (res.code !== 0) { alert(res.message); return; }
+        document.getElementById('create-version-form').reset();
+        document.querySelectorAll('.archive-item').forEach(cb => cb.checked = false);
+        currentVersionId = res.data.id;
+        saveState();
+        loadVersionList();
+        loadDeployVersions();
+        // Switch to release tab and show workflow
+        document.querySelector('#tab-release').click();
+        setTimeout(() => {
+            showReleaseWorkflow(res.data.id);
+            const wf = document.getElementById('release-workflow-container');
+            wf.scrollIntoView({behavior:'smooth', block:'start'});
+        }, 150);
+    });
+}
+
+function showReleaseWorkflow(versionId) {
+    currentVersionId = versionId;
+    saveState();
+    const container = document.getElementById('release-workflow-container');
+    const selector = document.getElementById('release-version-selector');
+    if (selector) selector.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="loadVersionListAndRefresh()"><i class="bi bi-arrow-repeat"></i> 刷新</button>`;
+    container.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载发布流程...</p>';
+    apiFetch('/api/versions/' + versionId).then(res => {
+        if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center py-3">加载失败 <button class="btn btn-sm btn-outline-danger ms-2" onclick="showReleaseWorkflow('+versionId+')">重试</button></p>'; return; }
+        renderReleaseWorkflow(res.data);
+    });
+}
+
+function loadVersionListAndRefresh() {
+    loadVersionList();
+    if (currentVersionId) showReleaseWorkflow(currentVersionId);
+}
+
+function renderReleaseWorkflow(v) {
+    const steps = v.steps.filter(s => s.stage === 1);
+    const currentUser = document.getElementById('nav-username').textContent.trim();
+    let html = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">${v.version} <span class="badge bg-${v.status==='released'?'success':v.status==='deployed'?'primary':v.status==='delisted'?'dark':'secondary'}">${v.status==='draft'?'草稿':v.status==='released'?'已发布':v.status==='deployed'?'已发行':'已下架'}</span> ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${v.project_name}</span>` : ''}</h6>
+            <small class="text-muted">${v.description || ''}</small>
+        </div>
+        <div class="mb-3">
+            <p class="mb-1 small"><strong>归档内容：</strong></p>
+            ${v.archive_items && v.archive_items.length ? v.archive_items.map(a => {
+                try { const snap = JSON.parse(a.data_snapshot || '{}'); return `<span class="badge bg-light text-dark me-1">${snap.name || a.type}</span>`; } catch(e) { return ''; }
+            }).join('') : '<span class="text-muted small">无</span>'}
+        </div>
+        <p class="small text-muted mb-2"><strong>发布流程（${steps.length} 步）</strong></p>`;
+    steps.forEach((s, i) => {
+        const isAssigned = s.assigned_to && s.assigned_to === currentUser;
+        const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (isAssigned && s.status === 'pending' ? 'pending-current' : ''));
+        html += `<div class="step-item ${cls}">
+            <div class="d-flex justify-content-between align-items-center">
+                <span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
+                <span>
+                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span>
+                    ${s.status === 'pending' && isAssigned ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')">通过</button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')">拒绝</button>` : ''}
+                </span>
+            </div>
+            ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+        </div>`;
+    });
+    html += `<hr><h6>发行目标</h6>`;
+    if (v.deployments && v.deployments.length) {
+        html += `<table class="table table-sm"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>状态</th></tr></thead><tbody>`;
+        v.deployments.forEach(d => {
+            const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
+            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
+            html += `<tr><td>${d.factory_name||'-'}</td><td>${d.line_name||'-'}</td><td>${d.station_name||'-'}</td><td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span></td></tr>`;
+        });
+        html += `</tbody></table>`;
+    } else {
+        html += `<p class="text-muted small">暂无发行目标</p>`;
+    }
+    document.getElementById('release-workflow-container').innerHTML = html;
+}
+
+function submitStep(stepId, action) {
+    const comment = action === 'approve' ? (prompt('审批意见（可选）') || '') : (prompt('拒绝原因') || '');
+    if (action === 'reject' && !comment) { alert('请填写拒绝原因'); return; }
+    apiFetch(`/api/versions/${currentVersionId}/submit-step`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({step_id: stepId, action, comment}),
+    }).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        showReleaseWorkflow(currentVersionId);
+        loadVersionList();
+    });
+}
+
+// ==================== Tab 3: 版本发行 ====================
+
+let deployVersionList = [];
+
+function loadDeployVersions() {
+    apiFetch('/api/versions').then(res => {
+        if (res.code !== 0) return;
+        deployVersionList = (res.data||[]).filter(v => v.status === 'released' || v.status === 'deployed');
+        document.getElementById('deploy-version-search').value = '';
+        renderDeployVersionOptions('');
+    });
+}
+
+function renderDeployVersionOptions(filter) {
+    const sel = document.getElementById('deploy-version-select');
+    sel.innerHTML = '<option value="">-- 请选择版本 --</option>';
+    const kw = (filter||'').toLowerCase();
+    deployVersionList.forEach(v => {
+        if (kw && !v.version.toLowerCase().includes(kw) && !(v.description||'').toLowerCase().includes(kw) && !(v.project_name||'').toLowerCase().includes(kw)) return;
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = `${v.version}${v.project_name ? ' [' + v.project_name + ']' : ''} (${v.status === 'released' ? '已发布' : '已发行'})${v.description ? ' - ' + v.description : ''}`;
+        sel.appendChild(opt);
+    });
+    if (sel.options.length <= 1) {
+        sel.innerHTML = '<option value="">-- 无匹配版本 --</option>';
+    }
+}
+
+function filterDeployVersions(value) {
+    const sel = document.getElementById('deploy-version-select');
+    const currentVal = sel.value;
+    renderDeployVersionOptions(value);
+    // Restore selection if still visible
+    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+    } else {
+        // Clear workflow if selection lost
+        document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
+    }
+}
+
+function loadFactories() {
+    apiFetch('/api/stations/factories').then(res => {
+        const container = document.getElementById('factory-checkboxes');
+        if (res.code !== 0) { container.innerHTML = '<p class="text-muted mb-0 small">加载失败</p>'; return; }
+        const factories = res.data || [];
+        if (!factories.length) { container.innerHTML = '<p class="text-muted mb-0 small">暂无厂区</p>'; return; }
+        let html = `<div class="form-check"><input class="form-check-input factory-cb" type="checkbox" id="factory-all" value="" onchange="toggleAllFactories(this.checked)"><label class="form-check-label" for="factory-all"><strong>全厂区</strong></label></div>`;
+        factories.forEach(f => {
+            html += `<div class="form-check"><input class="form-check-input factory-cb" type="checkbox" value="${f.id}" data-name="${f.name}"><label class="form-check-label">${f.name}</label></div>`;
+        });
+        container.innerHTML = html;
+        container.querySelectorAll('.factory-cb:not(#factory-all)').forEach(cb => {
+            cb.addEventListener('change', function() { syncFactoryAllCheckbox(); updateFactoryLines(); });
+        });
+    });
+}
+
+function toggleAllFactories(checked) {
+    document.querySelectorAll('.factory-cb').forEach(cb => cb.checked = checked);
+    updateFactoryLines();
+}
+
+function syncFactoryAllCheckbox() {
+    const allCb = document.getElementById('factory-all');
+    const individual = document.querySelectorAll('.factory-cb:not(#factory-all)');
+    const allChecked = [...individual].every(cb => cb.checked);
+    const anyUnchecked = [...individual].some(cb => !cb.checked);
+    if (allChecked) {
+        allCb.checked = true;
+    } else if (anyUnchecked) {
+        allCb.checked = false;
+    }
+}
+
+function getSelectedFactoryIds() {
+    const allChecked = document.getElementById('factory-all').checked;
+    if (allChecked) return 'all';
+    const ids = [];
+    document.querySelectorAll('.factory-cb:not(#factory-all):checked').forEach(cb => ids.push(parseInt(cb.value)));
+    return ids;
+}
+
+function updateFactoryLines() {
+    const sel = document.getElementById('deploy-line-select');
+    sel.innerHTML = '<option value="">所有线体</option>';
+    document.getElementById('deploy-station-select').innerHTML = '<option value="">所有装备</option>';
+    const fids = getSelectedFactoryIds();
+    if (fids === 'all' || fids.length > 0) {
+        sel.innerHTML += '<option value="all-lines">所有线体（全部厂区）</option>';
+    }
+    if (Array.isArray(fids) && fids.length === 1) {
+        apiFetch('/api/stations/factories/' + fids[0] + '/lines').then(res => {
+            if (res.code === 0 && res.data) {
+                res.data.forEach(l => sel.innerHTML += `<option value="${l.id}" data-factory-id="${fids[0]}">${l.name}</option>`);
+            }
+        });
+    }
+}
+
+function addDeployTargets() {
+    const vid = document.getElementById('deploy-version-select').value;
+    if (!vid) { alert('请选择版本'); return; }
+    const fids = getSelectedFactoryIds();
+    if (!fids || (Array.isArray(fids) && !fids.length)) { alert('请至少选择一个厂区'); return; }
+
+    const lineVal = document.getElementById('deploy-line-select').value;
+    const stationVal = document.getElementById('deploy-station-select').value;
+
+    if (stationVal) {
+        pendingTargets.push({version_id: parseInt(vid), station_id: parseInt(stationVal), station_name: document.getElementById('deploy-station-select').options[document.getElementById('deploy-station-select').selectedIndex].text});
+        renderPendingTargets();
+        return;
+    }
+    if (lineVal && lineVal !== 'all-lines') {
+        pendingTargets.push({version_id: parseInt(vid), line_id: parseInt(lineVal), line_name: document.getElementById('deploy-line-select').options[document.getElementById('deploy-line-select').selectedIndex].text});
+        renderPendingTargets();
+        return;
+    }
+    if (fids === 'all') {
+        pendingTargets.push({version_id: parseInt(vid), factory_id: null, factory_name: '全厂区'});
+    } else {
+        fids.forEach(fid => {
+            const name = document.querySelector(`.factory-cb[value="${fid}"]`).dataset.name;
+            pendingTargets.push({version_id: parseInt(vid), factory_id: fid, factory_name: name});
+        });
+    }
+    renderPendingTargets();
+}
+
+function renderPendingTargets() {
+    const container = document.getElementById('pending-targets');
+    if (!pendingTargets.length) { container.innerHTML = '<p class="text-muted text-center mb-0 small py-2">暂无</p>'; return; }
+    let html = `<table class="table table-sm mb-0"><thead><tr><th>目标</th><th></th></tr></thead><tbody>`;
+    pendingTargets.forEach((t, i) => {
+        const label = t.factory_name ? (t.line_name ? t.factory_name + '/' + t.line_name : t.factory_name) : (t.station_name || '-');
+        html += `<tr><td>${label}</td><td><button class="btn btn-sm btn-outline-danger" onclick="removePendingTarget(${i})"><i class="bi bi-x"></i></button></td></tr>`;
+    });
+    html += `</tbody></table>`;
+    html += `<div class="p-2"><button class="btn btn-primary btn-sm w-100" onclick="submitDeployTargets()"><i class="bi bi-send"></i> 提交发行</button></div>`;
+    container.innerHTML = html;
+}
+
+function removePendingTarget(i) { pendingTargets.splice(i, 1); renderPendingTargets(); }
+
+function submitDeployTargets() {
+    const vid = document.getElementById('deploy-version-select').value;
+    if (!vid || !pendingTargets.length) return;
+    const te = document.getElementById('deploy-te').value;
+    if (!te) { alert('请选择TE工程师'); return; }
+    const btn = document.querySelector('#pending-targets .btn-primary');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 提交中...'; }
+    apiFetch('/api/versions/' + vid + '/deployments', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            te_engineer: te,
+            targets: pendingTargets.map(t => ({
+                factory_id: t.factory_id,
+                factory_name: t.factory_name || '',
+                line_id: t.line_id,
+                line_name: t.line_name || '',
+                station_id: t.station_id,
+                station_name: t.station_name || '',
+            })),
+        }),
+    }).then(res => {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send"></i> 提交发行'; }
+        if (res.code !== 0) { alert(res.message); return; }
+        pendingTargets = [];
+        renderPendingTargets();
+        showDeployWorkflow(parseInt(vid));
+        loadVersionList();
+    });
+}
+
+function showDeployWorkflow(versionId) {
+    currentVersionId = versionId;
+    saveState();
+    const container = document.getElementById('deploy-workflow-container');
+    container.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载发行流程...</p>';
+    apiFetch('/api/versions/' + versionId).then(res => {
+        if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center py-3">加载失败 <button class="btn btn-sm btn-outline-danger ms-1" onclick="showDeployWorkflow('+versionId+')">重试</button></p>'; return; }
+        renderDeployWorkflow(res.data);
+    });
+}
+
+function renderDeployWorkflow(v) {
+    const steps = v.steps.filter(s => s.stage === 2);
+    const currentUser = document.getElementById('nav-username').textContent.trim();
+    const isReleased = v.status === 'released' || v.status === 'deployed';
+    let html = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">${v.version} <span class="badge bg-${v.status==='deployed'?'primary':'secondary'}">${v.status==='deployed'?'已发行':(v.status==='released'?'已发布':'草稿')}</span> ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${v.project_name}</span>` : ''}</h6>
+            <small class="text-muted">${v.description || ''}</small>
+        </div>
+        <p class="small text-muted mb-2"><strong>发行流程（${steps.length} 步）</strong></p>`;
+    if (steps.length === 0) {
+        html += `<p class="text-muted small">尚未创建发行步骤，请提交发行目标</p>`;
+    } else {
+        steps.forEach(s => {
+            const isAssigned = s.assigned_to && s.assigned_to === currentUser;
+            const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (isAssigned && s.status === 'pending' ? 'pending-current' : ''));
+            html += `<div class="step-item ${cls}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
+                    <span>
+                        <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span>
+                        ${s.status === 'pending' && isAssigned && isReleased ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')">通过</button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')">拒绝</button>` : ''}
+                    </span>
+                </div>
+                ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+            </div>`;
+        });
+    }
+    html += `<hr><h6>发行目标</h6>`;
+    const deps = v.deployments || [];
+    if (deps.length) {
+        html += `<div class="target-list"><table class="table table-sm"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>TE工程师</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
+        deps.forEach(d => {
+            const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
+            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
+            html += `<tr>
+                <td>${d.factory_name||'-'}</td>
+                <td>${d.line_name||'-'}</td>
+                <td>${d.station_name||'-'}</td>
+                <td><small>${d.assigned_to || '-'}</small></td>
+                <td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span>
+                    ${d.approved_by ? `<br><small class="text-muted">${d.approved_by}</small>` : ''}
+                </td>
+                <td>
+                    ${d.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="approveDeployment(${d.id})">TE审批</button><button class="btn btn-sm btn-danger ms-1" onclick="rejectDeployment(${d.id})">拒绝</button>` : ''}
+                    ${d.status === 'approved' ? `<button class="btn btn-sm btn-primary" onclick="executeDeployment(${d.id})">执行发行</button>` : ''}
+                    ${d.status === 'deployed' ? `<small class="text-muted">${d.deployed_at ? new Date(d.deployed_at).toLocaleString() : ''}</small>` : ''}
+                </td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    } else {
+        html += `<p class="text-muted small">暂无发行目标</p>`;
+    }
+    document.getElementById('deploy-workflow-container').innerHTML = html;
+}
+
+function approveDeployment(depId) {
+    const comment = prompt('TE审批意见（可选）') || '';
+    apiFetch('/api/deployments/' + depId + '/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'approve', comment}),
+    }).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        showDeployWorkflow(currentVersionId);
+        loadVersionList();
+    });
+}
+
+function rejectDeployment(depId) {
+    const comment = prompt('拒绝原因');
+    if (!comment) { alert('请填写拒绝原因'); return; }
+    apiFetch('/api/deployments/' + depId + '/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'reject', comment}),
+    }).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        showDeployWorkflow(currentVersionId);
+        loadVersionList();
+    });
+}
+
+function executeDeployment(depId) {
+    if (!confirm('确认执行发行到目标装备？')) return;
+    apiFetch('/api/deployments/' + depId + '/execute', {method: 'POST'}).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        showDeployWorkflow(currentVersionId);
+        loadVersionList();
+    });
+}
+
+// ==================== 待办 ====================
+
+function showPendingApprovals() {
+    apiFetch('/api/pending-approvals').then(res => {
+        const list = res.data || [];
+        const container = document.getElementById('pending-list');
+        if (!list.length) { container.innerHTML = '<p class="text-muted mb-0">暂无待办</p>'; return; }
+        let html = '';
+        list.forEach(item => {
+            const label = item.type === 'deployment'
+                ? `${item.version.version} - ${item.step.step_name} (目标)`
+                : `${item.version.version} - ${item.step.step_name}`;
+            const clickHandler = item.type === 'deployment'
+                ? `gotoDeployPending(${item.version.id})`
+                : `gotoPending(${item.version.id})`;
+            html += `<div class="card mb-2"><div class="card-body py-2">
+                <div class="d-flex justify-content-between">
+                    <span><strong>${label}</strong></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="${clickHandler}">前往处理</button>
+                </div>
+            </div></div>`;
+        });
+        container.innerHTML = html;
+        new bootstrap.Modal(document.getElementById('pending-modal')).show();
+    });
+}
+
+function gotoPending(vid) {
+    bootstrap.Modal.getInstance(document.getElementById('pending-modal')).hide();
+    currentVersionId = vid;
+    saveState();
+    showReleaseWorkflow(vid);
+    document.querySelector('#tab-release').click();
+}
+
+function gotoDeployPending(vid) {
+    bootstrap.Modal.getInstance(document.getElementById('pending-modal')).hide();
+    currentVersionId = vid;
+    document.getElementById('deploy-version-select').value = vid;
+    saveState();
+    showDeployWorkflow(vid);
+    document.querySelector('#tab-deploy').click();
+}
+
+function showVersionDetail(vid) {
+    const modal = new bootstrap.Modal(document.getElementById('version-detail-modal'));
+    const body = document.getElementById('version-detail-body');
+    body.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载中...</p>';
+    modal.show();
+    apiFetch('/api/versions/' + vid).then(res => {
+        if (res.code !== 0) { body.innerHTML = '<p class="text-danger">加载失败</p>'; return; }
+        const v = res.data;
+        const stMap = {draft:'草稿',released:'已发布',deployed:'已发行',delisted:'已下架'};
+        const clMap = {draft:'secondary',released:'success',deployed:'primary',delisted:'dark'};
+        let html = `
+            <div class="mb-3">
+                <table class="table table-sm table-bordered mb-0">
+                    <tr><th style="width:100px">版本号</th><td><strong>${v.version}</strong> <span class="badge bg-${clMap[v.status]} ms-2">${stMap[v.status]||v.status}</span></td></tr>
+                    <tr><th>工程名称</th><td>${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark">${v.project_name}</span>` : '-'}</td></tr>
+                    <tr><th>描述</th><td>${v.description||'-'}</td></tr>
+                    <tr><th>创建人</th><td>${v.created_by||'-'}</td></tr>
+                    <tr><th>创建时间</th><td>${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</td></tr>
+                    ${v.updated_at ? `<tr><th>更新时间</th><td>${new Date(v.updated_at).toLocaleString()}</td></tr>` : ''}
+                </table>
+            </div>`;
+        // Archive items
+        const items = v.archive_items || [];
+        html += `<div class="mb-3"><h6>归档内容</h6>`;
+        if (items.length) {
+            html += items.map(a => {
+                try { const snap = JSON.parse(a.data_snapshot || '{}'); return `<span class="badge bg-light text-dark me-1 mb-1">${snap.name || a.type||a.type}</span>`; } catch(e) { return `<span class="badge bg-light text-dark me-1 mb-1">${a.type}</span>`; }
+            }).join('');
+        } else {
+            html += '<p class="text-muted small">无</p>';
+        }
+        html += `</div>`;
+        // Workflow steps
+        const allSteps = v.steps || [];
+        const stage1 = allSteps.filter(s => s.stage === 1);
+        const stage2 = allSteps.filter(s => s.stage === 2);
+        if (stage1.length) {
+            html += `<div class="mb-3"><h6>发布流程（${stage1.length} 步）</h6>`;
+            stage1.forEach(s => {
+                const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '');
+                html += `<div class="step-item ${cls}">
+                    <div class="d-flex justify-content-between"><span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
+                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span></div>
+                    ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+                </div>`;
+            });
+            html += `</div>`;
+        }
+        if (stage2.length) {
+            html += `<div class="mb-3"><h6>发行流程（${stage2.length} 步）</h6>`;
+            stage2.forEach(s => {
+                const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '');
+                html += `<div class="step-item stage-2 ${cls}">
+                    <div class="d-flex justify-content-between"><span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
+                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span></div>
+                    ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+                </div>`;
+            });
+            html += `</div>`;
+        }
+        // Deploy targets
+        const deps = v.deployments || [];
+        html += `<h6>发行目标（${deps.length}）</h6>`;
+        if (deps.length) {
+            const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
+            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
+            html += `<table class="table table-sm table-bordered mb-0"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>状态</th></tr></thead><tbody>`;
+            deps.forEach(d => {
+                html += `<tr><td>${d.factory_name||'-'}</td><td>${d.line_name||'-'}</td><td>${d.station_name||'-'}</td><td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span></td></tr>`;
+            });
+            html += `</tbody></table>`;
+        } else {
+            html += '<p class="text-muted small">暂无发行目标</p>';
+        }
+        body.innerHTML = html;
+    });
+}
+
+function delistVersion(vid) {
+    if (!confirm('确认下架该版本？')) return;
+    apiFetch('/api/versions/' + vid + '/delist', {method:'POST'}).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        loadVersionList();
+    });
+}
+
+function restoreVersion(vid) {
+    if (!confirm('确认重新上架该版本？')) return;
+    apiFetch('/api/versions/' + vid + '/restore', {method:'POST'}).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        loadVersionList();
+    });
+}
+
+function deleteVersion(vid) {
+    if (!confirm('确认永久删除该版本？此操作不可恢复！')) return;
+    apiFetch('/api/versions/' + vid, {method:'DELETE'}).then(res => {
+        if (res.code !== 0) { alert(res.message); return; }
+        loadVersionList();
+    });
+}
+</script>
+{% endblock %}

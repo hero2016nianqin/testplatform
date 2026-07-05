@@ -41,6 +41,12 @@ def records_page():
     return render_template('test_records.html')
 
 
+@main_bp.route('/releases')
+def releases_page():
+    """版本归档与发布页面"""
+    return render_template('releases.html')
+
+
 @main_bp.route('/settings')
 def settings_page():
     """参数设置页面 - 管理测试项、导入/导出配置方案"""

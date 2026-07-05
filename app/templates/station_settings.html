@@ -102,6 +102,21 @@
 
     <!-- ========== 软件参数 ========== -->
     <div class="tab-pane fade" id="tab-software">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="border-bottom pb-2">版本发布信息 <span class="text-muted small fw-normal">（从版本发行系统同步）</span></h6>
+                <div class="row mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label small">选择工程</label>
+                        <select class="form-select form-select-sm" id="sw-project-select" onchange="onProjectChange(this.value)">
+                            <option value="">-- 选择工程 --</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="deployed-version-info" class="text-muted small">加载中...</div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-body">
                 <h6 class="border-bottom pb-2">被测物版本信息</h6>
@@ -121,9 +136,10 @@
                 </div>
 
                 <h6 class="border-bottom pb-2 mt-4">测试项目集合（可勾选）</h6>
-                <div class="mb-2">
+                <div class="mb-2 d-flex gap-2">
                     <button class="btn btn-sm btn-outline-primary" onclick="document.querySelectorAll('#sw-items-body input[type=checkbox]').forEach(c=>c.checked=true)">全选</button>
                     <button class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('#sw-items-body input[type=checkbox]').forEach(c=>c.checked=false)">全不选</button>
+                    <button class="btn btn-sm btn-outline-success ms-auto" onclick="loadItemsFromDeployedVersion()"><i class="bi bi-cloud-download"></i> 从版本发布加载测试项</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover">
@@ -259,8 +275,36 @@ function deleteHardware(id) {
 }
 
 // ========== 软件参数 ==========
+let deployedVersionsForStation = [];
+
 function loadSoftware() {
-    fetch(`/api/stations/${stationId}/software`).then(r=>r.json()).then(res=>{
+    // Load all deployed versions grouped by project for this station
+    fetch(`/api/stations/${stationId}/deployed-version`).then(r=>r.json()).then(res => {
+        if (res.code === 0) {
+            deployedVersionsForStation = [];
+            const sel = document.getElementById('sw-project-select');
+            sel.innerHTML = '<option value="">-- 选择工程 --</option>';
+            // Collect unique projects from all deployed versions for this station
+            const projects = new Set();
+            const d = res.data;
+            if (d && d.project_name) projects.add(d.project_name);
+            // Also check if there are additional deployed versions via station.deployed_version
+            projects.forEach(p => {
+                deployedVersionsForStation.push(p);
+                sel.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+            if (projects.size === 0) {
+                sel.innerHTML += '<option value="" disabled>暂无已发行工程</option>';
+            }
+            const softRes = res;
+        }
+    });
+    loadSoftwareConfig('');
+}
+
+function loadSoftwareConfig(projectName) {
+    const url = projectName ? `/api/stations/${stationId}/software?project=${encodeURIComponent(projectName)}` : `/api/stations/${stationId}/software`;
+    fetch(url).then(r=>r.json()).then(res=>{
         if (res.code !== 0) return;
         const d = res.data;
         document.getElementById('sw-dut-version').value = d.dut_version || '';
@@ -280,6 +324,58 @@ function loadSoftware() {
             </tr>
         `).join('');
     });
+}
+
+function loadDeployedVersionInfo(projectName) {
+    const container = document.getElementById('deployed-version-info');
+    const url = projectName ? `/api/stations/${stationId}/deployed-version?project=${encodeURIComponent(projectName)}` : `/api/stations/${stationId}/deployed-version`;
+    fetch(url).then(r=>r.json()).then(res=>{
+        if (res.code !== 0 || !res.data) {
+            container.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> 暂无已发行版本</span>';
+            return;
+        }
+        const d = res.data;
+        container.innerHTML = `
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-success">${d.version}</span>
+                ${d.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark">${d.project_name}</span>` : ''}
+                <span class="text-secondary">${d.description || ''}</span>
+            </div>
+            <div class="text-secondary">
+                发行目标: ${d.factory_name || '-'} / ${d.line_name || '-'} / ${d.station_name || '-'}
+                &middot; 发行时间: ${d.deployed_at ? new Date(d.deployed_at).toLocaleString() : '-'}
+                &middot; 测试项: ${d.test_items.length} 个
+            </div>
+        `;
+        container.className = '';
+    }).catch(() => {
+        container.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> 查询版本信息失败</span>';
+    });
+}
+
+function onProjectChange(projectName) {
+    if (!projectName) {
+        document.getElementById('deployed-version-info').innerHTML = '<span class="text-muted">请选择工程</span>';
+        loadSoftwareConfig('');
+        return;
+    }
+    loadDeployedVersionInfo(projectName);
+    loadSoftwareConfig(projectName);
+}
+
+function loadItemsFromDeployedVersion() {
+    const projectName = document.getElementById('sw-project-select').value;
+    const url = projectName ? `/api/stations/${stationId}/deployed-version?project=${encodeURIComponent(projectName)}` : `/api/stations/${stationId}/deployed-version`;
+    fetch(url).then(r=>r.json()).then(res=>{
+        if (res.code !== 0 || !res.data) { alert('暂无已发行版本'); return; }
+        const d = res.data;
+        if (!d.test_items || d.test_items.length === 0) { alert('该版本未归档测试项'); return; }
+        const deployedIds = d.test_items.map(item => item.id);
+        document.querySelectorAll('#sw-items-body input[type=checkbox]').forEach(cb => {
+            cb.checked = deployedIds.includes(parseInt(cb.value));
+        });
+        alert(`已从版本 ${d.version} 加载 ${d.test_items.length} 个测试项（勾选匹配项）`);
+    }).catch(() => alert('加载失败'));
 }
 
 function saveSoftware() {

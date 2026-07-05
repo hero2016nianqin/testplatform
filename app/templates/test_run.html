@@ -173,47 +173,61 @@
     cursor: pointer; transition: all .2s;
 }
 .station-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-.station-rect { border: 3px solid #0d6efd; border-radius: 12px; padding: 16px; margin-bottom: 16px; background: #f8f9ff; max-width: 520px; }
-.detail-container { display: flex; justify-content: center; }
-.station-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #0d6efd33; }
+.station-rect {
+    border: 2px solid #4a90d9; border-radius: 14px; padding: 18px; margin-bottom: 18px;
+    background: linear-gradient(135deg, #f8fbff 0%, #eef4fb 100%);
+    box-shadow: 0 4px 16px rgba(74,144,217,.12);
+    max-width: 560px;
+}
+.detail-container { display: flex; justify-content: center; padding: 8px 0; }
+.station-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid rgba(74,144,217,.2); }
 .station-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .station-badges .badge { cursor: pointer; font-size: .75rem; }
 .station-badges .badge:hover { filter: brightness(1.1); }
-.station-name { flex: 1; }
+.station-name { flex: 1; font-size: 1rem; }
 
-    width: 0%;
+.cabinet-rect {
+    border: 2px solid #7c5cbf; border-radius: 12px; padding: 14px; margin-bottom: 12px;
+    background: linear-gradient(135deg, #f8f4ff 0%, #f0eaff 100%);
+    box-shadow: 0 2px 8px rgba(124,92,191,.1);
 }
-.cabinet-rect { border: 2px solid #6f42c1; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #f8f0ff; }
-.cabinet-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #6f42c133; }
-.cabinet-body { display: flex; flex-direction: column; gap: 8px; }
-.chassis-rect { border: 2px solid #198754; border-radius: 8px; padding: 10px; background: #f0fff4; }
-.chassis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #19875433; }
-.chassis-slots { display: flex; flex-wrap: wrap; gap: 4px; }
+.cabinet-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(124,92,191,.2); }
+.cabinet-body { display: flex; flex-direction: column; gap: 10px; }
+.chassis-rect {
+    border: 2px solid #2b8c5e; border-radius: 10px; padding: 12px;
+    background: linear-gradient(135deg, #f2faf5 0%, #e8f5ee 100%);
+    box-shadow: 0 1px 4px rgba(43,140,94,.08);
+}
+.chassis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(43,140,94,.2); }
+.chassis-slots { display: flex; flex-wrap: wrap; gap: 6px; }
 /* 单元素时内层大小接近外层 */
-.station-rect.single-cab { padding: 8px; }
-.station-rect.single-cab .cabinet-rect { padding: 8px; }
-.station-rect.single-cab .chassis-rect { padding: 6px; font-size: .85rem; }
-.station-rect.single-cab .slot-item { width: 80px; height: 66px; }
+.station-rect.single-cab { padding: 10px; }
+.station-rect.single-cab .cabinet-rect { padding: 10px; }
+.station-rect.single-cab .chassis-rect { padding: 8px; font-size: .85rem; }
+.station-rect.single-cab .slot-item { width: 90px; height: 70px; }
 .slot-item {
     position: relative; overflow: hidden;
     display: inline-flex; align-items: center; justify-content: center;
-    width: 72px; height: 56px; margin: 4px; border-radius: 6px;
-    font-size: .8rem; font-weight: 500; cursor: pointer; transition: all .15s;
+    width: 80px; height: 62px; margin: 3px; border-radius: 8px;
+    font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .2s;
     border: 2px solid transparent;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
+.slot-item:hover:not(.slot-disabled) { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,.15); }
 .slot-progress-fill {
     position: absolute; bottom: 0; left: 0; right: 0;
     height: 0%; z-index: 0;
     transition: height 0.4s ease, background-color 0.4s ease;
-    border-radius: 0 0 4px 4px;
+    border-radius: 0 0 6px 6px;
 }
-.slot-content { position: relative; z-index: 1; }
-.slot-idle { background: #e9ecef; color: #495057; }
-.slot-testing { background: #cff4fc; color: #055160; border-color: #9eeaf9; }
-.slot-pass { background: #d1e7dd; color: #0f5132; border-color: #a3cfbb; }
-.slot-fail { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
+.slot-content { position: relative; z-index: 1; line-height: 1.3; text-align: center; }
+.slot-idle { background: #f0f2f5; color: #495057; border-color: #dde0e5; }
+.slot-idle:hover { border-color: #adb5bd; }
+.slot-testing { background: linear-gradient(135deg, #d4edfa 0%, #b8e3f5 100%); color: #055160; border-color: #7cd4ef; }
+.slot-pass { background: linear-gradient(135deg, #d4edda 0%, #b8dfc7 100%); color: #0f5132; border-color: #96c7a8; }
+.slot-fail { background: linear-gradient(135deg, #f8d7da 0%, #f0c4c8 100%); color: #842029; border-color: #e8a9ae; }
 .slot-disabled { background: #e9ecef; color: #adb5bd; opacity: .5; cursor: default !important; }
-.slot-selected { border-color: #0d6efd !important; box-shadow: 0 0 0 3px rgba(13,110,253,.2); }
+.slot-selected { border-color: #0d6efd !important; box-shadow: 0 0 0 3px rgba(13,110,253,.25); }
 .settings-badge {
     position: absolute; top: 8px; right: 8px; cursor: pointer;
     opacity: .6; transition: opacity .2s;
@@ -410,6 +424,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (eqId) {
         setTimeout(() => selectEquipment(parseInt(eqId)), 500);
     }
+
+
 });
 
 function setupSocket() {
@@ -756,11 +772,19 @@ function submitBarcodeTest() {
     addLogEntry('info', `扫码测试启动 - 条码: ${barcode}, 槽位: ${slotId}`);
     document.getElementById('barcode-test-progress').classList.remove('d-none');
     document.getElementById('barcode-progress-text').textContent = '启动中...';
-    // 获取测试项列表
-    fetch('/api/tests/items?active_only=true').then(r=>r.json()).then(itemRes => {
-        const items = itemRes.data || [];
-        if (!items.length) { addLogEntry('error', '没有可用的测试项'); alert('没有可用的测试项'); return; }
-        addLogEntry('info', `获取到 ${items.length} 个测试项`);
+    // 先获取该装备的软件配置（获取已选测试项），再获取测试项列表
+    fetch(`/api/stations/${stationId}/software`).then(r=>r.json()).then(softRes => {
+        const selectedIds = (softRes.code === 0 && softRes.data) ? (softRes.data.selected_test_item_ids || []) : [];
+        addLogEntry('info', `装备软件配置: ${selectedIds.length} 个已选测试项`);
+        fetch('/api/tests/items?active_only=true').then(r=>r.json()).then(itemRes => {
+            let items = itemRes.data || [];
+            // 如果有已选测试项 ID，则只执行这些项
+            if (selectedIds.length > 0) {
+                items = items.filter(item => selectedIds.includes(item.id));
+                addLogEntry('info', `根据版本配置过滤后: ${items.length} 个测试项`);
+            }
+            if (!items.length) { addLogEntry('error', '没有可用的测试项'); alert('没有可用的测试项'); return; }
+            addLogEntry('info', `获取到 ${items.length} 个测试项`);
         // 调用测试批次启动 API
         fetch(`/api/tests/runs`, {
             method: 'POST',
@@ -790,8 +814,8 @@ function submitBarcodeTest() {
             executeTestItems(run.id, run.batch_id, items, slotId, stationId);
         }).catch(() => { addLogEntry('error', '测试启动请求失败'); alert('请求失败'); });
     });
+});
 }
-
 function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFailed) {
     if (!index) index = 0;
     if (hasFailed === undefined) hasFailed = false;
