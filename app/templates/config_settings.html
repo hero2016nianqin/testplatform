@@ -10,21 +10,6 @@
                 </button>
             </li>
             <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#import-tab">
-                    <i class="bi bi-upload"></i> 导入配置
-                </button>
-            </li>
-            <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#export-tab">
-                    <i class="bi bi-download"></i> 导出配置
-                </button>
-            </li>
-            <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#configs-tab">
-                    <i class="bi bi-file-earmark"></i> 配置方案
-                </button>
-            </li>
-            <li class="nav-item">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#definition-tab">
                     <i class="bi bi-box"></i> 装备定义
                 </button>
@@ -74,99 +59,6 @@
                 </div>
             </div>
 
-            <div class="tab-pane fade" id="import-tab">
-                <div class="card">
-                    <div class="card-body">
-                        <form id="import-form">
-                            <div class="mb-3">
-                                <label class="form-label">选择配置文件 (CSV, XLSX, JSON, XML)</label>
-                                <input type="file" class="form-control" id="import-file"
-                                       accept=".csv,.xlsx,.json,.xml">
-                            </div>
-                            <div class="mb-3 form-check">
-                                <input type="checkbox" class="form-check-input" id="preview-only">
-                                <label class="form-check-label">仅预览（不保存）</label>
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-upload"></i> 导入
-                            </button>
-                        </form>
-                        <div id="import-result" class="mt-3"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="tab-pane fade" id="export-tab">
-                <div class="card">
-                    <div class="card-body">
-                        <form id="export-form" class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label">导出格式</label>
-                                <select class="form-select" id="export-format">
-                                    <option value="json">JSON</option>
-                                    <option value="csv">CSV</option>
-                                    <option value="xlsx">Excel (XLSX)</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">分类筛选（可选）</label>
-                                <select class="form-select" id="export-category">
-                                    <option value="">全部</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <button type="submit" class="btn btn-success w-100">
-                                    <i class="bi bi-download"></i> 导出
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div class="tab-pane fade" id="configs-tab">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="bi bi-file-earmark"></i> 配置方案
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>名称</th>
-                                        <th>版本</th>
-                                        <th>描述</th>
-                                        <th>状态</th>
-                                        <th>创建时间</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="configs-body"></tbody>
-                            </table>
-                        </div>
-                        <form id="create-config-form" class="row g-3 mt-3">
-                            <div class="col-md-4">
-                                <input type="text" class="form-control" id="config-name" placeholder="配置名称" required>
-                            </div>
-                            <div class="col-md-2">
-                                <input type="text" class="form-control" id="config-version" placeholder="版本号" value="1.0">
-                            </div>
-                            <div class="col-md-4">
-                                <input type="text" class="form-control" id="config-desc" placeholder="描述">
-                            </div>
-                            <div class="col-md-2">
-                                <button type="submit" class="btn btn-primary w-100">
-                                    <i class="bi bi-save"></i> 保存当前配置
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 装备定义管理 -->
             <div class="tab-pane fade" id="definition-tab">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -653,21 +545,24 @@
             });
 
         loadItems();
-        loadConfigs();
-        loadCategories();
-
-        document.getElementById('import-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            importConfig();
-        });
-        document.getElementById('export-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            exportConfig();
-        });
         document.getElementById('save-item-btn').addEventListener('click', saveItem);
-        document.getElementById('create-config-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            createConfig();
+
+        // 恢复上次打开的标签页（刷新保持）
+        const savedTab = sessionStorage.getItem('config_settings_tab');
+        if (savedTab) {
+            const targetBtn = document.querySelector(`.nav-link[data-bs-target="${savedTab}"]`);
+            if (targetBtn) {
+                document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
+                targetBtn.classList.add('active');
+                const pane = document.querySelector(savedTab);
+                if (pane) pane.classList.add('show', 'active');
+            }
+        }
+        document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function(e) {
+                sessionStorage.setItem('config_settings_tab', e.target.getAttribute('data-bs-target'));
+            });
         });
     });
 
@@ -782,159 +677,6 @@
                 if (res.code === 0) {
                     bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide();
                     loadItems();
-                } else {
-                    alert(res.message);
-                }
-            });
-    }
-
-    function loadConfigs() {
-        fetch('/api/configs')
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0) renderConfigs(res.data);
-            });
-    }
-
-    function renderConfigs(configs) {
-        const tbody = document.getElementById('configs-body');
-        tbody.innerHTML = configs.map(c => `
-            <tr>
-                <td>${c.id}</td>
-                <td>${c.name}</td>
-                <td>v${c.version}</td>
-                <td>${c.description || '-'}</td>
-                <td>
-                    <span class="badge bg-${c.is_active ? 'success' : 'secondary'}">
-                        ${c.is_active ? '当前使用' : '未激活'}
-                    </span>
-                </td>
-                <td><small class="text-muted">${c.created_at ? new Date(c.created_at).toLocaleString() : '-'}</small></td>
-                <td>
-                    ${!c.is_active ? `<button class="btn btn-sm btn-outline-success" onclick="activateConfig(${c.id})">激活</button>` : ''}
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteConfig(${c.id})">删除</button>
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    function activateConfig(id) {
-        fetch(`/api/configs/${id}/activate`, {method: 'POST'})
-            .then(r => r.json())
-            .then(res => { if (res.code === 0) { loadConfigs(); loadItems(); }});
-    }
-
-    function deleteConfig(id) {
-        if (!confirm('确定删除此配置方案？')) return;
-        fetch(`/api/configs/${id}`, {method: 'DELETE'})
-            .then(r => r.json())
-            .then(res => { if (res.code === 0) loadConfigs(); });
-    }
-
-    function createConfig() {
-        const name = document.getElementById('config-name').value.trim();
-        const version = document.getElementById('config-version').value.trim();
-        const desc = document.getElementById('config-desc').value.trim();
-        if (!name) { alert('请输入配置名称'); return; }
-
-        fetch('/api/tests/items?active_only=false')
-            .then(r => r.json())
-            .then(res => {
-                const items = res.data.filter(i => i.is_active).map(i => ({
-                    name: i.name, description: i.description,
-                    expected_value: i.expected_value, min_value: i.min_value,
-                    max_value: i.max_value, unit: i.unit, category: i.category,
-                    sort_order: i.sort_order,
-                }));
-                return fetch('/api/configs', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name, version, description: desc, config_data: {items}}),
-                });
-            })
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0) {
-                    loadConfigs();
-                    document.getElementById('config-name').value = '';
-                    document.getElementById('config-version').value = '1.0';
-                    document.getElementById('config-desc').value = '';
-                } else {
-                    alert(res.message);
-                }
-            });
-    }
-
-    function loadCategories() {
-        fetch('/api/tests/categories')
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0) {
-                    const select = document.getElementById('export-category');
-                    res.data.forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c;
-                        opt.textContent = c;
-                        select.appendChild(opt);
-                    });
-                }
-            });
-    }
-
-    function importConfig() {
-        const fileInput = document.getElementById('import-file');
-        if (!fileInput.files.length) { alert('请选择文件'); return; }
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        if (document.getElementById('preview-only').checked) {
-            formData.append('preview_only', 'true');
-        }
-
-        document.getElementById('import-result').innerHTML =
-            '<p class="text-muted">正在处理...</p>';
-
-        fetch('/api/configs/import', {method: 'POST', body: formData})
-            .then(r => r.json())
-            .then(res => {
-                const div = document.getElementById('import-result');
-                if (res.code === 0) {
-                    const d = res.data;
-                    let html = `<div class="alert alert-success">${res.message}</div>`;
-                    if (d.validated && d.validated.length > 0) {
-                        html += '<h6>预览数据:</h6><div class="table-responsive"><table class="table table-sm"><tr>';
-                        Object.keys(d.validated[0]).forEach(k => html += `<th>${k}</th>`);
-                        html += '</tr>';
-                        d.validated.forEach(item => {
-                            html += '<tr>';
-                            Object.values(item).forEach(v => html += `<td>${v}</td>`);
-                            html += '</tr>';
-                        });
-                        html += '</table></div>';
-                    }
-                    if (d.errors && d.errors.length > 0) {
-                        html += `<div class="alert alert-warning"><strong>${d.errors.length} 个错误:</strong><ul>`;
-                        d.errors.forEach(e => html += `<li>${e}</li>`);
-                        html += '</ul></div>';
-                    }
-                    div.innerHTML = html;
-                    loadItems();
-                } else {
-                    div.innerHTML = `<div class="alert alert-danger">${res.message}</div>`;
-                }
-            });
-    }
-
-    function exportConfig() {
-        const format = document.getElementById('export-format').value;
-        const category = document.getElementById('export-category').value;
-        let url = `/api/configs/export?format=${format}`;
-        if (category) url += `&category=${category}`;
-
-        fetch(url)
-            .then(r => r.json())
-            .then(res => {
-                if (res.code === 0) {
-                    alert(`导出成功: ${res.data.filename}`);
                 } else {
                     alert(res.message);
                 }

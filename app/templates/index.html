@@ -85,19 +85,15 @@
                     const d = res.data;
                     document.getElementById('system-status').innerHTML = `
                         <div class="row text-center">
-                            <div class="col-3">
+                            <div class="col-4">
                                 <h3>${d.test_items}</h3>
                                 <small class="text-muted">测试项</small>
                             </div>
-                            <div class="col-3">
-                                <h3>${d.configs}</h3>
-                                <small class="text-muted">配置方案</small>
-                            </div>
-                            <div class="col-3">
+                            <div class="col-4">
                                 <h3>${d.test_runs}</h3>
                                 <small class="text-muted">测试批次</small>
                             </div>
-                            <div class="col-3">
+                            <div class="col-4">
                                 <h3>${d.test_results}</h3>
                                 <small class="text-muted">测试结果</small>
                             </div>

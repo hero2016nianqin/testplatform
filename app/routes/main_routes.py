@@ -49,7 +49,7 @@ def releases_page():
 
 @main_bp.route('/settings')
 def settings_page():
-    """参数设置页面 - 管理测试项、导入/导出配置方案"""
+    """参数设置页面 - 管理测试项、厂区线体、测试序列"""
     from app.models.test_sequence import TestItemTemplate, TestSequence
     templates = TestItemTemplate.query.order_by(TestItemTemplate.sort_order, TestItemTemplate.id).all()
     sequences = TestSequence.query.order_by(TestSequence.id).all()

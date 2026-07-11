@@ -4,9 +4,9 @@ import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session, current_app
 from app import db
-from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile
-from app.models import TestItem, TestConfig, User
-from app.models.station import TestStation, SoftwareConfig, EquipmentMetrics, EquipmentPropertyPage
+from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile, SubScenario
+from app.models import TestItem, User
+from app.models.station import TestStation, ProductionLine, SoftwareConfig, EquipmentMetrics, EquipmentPropertyPage
 from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
 from app.auth import login_required
 
@@ -59,6 +59,86 @@ def list_versions():
     return jsonify({'code': 0, 'data': data})
 
 
+@version_bp.route('/versions/<int:version_id>', methods=['PUT'])
+@login_required
+def update_version(version_id):
+    """编辑版本基本信息（仅draft状态允许编辑）"""
+    v = TestVersion.query.get_or_404(version_id)
+    if v.status != 'draft':
+        return jsonify({'code': 1, 'message': '仅草稿状态的版本可编辑'}), 400
+    data = request.get_json()
+    if not data:
+        return jsonify({'code': 1, 'message': '请求数据为空'}), 400
+    if 'description' in data:
+        v.description = data['description']
+    if 'process_type' in data:
+        pt = data['process_type']
+        v.process_type = ','.join(pt) if isinstance(pt, list) else str(pt) if pt else ''
+    if 'workstation' in data:
+        ws = data['workstation']
+        v.workstation = ','.join(ws) if isinstance(ws, list) else str(ws) if ws else ''
+    if v.type in ('multi_process', 'product_family'):
+        if 'bom_code' in data:
+            v.bom_code = data.get('bom_code', '')
+        if 'tps_name' in data:
+            v.tps_name = data.get('tps_name', '')
+        if 'domain_tags' in data:
+            v.domain_tags = data.get('domain_tags', '')
+    if 'sub_scenarios' in data and data['sub_scenarios']:
+        # Replace all sub-scenarios for this version
+        SubScenario.query.filter_by(version_id=v.id).delete()
+        for idx, ss_data in enumerate(data['sub_scenarios']):
+            name = (ss_data.get('name') or '').strip()
+            if not name:
+                continue
+            db.session.add(SubScenario(
+                version_id=v.id,
+                name=name,
+                sort_order=idx,
+                process_type=ss_data.get('process_type', ''),
+                workstation=ss_data.get('workstation', ''),
+                sequence_id=ss_data.get('sequence_id', 0) or 0,
+                hardware_params=ss_data.get('hardware_params', '{}'),
+                software_metrics=ss_data.get('software_metrics', '[]'),
+                property_page=ss_data.get('property_page', '{}'),
+            ))
+    # Handle standard version fields
+    if 'sequence_id' in data:
+        seq_id = data['sequence_id'] or 0
+        try:
+            seq_id = int(seq_id)
+        except (ValueError, TypeError):
+            seq_id = 0
+        if seq_id:
+            v.sequence_id = seq_id
+    if 'archive_items' in data:
+        # Remove existing non-sequence_step archive items, add new ones
+        VersionArchiveItem.query.filter_by(version_id=v.id).filter(VersionArchiveItem.type != 'sequence_step').delete()
+        for ai in data['archive_items']:
+            db.session.add(VersionArchiveItem(
+                version_id=v.id,
+                type=ai.get('type', ''),
+                item_id=ai.get('item_id'),
+                data_snapshot=ai.get('data_snapshot', '{}'),
+            ))
+    if 'steps_config' in data:
+        steps_config = data['steps_config']
+        existing_steps = ReleaseStep.query.filter_by(version_id=v.id).count()
+        if not existing_steps:
+            stage_map = {'test_manager': 1, 'project_manager': 2}
+            label_map = {'test_manager': '测试经理', 'project_manager': '项目经理'}
+            for role in ('test_manager', 'project_manager'):
+                assignee = (steps_config.get(role) or '').strip()
+                db.session.add(ReleaseStep(
+                    version_id=v.id, stage=role, step_order=stage_map[role],
+                    label=label_map[role],
+                    assignee=assignee,
+                    status='pending',
+                ))
+    db.session.commit()
+    return jsonify({'code': 0, 'data': v.to_dict(), 'message': '版本已更新'})
+
+
 @version_bp.route('/versions', methods=['POST'])
 @login_required
 def create_version():
@@ -71,26 +151,162 @@ def create_version():
         return jsonify({'code': 1, 'message': '版本号不能为空'}), 400
     if not project_name:
         return jsonify({'code': 1, 'message': '工程名称不能为空'}), 400
-    # Check (project_name, version) uniqueness
     existing = TestVersion.query.filter_by(project_name=project_name, version=version).first()
     if existing:
         return jsonify({'code': 1, 'message': f'工程"{project_name}"的版本"{version}"已存在'}), 400
-    sequence_id = data.get('sequence_id', 0) or 0
-    try:
-        sequence_id = int(sequence_id)
-    except (ValueError, TypeError):
-        sequence_id = 0
-    if not sequence_id:
-        return jsonify({'code': 1, 'message': '必须选择测试序列（sequence_id）'}), 400
+
+    version_type = data.get('type', 'standard')
     description = data.get('description', '')
-    archive_items = data.get('archive_items', [])
     steps_config = data.get('steps_config', {})
+    process_type = data.get('process_type', '')
+    workstation = data.get('workstation', '')
+    if isinstance(process_type, list):
+        process_type = ','.join(process_type)
+    if isinstance(workstation, list):
+        workstation = ','.join(workstation)
+    codes_config = data.get('codes_config', [])
+    if isinstance(codes_config, list):
+        codes_config = json.dumps(codes_config, ensure_ascii=False)
+    else:
+        codes_config = '[]'
+
+    bom_code = data.get('bom_code', '')
+    tps_name = data.get('tps_name', '')
+    domain_tags = data.get('domain_tags', '')
+    inherit_from_id = data.get('inherit_from_id')
+
+    if version_type == 'multi_process':
+        if not bom_code:
+            return jsonify({'code': 1, 'message': '多工序版本必须填写BOM编码'}), 400
+        if not tps_name:
+            return jsonify({'code': 1, 'message': '多工序版本必须填写TPS名称'}), 400
+    elif version_type == 'product_family':
+        pass
+    else:
+        version_type = 'standard'
+
     v = TestVersion(version=version, project_name=project_name,
                     description=description, status='draft',
                     created_by=_current_user(),
-                    sequence_id=sequence_id)
+                    process_type=process_type,
+                    workstation=workstation,
+                    codes_config=codes_config,
+                    type=version_type,
+                    bom_code=bom_code,
+                    tps_name=tps_name,
+                    domain_tags=domain_tags,
+                    inherit_from_id=inherit_from_id)
     db.session.add(v)
     db.session.flush()
+
+    # Handle standard version: require sequence_id
+    if version_type == 'standard':
+        sequence_id = data.get('sequence_id', 0) or 0
+        try:
+            sequence_id = int(sequence_id)
+        except (ValueError, TypeError):
+            sequence_id = 0
+        if not sequence_id:
+            return jsonify({'code': 1, 'message': '标准版本必须选择测试序列（sequence_id）'}), 400
+        v.sequence_id = sequence_id
+        archive_items = data.get('archive_items', [])
+        for ai in archive_items:
+            db.session.add(VersionArchiveItem(version_id=v.id, type=ai.get('type', ''),
+                                               item_id=ai.get('item_id'),
+                                               data_snapshot=ai.get('data_snapshot', '{}')))
+        if v.sequence_id:
+            seq = TestSequence.query.get(v.sequence_id)
+            if seq:
+                for step in seq.steps.order_by(TestSequenceStep.step_order).all():
+                    t = step.template
+                    db.session.add(VersionArchiveItem(
+                        version_id=v.id, type='sequence_step',
+                        item_id=step.id,
+                        data_snapshot=json.dumps({
+                            'step_order': step.step_order,
+                            'timeout_seconds': step.timeout_seconds,
+                            'template_id': t.id if t else 0,
+                            'template_name': t.name if t else '',
+                            'template_service_address': t.service_address if t else '',
+                            'template_is_critical': t.is_critical if t else False,
+                            'template_category': t.category if t else '',
+                            'sequence_name': seq.name,
+                            'sequence_version': seq.version,
+                        }, ensure_ascii=False)))
+
+    # Handle multi_process version: create sub-scenarios
+    if version_type == 'multi_process':
+        sub_scenarios_data = data.get('sub_scenarios', [])
+        if not sub_scenarios_data:
+            return jsonify({'code': 1, 'message': '多工序版本必须至少有一个子场景'}), 400
+        for idx, ss_data in enumerate(sub_scenarios_data):
+            name = (ss_data.get('name') or '').strip()
+            if not name:
+                return jsonify({'code': 1, 'message': f'子场景 #{idx+1} 名称不能为空'}), 400
+            process_type_ss = ss_data.get('process_type', '')
+            workstation_ss = ss_data.get('workstation', '')
+            if not process_type_ss:
+                # Try to parse from name: "FT-MP1" -> process_type="FT", workstation="MP1"
+                parts = name.split('-', 1)
+                if len(parts) == 2:
+                    process_type_ss = parts[0]
+                    workstation_ss = parts[1]
+            db.session.add(SubScenario(
+                version_id=v.id,
+                name=name,
+                sort_order=idx,
+                process_type=process_type_ss,
+                workstation=workstation_ss,
+                sequence_id=ss_data.get('sequence_id', 0) or 0,
+                hardware_params=ss_data.get('hardware_params', '{}'),
+                software_metrics=ss_data.get('software_metrics', '[]'),
+                property_page=ss_data.get('property_page', '{}'),
+            ))
+
+    # Handle inheritance: copy sub-scenarios and archive items from source version
+    if v.inherit_from_id:
+        src = TestVersion.query.get(v.inherit_from_id)
+        if src:
+            # Copy sub-scenarios if version is multi_process and no new ones provided
+            if version_type == 'multi_process' and not data.get('sub_scenarios'):
+                for ss in SubScenario.query.filter_by(version_id=src.id).order_by(SubScenario.sort_order).all():
+                    db.session.add(SubScenario(
+                        version_id=v.id,
+                        name=ss.name,
+                        description=ss.description,
+                        sort_order=ss.sort_order,
+                        process_type=ss.process_type,
+                        workstation=ss.workstation,
+                        sequence_id=ss.sequence_id,
+                        hardware_params=ss.hardware_params,
+                        software_metrics=ss.software_metrics,
+                        property_page=ss.property_page,
+                    ))
+            # Copy archive items if standard and no new ones provided
+            if version_type == 'standard' and not data.get('archive_items'):
+                for ai in VersionArchiveItem.query.filter_by(version_id=src.id).all():
+                    db.session.add(VersionArchiveItem(
+                        version_id=v.id,
+                        type=ai.type,
+                        item_id=ai.item_id,
+                        data_snapshot=ai.data_snapshot,
+                    ))
+            # Copy binary files
+            for bf in VersionBinaryFile.query.filter_by(version_id=src.id).all():
+                import shutil
+                new_path = bf.file_path.replace(f'/versions/{src.id}/', f'/versions/{v.id}/')
+                dst_dir = os.path.dirname(new_path)
+                os.makedirs(dst_dir, exist_ok=True)
+                if os.path.exists(bf.file_path):
+                    shutil.copy2(bf.file_path, new_path)
+                db.session.add(VersionBinaryFile(
+                    version_id=v.id,
+                    filename=bf.filename,
+                    file_path=new_path,
+                    file_size=bf.file_size,
+                    description=bf.description,
+                ))
+
     stage1_configs = [
         {'step_order': 1, 'step_name': '测试经理审核', 'approver_role': '测试经理',
          'assigned_to': steps_config.get('test_manager', '')},
@@ -99,32 +315,90 @@ def create_version():
     ]
     for step_cfg in stage1_configs:
         db.session.add(ReleaseStep(version_id=v.id, stage=1, **step_cfg))
-    for ai in archive_items:
-        db.session.add(VersionArchiveItem(version_id=v.id, type=ai.get('type', ''),
-                                           item_id=ai.get('item_id'),
-                                           data_snapshot=ai.get('data_snapshot', '{}')))
-    # Snapshot sequence steps if sequence_id is given
-    if v.sequence_id:
-        seq = TestSequence.query.get(v.sequence_id)
-        if seq:
-            for step in seq.steps.order_by(TestSequenceStep.step_order).all():
-                t = step.template
-                db.session.add(VersionArchiveItem(
-                    version_id=v.id, type='sequence_step',
-                    item_id=step.id,
-                    data_snapshot=json.dumps({
-                        'step_order': step.step_order,
-                        'timeout_seconds': step.timeout_seconds,
-                        'template_id': t.id if t else 0,
-                        'template_name': t.name if t else '',
-                        'template_service_address': t.service_address if t else '',
-                        'template_is_critical': t.is_critical if t else False,
-                        'template_category': t.category if t else '',
-                        'sequence_name': seq.name,
-                        'sequence_version': seq.version,
-                    }, ensure_ascii=False)))
+
     db.session.commit()
     return jsonify({'code': 0, 'data': v.to_dict()})
+
+
+@version_bp.route('/versions/<int:version_id>/sub-scenarios', methods=['GET'])
+@login_required
+def list_sub_scenarios(version_id):
+    TestVersion.query.get_or_404(version_id)
+    scenarios = SubScenario.query.filter_by(version_id=version_id).order_by(SubScenario.sort_order).all()
+    return jsonify({'code': 0, 'data': [s.to_dict() for s in scenarios]})
+
+
+@version_bp.route('/sub-scenarios/<int:ss_id>', methods=['GET'])
+@login_required
+def get_sub_scenario(ss_id):
+    ss = SubScenario.query.get_or_404(ss_id)
+    return jsonify({'code': 0, 'data': ss.to_dict()})
+
+
+@version_bp.route('/sub-scenarios', methods=['POST'])
+@login_required
+def create_sub_scenario():
+    data = request.get_json()
+    if not data or not data.get('version_id'):
+        return jsonify({'code': 1, 'message': '缺少版本ID'}), 400
+    v = TestVersion.query.get(data['version_id'])
+    if not v:
+        return jsonify({'code': 1, 'message': '版本不存在'}), 404
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'code': 1, 'message': '子场景名称不能为空'}), 400
+    max_order = db.session.query(db.func.max(SubScenario.sort_order)).filter_by(version_id=v.id).scalar() or 0
+    ss = SubScenario(
+        version_id=v.id,
+        name=name,
+        description=data.get('description', ''),
+        sort_order=max_order + 1,
+        sequence_id=data.get('sequence_id', 0) or 0,
+    )
+    db.session.add(ss)
+    db.session.commit()
+    return jsonify({'code': 0, 'data': ss.to_dict()})
+
+
+@version_bp.route('/sub-scenarios/<int:ss_id>', methods=['PUT'])
+@login_required
+def update_sub_scenario(ss_id):
+    ss = SubScenario.query.get_or_404(ss_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({'code': 1, 'message': '请求数据为空'}), 400
+    if 'name' in data:
+        ss.name = data['name']
+    if 'description' in data:
+        ss.description = data.get('description', '')
+    if 'sort_order' in data:
+        ss.sort_order = int(data['sort_order'])
+    if 'process_type' in data:
+        ss.process_type = data.get('process_type', '')
+    if 'workstation' in data:
+        ss.workstation = data.get('workstation', '')
+    if 'sequence_id' in data:
+        ss.sequence_id = int(data['sequence_id'])
+    if 'hardware_params' in data:
+        hp = data['hardware_params']
+        ss.hardware_params = json.dumps(hp, ensure_ascii=False) if isinstance(hp, (dict, list)) else str(hp)
+    if 'software_metrics' in data:
+        sm = data['software_metrics']
+        ss.software_metrics = json.dumps(sm, ensure_ascii=False) if isinstance(sm, (dict, list)) else str(sm)
+    if 'property_page' in data:
+        pp = data['property_page']
+        ss.property_page = json.dumps(pp, ensure_ascii=False) if isinstance(pp, (dict, list)) else str(pp)
+    db.session.commit()
+    return jsonify({'code': 0, 'data': ss.to_dict()})
+
+
+@version_bp.route('/sub-scenarios/<int:ss_id>', methods=['DELETE'])
+@login_required
+def delete_sub_scenario(ss_id):
+    ss = SubScenario.query.get_or_404(ss_id)
+    db.session.delete(ss)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': '已删除'})
 
 
 @version_bp.route('/versions/<int:version_id>', methods=['GET'])
@@ -135,7 +409,8 @@ def get_version(version_id):
     d['steps'] = [s.to_dict() for s in v.steps]
     d['archive_items'] = [a.to_dict() for a in v.archive_items]
     d['deployments'] = [dep.to_dict() for dep in v.deployments]
-    d['binary_count'] = VersionBinaryFile.query.filter_by(version_id=version_id).count()
+    d['binaries'] = [f.to_dict() for f in VersionBinaryFile.query.filter_by(version_id=version_id).order_by(VersionBinaryFile.created_at.desc()).all()]
+    d['binary_count'] = len(d['binaries'])
     return jsonify({'code': 0, 'data': d})
 
 
@@ -172,6 +447,26 @@ def submit_step(version_id):
         v.status = 'deployed'
     db.session.commit()
     return jsonify({'code': 0, 'data': step.to_dict()})
+
+
+@version_bp.route('/versions/<int:version_id>/assign-approvers', methods=['POST'])
+@login_required
+def assign_approvers(version_id):
+    """发布流程中设置审批人"""
+    v = TestVersion.query.get_or_404(version_id)
+    data = request.get_json() or {}
+    steps = ReleaseStep.query.filter_by(version_id=version_id, stage=1).order_by(ReleaseStep.step_order).all()
+    if not steps:
+        return jsonify({'code': 1, 'message': '未找到发布步骤'}), 400
+    test_manager = data.get('test_manager', '')
+    project_manager = data.get('project_manager', '')
+    for s in steps:
+        if s.step_order == 1 and s.status == 'pending':
+            s.assigned_to = test_manager
+        if s.step_order == 2 and s.status == 'pending':
+            s.assigned_to = project_manager
+    db.session.commit()
+    return jsonify({'code': 0, 'data': [s.to_dict() for s in steps]})
 
 
 @version_bp.route('/versions/<int:version_id>/deployments', methods=['POST'])
@@ -428,12 +723,46 @@ def execute_deployment(dep_id):
 @login_required
 def get_station_deployed_version(station_id):
     project_filter = request.args.get('project', '').strip()
-    # First try to find a ReleaseDeployment record
+    seq_id_filter = request.args.get('sequence_id', '').strip()
+    
+    # When sequence_id is specified, return test items from that sequence directly
+    if seq_id_filter:
+        try:
+            seq_id = int(seq_id_filter)
+        except (ValueError, TypeError):
+            seq_id = 0
+        if seq_id:
+            from app.models.test_sequence import TestSequence, TestSequenceStep
+            seq = TestSequence.query.get(seq_id)
+            if seq:
+                steps = TestSequenceStep.query.filter_by(sequence_id=seq.id).order_by(TestSequenceStep.step_order).all()
+                test_items = []
+                for i, step in enumerate(steps):
+                    t = step.template
+                    test_items.append({
+                        'id': t.id if t else -(i+1),
+                        'name': t.name if t else f'步骤 {i+1}',
+                        'expected_value': '',
+                        'min_value': '',
+                        'max_value': '',
+                        'unit': '',
+                    })
+            else:
+                test_items = []
+            # Return minimal version info with the sequence-specific items
+            return jsonify({'code': 0, 'data': {
+                'version_id': 0, 'version': '', 'project_name': project_filter,
+                'description': '', 'type': '', 'bom_code': '', 'tps_name': '',
+                'sub_scenarios': [], 'deployed_at': None,
+                'test_items': test_items,
+                'sequence_data': '[]', 'binary_count': 0,
+                'factory_name': '', 'line_name': '', 'station_name': '',
+            }})
+    
     q = ReleaseDeployment.query.filter_by(
         station_id=station_id, status='deployed'
     )
     if project_filter:
-        # Find via version's project_name
         dep = q.join(TestVersion).filter(
             TestVersion.project_name == project_filter
         ).order_by(ReleaseDeployment.deployed_at.desc()).first()
@@ -445,12 +774,10 @@ def get_station_deployed_version(station_id):
             archive_items = VersionArchiveItem.query.filter_by(version_id=v.id, type='test_item').all()
             test_items = []
             for item in archive_items:
-                snap = item.data_snapshot
-                if isinstance(snap, str):
-                    try:
-                        snap = json.loads(snap)
-                    except (json.JSONDecodeError, TypeError):
-                        snap = {}
+                try:
+                    snap = json.loads(item.data_snapshot) if isinstance(item.data_snapshot, str) else {}
+                except (json.JSONDecodeError, TypeError):
+                    snap = {}
                 test_items.append({
                     'id': item.item_id,
                     'name': snap.get('name', ''),
@@ -459,13 +786,45 @@ def get_station_deployed_version(station_id):
                     'max_value': snap.get('max_value', ''),
                     'unit': snap.get('unit', ''),
                 })
+            # If no explicit test_item archive items, derive from sequence steps
+            if not test_items:
+                seq_steps_data = _load_archive_sequence_steps(v.id)
+                if seq_steps_data:
+                    for i, step in enumerate(seq_steps_data):
+                        name = step.get('template_name', '') or step.get('step_name', '') or f'步骤 {i+1}'
+                        test_items.append({
+                            'id': step.get('template_id', 0) or -(i+1),
+                            'name': name,
+                            'expected_value': '',
+                            'min_value': '',
+                            'max_value': '',
+                            'unit': '',
+                        })
+                else:
+                    # Fallback to all active TestItem records
+                    from app.models.test_item import TestItem
+                    all_items = TestItem.query.filter_by(is_active=True).order_by(TestItem.sort_order).all()
+                    test_items = [{'id': item.id, 'name': item.name,
+                                   'expected_value': str(item.expected_value) if item.expected_value else '',
+                                   'min_value': str(item.min_value) if item.min_value else '',
+                                   'max_value': str(item.max_value) if item.max_value else '',
+                                   'unit': item.unit or ''} for item in all_items]
             seq_steps = _load_archive_sequence_steps(v.id)
             binary_count = VersionBinaryFile.query.filter_by(version_id=v.id).count()
+            ss_list = []
+            try:
+                ss_list = [s.to_dict() for s in SubScenario.query.filter_by(version_id=v.id).order_by(SubScenario.sort_order).all()]
+            except Exception:
+                ss_list = []
             return jsonify({'code': 0, 'data': {
                 'version_id': v.id,
                 'version': v.version,
                 'project_name': v.project_name,
                 'description': v.description,
+                'type': v.type or 'standard',
+                'bom_code': v.bom_code or '',
+                'tps_name': v.tps_name or '',
+                'sub_scenarios': ss_list,
                 'deployed_at': dep.deployed_at.isoformat() if dep.deployed_at else None,
                 'test_items': test_items,
                 'sequence_data': json.dumps(seq_steps, ensure_ascii=False),
@@ -514,12 +873,45 @@ def get_station_deployed_version(station_id):
                     'max_value': snap.get('max_value', ''),
                     'unit': snap.get('unit', ''),
                 })
+            # If no explicit test_item archive items, derive from sequence steps
+            if not test_items:
+                seq_steps_data = _load_archive_sequence_steps(v.id)
+                if seq_steps_data:
+                    for i, step in enumerate(seq_steps_data):
+                        name = step.get('template_name', '') or step.get('step_name', '') or f'步骤 {i+1}'
+                        test_items.append({
+                            'id': step.get('template_id', 0) or -(i+1),
+                            'name': name,
+                            'expected_value': '',
+                            'min_value': '',
+                            'max_value': '',
+                            'unit': '',
+                        })
+                else:
+                    # Fallback to all active TestItem records
+                    from app.models.test_item import TestItem
+                    all_items = TestItem.query.filter_by(is_active=True).order_by(TestItem.sort_order).all()
+                    test_items = [{'id': item.id, 'name': item.name,
+                                   'expected_value': str(item.expected_value) if item.expected_value else '',
+                                   'min_value': str(item.min_value) if item.min_value else '',
+                                   'max_value': str(item.max_value) if item.max_value else '',
+                                   'unit': item.unit or ''} for item in all_items]
             seq_steps = _load_archive_sequence_steps(v.id)
+        ss_list = []
+        if v:
+            try:
+                ss_list = [s.to_dict() for s in SubScenario.query.filter_by(version_id=v.id).order_by(SubScenario.sort_order).all()]
+            except Exception:
+                ss_list = []
         return jsonify({'code': 0, 'data': {
             'version_id': v.id if v else 0,
             'version': station.deployed_version,
             'project_name': v.project_name if v else '',
             'description': v.description if v else '',
+            'type': v.type if v else 'standard',
+            'bom_code': v.bom_code if v else '',
+            'tps_name': v.tps_name if v else '',
+            'sub_scenarios': ss_list,
             'deployed_at': None,
             'test_items': test_items,
             'sequence_data': json.dumps(seq_steps, ensure_ascii=False),
@@ -530,11 +922,89 @@ def get_station_deployed_version(station_id):
     return jsonify({'code': 0, 'data': None})
 
 
+@version_bp.route('/stations/<int:station_id>/deployed-archives', methods=['GET'])
+@login_required
+def get_station_deployed_archives(station_id):
+    station = TestStation.query.get(station_id)
+    if not station:
+        return jsonify({'code': 0, 'data': None})
+    dep = ReleaseDeployment.query.filter_by(station_id=station_id, status='deployed').order_by(ReleaseDeployment.deployed_at.desc()).first()
+    if not dep and station.line_id:
+        dep = ReleaseDeployment.query.filter_by(line_id=station.line_id, status='deployed').order_by(ReleaseDeployment.deployed_at.desc()).first()
+    if not dep:
+        factory_id = db.session.query(ProductionLine.factory_id).filter(ProductionLine.id == station.line_id).scalar()
+        if factory_id:
+            dep = ReleaseDeployment.query.filter_by(factory_id=factory_id, status='deployed').order_by(ReleaseDeployment.deployed_at.desc()).first()
+    if not dep:
+        dep = ReleaseDeployment.query.filter_by(status='deployed').order_by(ReleaseDeployment.deployed_at.desc()).first()
+    if not dep:
+        return jsonify({'code': 0, 'data': None})
+    v = TestVersion.query.get(dep.version_id)
+    if not v:
+        return jsonify({'code': 0, 'data': None})
+
+    # Read hardware_params and property_page from sub-scenarios (multi-process)
+    hw_items = []
+    pp_items = []
+    ss_list = SubScenario.query.filter_by(version_id=v.id).order_by(SubScenario.sort_order).all()
+    for ss in ss_list:
+        try:
+            hw = json.loads(ss.hardware_params or '{}')
+            if isinstance(hw, dict) and hw:
+                hw_items.append({'sub_scenario': ss.name, 'data': hw})
+        except Exception:
+            pass
+        try:
+            pp = json.loads(ss.property_page or '{}')
+            if isinstance(pp, dict) and pp:
+                pp_items.append({'sub_scenario': ss.name, 'data': pp})
+        except Exception:
+            pass
+
+    merged_hw = {}
+    for item in hw_items: merged_hw.update(item['data'])
+    merged_pp = {}
+    for item in pp_items: merged_pp.update(item['data'])
+
+    return jsonify({
+        'code': 0,
+        'data': {
+            'version_id': v.id,
+            'version': v.version,
+            'hardware_params_list': hw_items,
+            'property_page_list': pp_items,
+            'hardware_params': merged_hw,
+            'property_page': merged_pp,
+        }
+    })
+
+
+def _version_summary(v):
+    d = v.to_dict()
+    ss = []
+    try:
+        ss = [s.to_dict() for s in SubScenario.query.filter_by(version_id=v.id).order_by(SubScenario.sort_order).all()]
+    except Exception:
+        ss = []
+    return {
+        'version_id': v.id,
+        'version': v.version,
+        'project_name': v.project_name,
+        'description': v.description,
+        'type': v.type or 'standard',
+        'bom_code': v.bom_code or '',
+        'tps_name': v.tps_name or '',
+        'process_type': v.process_type or '',
+        'workstation': v.workstation or '',
+        'codes_config': d.get('codes_config', []),
+        'sub_scenarios': ss,
+    }
+
+
 @version_bp.route('/stations/<int:station_id>/deployed-versions', methods=['GET'])
 @login_required
 def list_station_deployed_versions(station_id):
-    """返回某装备所有可用的已发行版本列表（含版本ID、工程名、版本号、描述）"""
-    # 1. From ReleaseDeployment records
+    """返回某装备所有可用的已发行版本列表"""
     deps = ReleaseDeployment.query.filter_by(
         station_id=station_id, status='deployed'
     ).order_by(ReleaseDeployment.deployed_at.desc()).all()
@@ -546,13 +1016,7 @@ def list_station_deployed_versions(station_id):
             key = (v.project_name, v.version)
             if key not in seen:
                 seen.add(key)
-                result.append({
-                    'version_id': v.id,
-                    'version': v.version,
-                    'project_name': v.project_name,
-                    'description': v.description,
-                })
-    # 2. Also include all released/deployed versions (so dropdown always has options)
+                result.append(_version_summary(v))
     versions = TestVersion.query.filter(
         TestVersion.status.in_(['released', 'deployed'])
     ).order_by(TestVersion.updated_at.desc()).all()
@@ -560,12 +1024,7 @@ def list_station_deployed_versions(station_id):
         key = (v.project_name, v.version)
         if key not in seen:
             seen.add(key)
-            result.append({
-                'version_id': v.id,
-                'version': v.version,
-                'project_name': v.project_name,
-                'description': v.description,
-            })
+            result.append(_version_summary(v))
     return jsonify({'code': 0, 'data': result})
 
 
@@ -641,7 +1100,6 @@ def get_next_version():
         .order_by(TestVersion.created_at.desc()).first()
     if not last:
         return jsonify({'code': 0, 'data': {'version': '1.0.0', 'is_new': True}})
-    # Try to extract numeric prefix and increment
     v = last.version
     m = re.match(r'^(\D*)(\d+(?:\.\d+)*)', v)
     if m:
@@ -659,6 +1117,20 @@ def get_next_version():
     return jsonify({'code': 0, 'data': {'version': next_ver, 'is_new': False}})
 
 
+@version_bp.route('/versions/<int:version_id>/inherit-data', methods=['GET'])
+@login_required
+def get_inherit_data(version_id):
+    """返回用于继承预填充的版本完整数据"""
+    v = TestVersion.query.get_or_404(version_id)
+    d = v.to_dict()
+    # Include archive items summary
+    d['archive_items'] = [a.to_dict() for a in v.archive_items]
+    d['binary_count'] = VersionBinaryFile.query.filter_by(version_id=version_id).count()
+    binaries = VersionBinaryFile.query.filter_by(version_id=version_id).all()
+    d['binaries'] = [b.to_dict() for b in binaries]
+    return jsonify({'code': 0, 'data': d})
+
+
 @version_bp.route('/all-users', methods=['GET'])
 @login_required
 def list_all_users():
@@ -670,12 +1142,10 @@ def list_all_users():
 @login_required
 def get_archive_configs():
     items = TestItem.query.filter_by(is_active=True).order_by(TestItem.sort_order).all()
-    configs = TestConfig.query.filter_by(is_active=True).all()
     return jsonify({
         'code': 0,
         'data': {
             'test_items': [i.to_dict() for i in items],
-            'configs': [c.to_dict() for c in configs],
         }
     })
 
@@ -731,3 +1201,14 @@ def delete_version_binary(version_id, file_id):
     db.session.delete(bf)
     db.session.commit()
     return jsonify({'code': 0, 'message': '已删除'})
+
+
+@version_bp.route('/versions/<int:version_id>/binaries/<int:file_id>/download', methods=['GET'])
+@login_required
+def download_version_binary(version_id, file_id):
+    """下载版本二进制文件"""
+    from flask import send_file
+    bf = VersionBinaryFile.query.filter_by(id=file_id, version_id=version_id).first_or_404()
+    if not os.path.exists(bf.file_path):
+        return jsonify({'code': 1, 'message': '文件不存在'}), 404
+    return send_file(bf.file_path, as_attachment=True, download_name=bf.filename)

@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 from app import db
-from app.models import TestItem, TestConfig, TestResult, TestRun
+from app.models import TestItem, TestResult, TestRun
 from app.auth import process_required
 from config.config_manager import ConfigManager
 
@@ -26,7 +26,6 @@ def init_status():
     返回各数据表的记录数，以及是否已初始化的标志。
     """
     item_count = TestItem.query.count()
-    config_count = TestConfig.query.count()
     run_count = TestRun.query.count()
     result_count = TestResult.query.count()
 
@@ -35,7 +34,6 @@ def init_status():
         'data': {
             'initialized': item_count > 0,
             'test_items': item_count,
-            'configs': config_count,
             'test_runs': run_count,
             'test_results': result_count,
         }
@@ -110,7 +108,6 @@ def reset_system():
     TestResult.query.delete()
     TestRun.query.delete()
     TestItem.query.delete()
-    TestConfig.query.delete()
     db.session.commit()
 
     return jsonify({

@@ -110,6 +110,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div id="property-page-version-info" class="small text-muted mb-2"></div>
                 <p class="small text-muted"><strong>Key</strong> 不可修改（来源于版本归档），<strong>Value</strong> 可编辑。</p>
                 <div class="table-responsive mb-3">
                     <table class="table table-sm table-bordered align-middle">
@@ -138,6 +139,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <div id="hardware-params-version-info" class="small text-muted mb-2"></div>
                 <p class="small text-muted"><strong>参数名</strong> 不可修改（来源于版本归档），<strong>参数值</strong> 可编辑。</p>
                 <div class="table-responsive mb-3">
                     <table class="table table-sm table-bordered align-middle">
@@ -218,6 +220,52 @@
 </div>
 <button class="log-hidden-toggle d-none" id="log-show-btn" onclick="toggleLogPanel()" title="显示运行日志">
     <i class="bi bi-terminal"></i> 日志
+</button>
+
+<!-- ===== 右侧悬浮信息面板 ===== -->
+<div class="info-panel d-none" id="info-panel">
+    <div class="info-panel-header">
+        <span><i class="bi bi-info-circle"></i> 当前状态</span>
+        <button class="btn-close btn-close-white" onclick="toggleInfoPanel()" title="关闭"></button>
+    </div>
+    <div class="info-panel-body">
+        <div class="info-item">
+            <span class="info-label">工序</span>
+            <span class="info-value" id="info-process">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">工位</span>
+            <span class="info-value" id="info-workstation">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">装备名称</span>
+            <span class="info-value" id="info-equip-name">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">软件版本</span>
+            <span class="info-value" id="info-sw-version">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">硬件编码</span>
+            <span class="info-value" id="info-hw-code">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">BOM编码</span>
+            <span class="info-value" id="info-bom-code">-</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+            <span class="info-label">操作人员</span>
+            <span class="info-value" id="info-operator">-</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">登录角色</span>
+            <span class="info-value" id="info-role">-</span>
+        </div>
+    </div>
+</div>
+<button class="info-toggle-btn" id="info-show-btn" onclick="toggleInfoPanel()" title="显示状态面板">
+    <i class="bi bi-info-circle"></i>
 </button>
 
 {% endblock %}
@@ -312,31 +360,34 @@
     min-height: 0;
 }
 .log-panel-sidebar {
-    width: 64px;
+    width: 72px;
     flex-shrink: 0;
     background: #16162a;
     display: flex;
     flex-direction: column;
-    padding: 8px 4px;
-    gap: 4px;
+    padding: 10px 6px;
+    gap: 6px;
     border-right: 1px solid #2a2a4e;
     align-items: stretch;
 }
 .log-filter-btn {
-    font-size: .6rem;
-    padding: 6px 2px;
-    border-radius: 4px;
-    border: 1px solid #333;
+    font-size: .75rem;
+    font-weight: 700;
+    font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+    padding: 8px 4px;
+    border-radius: 6px;
+    border: 1px solid #444;
     background: #222;
-    color: #aaa;
+    color: #bbb;
     cursor: pointer;
     transition: all .15s;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.3;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
+    letter-spacing: 0.5px;
 }
 .log-filter-btn.active {
     background: #0d6efd33;
@@ -344,7 +395,7 @@
     border-color: #0d6efd;
 }
 .log-filter-btn:hover:not(.active) { background: #333; color: #fff; }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .dot-all { background: #aaa; }
 .dot-debug { background: #28a745; }
 .dot-info { background: #0dcaf0; }
@@ -418,6 +469,43 @@
 }
 .log-hidden-toggle:hover { opacity: 1; }
 
+/* 右侧悬浮信息面板 */
+.info-panel {
+    position: fixed; right: 0; top: 60px; z-index: 1040;
+    width: 240px; background: #1a1a2e; color: #e0e0e0;
+    border-left: 2px solid #0d6efd; border-bottom: 2px solid #0d6efd;
+    border-radius: 0 0 0 10px;
+    box-shadow: -4px 4px 20px rgba(0,0,0,.3);
+    font-size: .82rem;
+    transition: transform .2s ease;
+}
+.info-panel.d-none { display: none; }
+.info-panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; background: #16162a;
+    border-bottom: 1px solid #2a2a4e;
+    font-weight: 600; font-size: .85rem;
+}
+.info-panel-header .btn-close { width: .6rem; height: .6rem; }
+.info-panel-body { padding: 8px 12px; }
+.info-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; border-bottom: 1px solid #ffffff0a;
+}
+.info-item:last-of-type { border-bottom: none; }
+.info-label { color: #8a8aaa; font-size: .75rem; }
+.info-value { color: #fff; font-weight: 500; text-align: right; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-divider { height: 1px; background: #2a2a4e; margin: 6px 0; }
+.info-toggle-btn {
+    position: fixed; right: 8px; top: 64px; z-index: 1041;
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid #0d6efd; background: #0d6efd; color: #fff;
+    font-size: 1rem; cursor: pointer; opacity: .6;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .15s;
+}
+.info-toggle-btn:hover { opacity: 1; }
+
 /* 右键菜单 */
 .context-menu {
     position: fixed; z-index: 9999;
@@ -473,13 +561,22 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('context-menu').classList.add('d-none');
     });
 
-    // 检查 URL 参数
+    // 检查 URL 参数（页面刷新保持 - 仅从URL恢复，不依赖sessionStorage）
     const params = new URLSearchParams(window.location.search);
     const eqId = params.get('equipment_id');
     if (eqId) {
         setTimeout(() => selectEquipment(parseInt(eqId)), 500);
     }
 
+    // 恢复之前保存的线体/装备视图范围
+    const savedLinesScope = sessionStorage.getItem('lines_scope');
+    if (savedLinesScope) {
+        currentLinesScope = savedLinesScope;
+    }
+    const savedEquipScope = sessionStorage.getItem('equip_scope');
+    if (savedEquipScope) {
+        currentEquipScope = savedEquipScope;
+    }
 
 });
 
@@ -504,6 +601,7 @@ function setupSocket() {
 
 function switchLinesView(scope) {
     currentLinesScope = scope;
+    sessionStorage.setItem('lines_scope', scope);
     document.querySelectorAll('#lines-panel .btn-group .btn').forEach(b => b.classList.remove('active'));
     document.getElementById('lines-' + scope + '-btn').classList.add('active');
     loadLinesList(scope);
@@ -549,6 +647,7 @@ function loadEquipmentsForLine(lineId) {
 
 function switchEquipView(scope) {
     currentEquipScope = scope;
+    sessionStorage.setItem('equip_scope', scope);
     document.querySelectorAll('#equipments-panel .btn-group .btn').forEach(b => b.classList.remove('active'));
     document.getElementById('equip-' + scope + '-btn').classList.add('active');
     loadEquipmentsList(scope);
@@ -665,6 +764,10 @@ function deleteEquip(id) {
 function selectEquipment(stationId) {
     currentStationId = stationId;
     addLogEntry('info', '进入装备测试视图 - stationId: ' + stationId);
+    // 更新URL保持页面状态，刷新后仍可恢复
+    const url = new URL(window.location);
+    url.searchParams.set('equipment_id', stationId);
+    window.history.replaceState({equipment_id: stationId}, '', url);
     fetch(`/api/stations/${stationId}/detail`)
         .then(r => r.json())
         .then(res => {
@@ -672,6 +775,8 @@ function selectEquipment(stationId) {
             document.getElementById('station-view').innerHTML = renderEquipmentDetail(res.data);
             document.title = '测试执行 - ' + (res.data.station.name || '');
             showLogPanel(true);
+            // 更新悬浮信息面板
+            updateInfoPanel(res.data);
             // 锁定厂区选择器为当前装备所属厂区
             const st = res.data.station;
             if (st.factory_name && typeof setFactoryLocked === 'function') {
@@ -710,6 +815,7 @@ function renderEquipmentDetail(detail) {
             <div class="station-badges">
                 <span class="badge bg-secondary" onclick="event.stopPropagation();showStationParams(${stationId})" title="参数设置"><i class="bi bi-gear"></i> 参数设置</span>
                 <span class="badge bg-info" onclick="event.stopPropagation();showPropertyPageModal(${stationId})" title="属性页"><i class="bi bi-file-text"></i> 属性页</span>
+                <span class="badge bg-success" onclick="event.stopPropagation();showHardwareParamsModal(${stationId})" title="硬件参数"><i class="bi bi-cpu"></i> 硬件参数</span>
             </div>
         </div>`;
         // 机柜（第二层）
@@ -1070,11 +1176,50 @@ function showPropertyPageModal(stationId) {
     currentPropertyPageStationId = stationId;
     const modal = new bootstrap.Modal(document.getElementById('propertyPageModal'));
     modal.show();
-    document.getElementById('property-page-modal-body').innerHTML = '<tr><td colspan="2" class="text-center text-muted">加载中...</td></tr>';
-    fetch(`/api/stations/${stationId}/property-page`).then(r => r.json()).then(res => {
-        const data = (res.code === 0) ? (res.data.page_data || {}) : {};
-        renderPropertyPageModalTable(data);
-    }).catch(() => { renderPropertyPageModalTable({}); });
+    document.getElementById('property-page-modal-body').innerHTML = '<tr><td colspan="3" class="text-center text-muted">加载中...</td></tr>';
+    document.getElementById('property-page-version-info').textContent = '';
+    fetch(`/api/stations/${stationId}/deployed-archives`).then(r => r.json()).then(arc => {
+        if (arc.code === 0 && arc.data) {
+            document.getElementById('property-page-version-info').textContent = '版本: ' + (arc.data.version || '-') + ' (ID: ' + arc.data.version_id + ')';
+            const list = arc.data.property_page_list || [];
+            if (list.length) {
+                renderPropertyPageList(list);
+                return;
+            }
+        }
+        fetch(`/api/stations/${stationId}/property-page`).then(r => r.json()).then(res => {
+            const data = (res.code === 0) ? (res.data.page_data || {}) : {};
+            renderPropertyPageModalTable(data);
+        }).catch(() => { renderPropertyPageModalTable({}); });
+    }).catch(() => {
+        fetch(`/api/stations/${stationId}/property-page`).then(r => r.json()).then(res => {
+            const data = (res.code === 0) ? (res.data.page_data || {}) : {};
+            renderPropertyPageModalTable(data);
+        }).catch(() => { renderPropertyPageModalTable({}); });
+    });
+}
+
+function renderPropertyPageList(list) {
+    const tbody = document.getElementById('property-page-modal-body');
+    if (list.length === 1) {
+        renderPropertyPageModalTable(list[0].data);
+        return;
+    }
+    let html = '';
+    list.forEach((item, idx) => {
+        const entries = Object.entries(item.data || {});
+        if (!entries.length) return;
+        html += `<tr><td colspan="3" class="small fw-semibold bg-light">${escHtml(item.sub_scenario || '属性页 ' + (idx+1))}</td></tr>`;
+        entries.forEach(([k, v]) => {
+            html += `<tr>
+                <td><span class="badge bg-secondary bg-opacity-10 text-dark py-2 px-3 w-100 text-start fw-semibold pp-key-display">${escHtml(k)}</span></td>
+                <td><input type="text" class="form-control form-control-sm pp-val" value="${escHtml(String(v))}" placeholder="Value"></td>
+                <td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()" title="删除"><i class="bi bi-x"></i></button></td>
+            </tr>`;
+        });
+    });
+    if (!html) html = '<tr><td colspan="3" class="text-center text-muted">暂无属性</td></tr>';
+    tbody.innerHTML = html;
 }
 
 function renderPropertyPageModalTable(data) {
@@ -1118,6 +1263,94 @@ function savePropertyPageFromModal() {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({page_data: pageData}),
+    }).then(r => r.json()).then(res => {
+        alert(res.code === 0 ? '保存成功' : '保存失败: ' + res.message);
+    });
+}
+
+function showHardwareParamsModal(stationId) {
+    currentHardwareParamsStationId = stationId;
+    const modal = new bootstrap.Modal(document.getElementById('hardwareParamsModal'));
+    modal.show();
+    document.getElementById('hardware-params-modal-body').innerHTML = '<tr><td colspan="3" class="text-center text-muted">加载中...</td></tr>';
+    document.getElementById('hardware-params-version-info').textContent = '';
+    fetch(`/api/stations/${stationId}/deployed-archives`).then(r => r.json()).then(arc => {
+        if (arc.code === 0 && arc.data) {
+            document.getElementById('hardware-params-version-info').textContent = '版本: ' + (arc.data.version || '-') + ' (ID: ' + arc.data.version_id + ')';
+            const list = arc.data.hardware_params_list || [];
+            if (list.length) {
+                renderHardwareParamsList(list);
+                return;
+            }
+        }
+        renderHardwareParamsModalTable({});
+    }).catch(() => { renderHardwareParamsModalTable({}); });
+}
+
+function renderHardwareParamsList(list) {
+    const tbody = document.getElementById('hardware-params-modal-body');
+    if (list.length === 1) {
+        renderHardwareParamsModalTable(list[0].data);
+        return;
+    }
+    let html = '';
+    list.forEach((item, idx) => {
+        const entries = Object.entries(item.data || {});
+        if (!entries.length) return;
+        html += `<tr><td colspan="3" class="small fw-semibold bg-light">${escHtml(item.sub_scenario || '硬件参数 ' + (idx+1))}</td></tr>`;
+        entries.forEach(([k, v]) => {
+            html += `<tr>
+                <td><span class="badge bg-secondary bg-opacity-10 text-dark py-2 px-3 w-100 text-start fw-semibold hp-key-display">${escHtml(k)}</span></td>
+                <td><input type="text" class="form-control form-control-sm hp-val" value="${escHtml(String(v))}" placeholder="Value"></td>
+                <td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()" title="删除"><i class="bi bi-x"></i></button></td>
+            </tr>`;
+        });
+    });
+    if (!html) html = '<tr><td colspan="3" class="text-center text-muted">暂无硬件参数</td></tr>';
+    tbody.innerHTML = html;
+}
+
+function renderHardwareParamsModalTable(data) {
+    const tbody = document.getElementById('hardware-params-modal-body');
+    const entries = Object.entries(data);
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">暂无硬件参数</td></tr>';
+        return;
+    }
+    tbody.innerHTML = entries.map(([k, v]) => `
+        <tr>
+            <td><span class="badge bg-secondary bg-opacity-10 text-dark py-2 px-3 w-100 text-start fw-semibold hp-key-display">${escHtml(k)}</span></td>
+            <td><input type="text" class="form-control form-control-sm hp-val" value="${escHtml(String(v))}" placeholder="Value"></td>
+            <td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()" title="删除此行"><i class="bi bi-x"></i></button></td>
+        </tr>
+    `).join('');
+}
+
+function addHardwareParamsRow() {
+    const tbody = document.getElementById('hardware-params-modal-body');
+    const emptyRow = tbody.querySelector('tr td[colspan]');
+    if (emptyRow) tbody.innerHTML = '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="text" class="form-control form-control-sm hp-key" placeholder="新建参数名"></td><td><input type="text" class="form-control form-control-sm hp-val" placeholder="Value"></td><td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="this.closest(\'tr\').remove()" title="删除"><i class="bi bi-x"></i></button></td>';
+    tbody.appendChild(tr);
+}
+
+function saveHardwareParamsFromModal() {
+    if (!currentHardwareParamsStationId) return;
+    const params = [];
+    document.querySelectorAll('#hardware-params-modal-body tr').forEach(tr => {
+        const keyInput = tr.querySelector('.hp-key');
+        const keyDisplay = tr.querySelector('.hp-key-display');
+        const valInput = tr.querySelector('.hp-val');
+        const key = keyInput ? keyInput.value.trim() : (keyDisplay ? keyDisplay.textContent.trim() : '');
+        if (key && valInput) {
+            params.push({param_name: key, param_value: valInput.value.trim()});
+        }
+    });
+    fetch(`/api/stations/${currentHardwareParamsStationId}/hardware-params/batch`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({params}),
     }).then(r => r.json()).then(res => {
         alert(res.code === 0 ? '保存成功' : '保存失败: ' + res.message);
     });
@@ -1435,6 +1668,13 @@ function goBackToStations() {
     addLogEntry('info', '返回装备列表');
     showLogPanel(false);
     if (typeof setFactoryUnlocked === 'function') setFactoryUnlocked();
+    // 清除URL中的equipment_id
+    const url = new URL(window.location);
+    url.searchParams.delete('equipment_id');
+    window.history.replaceState({}, '', url);
+    // 隐藏悬浮信息面板
+    document.getElementById('info-panel')?.classList.add('d-none');
+    document.getElementById('info-show-btn')?.classList.remove('d-none');
     // 恢复布局
     const isEquipOnly = window.location.pathname === '/equipment';
     const isLinesOnly = window.location.pathname === '/lines';
@@ -1476,6 +1716,44 @@ function goBackToStations() {
 
 function openStationSettings(stationId) {
     window.location.href = `/station-settings/${stationId}`;
+}
+
+// ==================== 右侧悬浮信息面板 ====================
+
+function toggleInfoPanel() {
+    const panel = document.getElementById('info-panel');
+    const btn = document.getElementById('info-show-btn');
+    const show = panel.classList.contains('d-none');
+    panel.classList.toggle('d-none', !show);
+    btn.classList.toggle('d-none', show);
+}
+
+function updateInfoPanel(stationData) {
+    if (!stationData) return;
+    const st = stationData.station || stationData;
+    document.getElementById('info-process').textContent = st.process_type || '-';
+    document.getElementById('info-workstation').textContent = st.workstation || '-';
+    document.getElementById('info-equip-name').textContent = st.name || '-';
+    document.getElementById('info-hw-code').textContent = st.hardware_code || '-';
+    document.getElementById('info-bom-code').textContent = '-';
+    document.getElementById('info-panel').classList.remove('d-none');
+    document.getElementById('info-show-btn').classList.add('d-none');
+    if (st.id) {
+        fetch(`/api/stations/${st.id}/software`).then(r=>r.json()).then(res => {
+            if (res.code === 0 && res.data) {
+                const d = res.data;
+                document.getElementById('info-sw-version').textContent =
+                    d.dut_version || d.project_name || '-';
+                if (d.process_type) document.getElementById('info-process').textContent = d.process_type;
+                if (d.workstation) document.getElementById('info-workstation').textContent = d.workstation;
+                if (d.bom_code) document.getElementById('info-bom-code').textContent = d.bom_code.replace(/[,;，；]+/g,', ');
+            }
+        }).catch(() => {});
+    }
+    const userName = document.getElementById('nav-username')?.textContent || '-';
+    const roleText = document.getElementById('nav-role-label')?.textContent || '-';
+    document.getElementById('info-operator').textContent = userName;
+    document.getElementById('info-role').textContent = roleText;
 }
 
 // ==================== Socket.IO 实时更新 ====================

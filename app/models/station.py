@@ -427,6 +427,13 @@ class SoftwareConfig(db.Model):
     sequence_id = db.Column(db.Integer, default=0)
     # 发行版本下发的序列快照（JSON，含步骤+模板数据）
     sequence_data = db.Column(db.Text, default='')
+    # 工序/工位
+    process_type = db.Column(db.String(50), default='', comment='工序: FT/老化/ORT等')
+    workstation = db.Column(db.String(50), default='', comment='工位: MP1/MP2/MP3等')
+    # 当前选中的被测编码（来自版本codes_config）
+    selected_code = db.Column(db.String(100), default='', comment='选中的被测编码')
+    # BOM编码（物料编码，用于多工序/产品族版本）
+    bom_code = db.Column(db.String(200), default='', comment='BOM编码')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                            onupdate=datetime.utcnow)
@@ -444,6 +451,10 @@ class SoftwareConfig(db.Model):
                 self.selected_test_item_ids or '[]'),
             'sequence_id': self.sequence_id or 0,
             'sequence_data': self.sequence_data or '',
+            'process_type': self.process_type or '',
+            'workstation': self.workstation or '',
+            'selected_code': self.selected_code or '',
+            'bom_code': self.bom_code or '',
         }
 
 

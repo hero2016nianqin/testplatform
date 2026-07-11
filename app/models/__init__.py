@@ -8,7 +8,6 @@
 - TestSequence:    测试序列（有序模板集合）
 - TestSequenceStep: 序列步骤（模板与顺序的关联）
 - TestResult:      测试结果记录（实测值、合格判定、偏差）
-- TestConfig:      配置方案快照（版本管理、JSON 配置数据）
 - TestRun:         测试批次（状态跟踪、通过/失败统计）
 - TestStation:     测试工站
 - TestChassis:     机框
@@ -27,21 +26,20 @@ from .user import User
 from .test_item import TestItem
 from .test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
 from .test_result import TestResult
-from .test_config import TestConfig
 from .test_run import TestRun
 from .station import (
     TestStation, TestChassis, TestSlot,
     EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig,
     EquipmentMetrics, EquipmentPropertyPage,
 )
-from .version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile
+from .version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile, SubScenario
 
 __all__ = [
     'User', 'TestItem', 'TestItemTemplate', 'TestSequence', 'TestSequenceStep',
-    'TestResult', 'TestConfig', 'TestRun',
+    'TestResult', 'TestRun',
     'TestStation', 'TestChassis', 'TestSlot',
     'EquipmentConfig', 'HardwareParam', 'SoftwareConfig', 'ScenarioConfig',
     'EquipmentMetrics', 'EquipmentPropertyPage',
     'TestVersion', 'ReleaseStep', 'VersionArchiveItem', 'ReleaseDeployment',
-    'VersionBinaryFile',
+    'VersionBinaryFile', 'SubScenario',
 ]

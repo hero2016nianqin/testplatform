@@ -666,6 +666,27 @@ def delete_hardware_param(param_id):
     return jsonify({'code': 0, 'message': '已删除'})
 
 
+@station_bp.route('/<int:station_id>/hardware/batch', methods=['PUT'])
+@login_required
+def batch_update_hardware_params(station_id):
+    """批量更新硬件参数（全量替换：删除旧参数写入新参数）"""
+    data = request.get_json() or {}
+    params = data.get('params', [])
+    HardwareParam.query.filter_by(station_id=station_id).delete()
+    for idx, p in enumerate(params):
+        param = HardwareParam(
+            station_id=station_id,
+            param_name=p.get('param_name', '').strip(),
+            param_value=p.get('param_value', ''),
+            group_name='deployed',
+            sort_order=idx,
+        )
+        if param.param_name:
+            db.session.add(param)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': f'已保存 {len(params)} 个参数'})
+
+
 # ==================== 软件参数配置 ====================
 
 @station_bp.route('/<int:station_id>/software', methods=['GET'])
@@ -706,7 +727,8 @@ def update_software_config(station_id):
         config = SoftwareConfig(station_id=station_id, project_name=project_name)
         db.session.add(config)
     for field in ['dut_version', 'dut_firmware_version',
-                  'dut_hardware_version', 'project_name']:
+                  'dut_hardware_version', 'project_name',
+                  'process_type', 'workstation', 'selected_code', 'bom_code']:
         if field in data:
             setattr(config, field, data[field])
     if 'sequence_id' in data:
