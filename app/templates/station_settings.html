@@ -5,7 +5,7 @@
     <div class="col-12 mb-3">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-gear-wide-connected"></i> <span id="station-name">工站设置</span></h5>
-            <a href="/equipment" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回装备</a>
+            <a id="back-to-equipment" href="/equipment" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回装备</a>
         </div>
     </div>
 </div>
@@ -219,6 +219,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // 从 URL 获取工站 ID
     const m = window.location.pathname.match(/\/station-settings\/(\d+)/);
     if (m) stationId = parseInt(m[1]);
+
+    // 如果 URL 有 equipment_id，返回装备时回到柜框槽视图
+    const eqId = new URLSearchParams(window.location.search).get('equipment_id');
+    if (eqId) {
+        document.getElementById('back-to-equipment').href = `/equipment?equipment_id=${eqId}`;
+    }
 
     // 权限检查
     fetch('/api/auth/me').then(r=>r.json()).then(res=>{
@@ -584,6 +590,44 @@ function onScenarioChange(scenVal) {
     // 加载该子场景对应的软件配置
     const v = deployedVersionsForStation.find(x => x.version_id == document.getElementById('sw-version-select').value);
     loadSoftwareConfig(v ? v.project_name : '', sequenceId);
+
+    // 同步硬件参数和属性页：从子场景数据同步到装备
+    syncHwPpFromSubScenario(v, scenVal);
+}
+
+function syncHwPpFromSubScenario(version, scenarioName) {
+    if (!version || !version.sub_scenarios || !scenarioName) return;
+    const ss = version.sub_scenarios.find(s => s.name === scenarioName);
+    if (!ss) return;
+
+    // 同步硬件参数
+    const hwParams = ss.hardware_params || {};
+    if (typeof hwParams === 'object' && Object.keys(hwParams).length > 0) {
+        const batchParams = Object.entries(hwParams).map(([k, v]) => ({
+            param_name: k,
+            param_value: typeof v === 'string' ? v : JSON.stringify(v),
+            group_name: 'deployed',
+        }));
+        fetch(`/api/stations/${stationId}/hardware/batch`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({params: batchParams}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) loadHardware();
+        });
+    }
+
+    // 同步属性页
+    const ppData = ss.property_page || {};
+    if (typeof ppData === 'object' && Object.keys(ppData).length > 0) {
+        fetch(`/api/stations/${stationId}/property-page`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({page_data: ppData}),
+        }).then(r => r.json()).then(res => {
+            if (res.code === 0) loadPropertyPage();
+        });
+    }
 }
 
 function loadItemsFromDeployedVersion() {

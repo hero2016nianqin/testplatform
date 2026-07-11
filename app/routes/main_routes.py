@@ -5,7 +5,7 @@
 每个路由对应一个功能页面，通过 Jinja2 模板引擎渲染。
 """
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 
 # 前端页面蓝图，无 URL 前缀（所有页面路径直接挂载在根路径下）
 main_bp = Blueprint('main', __name__)
@@ -26,7 +26,8 @@ def lines_page():
 @main_bp.route('/equipment')
 def equipment_page():
     """装备列表页面（含测试执行视图）"""
-    return render_template('test_run.html', view='equipment')
+    equipment_id = request.args.get('equipment_id')
+    return render_template('test_run.html', view='equipment', equipment_id=equipment_id)
 
 
 @main_bp.route('/logs')

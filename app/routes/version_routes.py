@@ -37,7 +37,9 @@ def _load_archive_sequence_steps(version_id):
 @version_bp.route('/versions', methods=['GET'])
 @login_required
 def list_versions():
+    scope = request.args.get('scope', 'all')
     versions = TestVersion.query.order_by(TestVersion.created_at.desc()).all()
+    current_user = _current_user()
     data = []
     for v in versions:
         d = v.to_dict()
@@ -55,7 +57,17 @@ def list_versions():
             ReleaseDeployment.factory_name != ''
         ).distinct().all()
         d['deploy_factories'] = [f[0] for f in factories]
+        # 判断是否与当前用户相关（创建者或待审批步骤的审批人）
+        is_creator = v.created_by == current_user
+        pending_my = ReleaseStep.query.filter(
+            ReleaseStep.version_id == v.id,
+            ReleaseStep.status == 'pending',
+            ReleaseStep.assigned_to == current_user
+        ).count()
+        d['is_mine'] = is_creator or pending_my > 0
         data.append(d)
+    if scope == 'mine':
+        data = [d for d in data if d['is_mine']]
     return jsonify({'code': 0, 'data': data})
 
 
@@ -91,6 +103,12 @@ def update_version(version_id):
             name = (ss_data.get('name') or '').strip()
             if not name:
                 continue
+            def _to_json_str(val, default='{}'):
+                if isinstance(val, (dict, list)):
+                    return json.dumps(val, ensure_ascii=False)
+                if isinstance(val, str) and val:
+                    return val
+                return default
             db.session.add(SubScenario(
                 version_id=v.id,
                 name=name,
@@ -98,9 +116,9 @@ def update_version(version_id):
                 process_type=ss_data.get('process_type', ''),
                 workstation=ss_data.get('workstation', ''),
                 sequence_id=ss_data.get('sequence_id', 0) or 0,
-                hardware_params=ss_data.get('hardware_params', '{}'),
-                software_metrics=ss_data.get('software_metrics', '[]'),
-                property_page=ss_data.get('property_page', '{}'),
+                hardware_params=_to_json_str(ss_data.get('hardware_params'), '{}'),
+                software_metrics=_to_json_str(ss_data.get('software_metrics'), '[]'),
+                property_page=_to_json_str(ss_data.get('property_page'), '{}'),
             ))
     # Handle standard version fields
     if 'sequence_id' in data:
@@ -258,9 +276,9 @@ def create_version():
                 process_type=process_type_ss,
                 workstation=workstation_ss,
                 sequence_id=ss_data.get('sequence_id', 0) or 0,
-                hardware_params=ss_data.get('hardware_params', '{}'),
-                software_metrics=ss_data.get('software_metrics', '[]'),
-                property_page=ss_data.get('property_page', '{}'),
+                hardware_params=json.dumps(ss_data['hardware_params'], ensure_ascii=False) if isinstance(ss_data.get('hardware_params'), (dict, list)) else (ss_data.get('hardware_params') or '{}'),
+                software_metrics=json.dumps(ss_data['software_metrics'], ensure_ascii=False) if isinstance(ss_data.get('software_metrics'), (dict, list)) else (ss_data.get('software_metrics') or '[]'),
+                property_page=json.dumps(ss_data['property_page'], ensure_ascii=False) if isinstance(ss_data.get('property_page'), (dict, list)) else (ss_data.get('property_page') or '{}'),
             ))
 
     # Handle inheritance: copy sub-scenarios and archive items from source version
@@ -1212,3 +1230,37 @@ def download_version_binary(version_id, file_id):
     if not os.path.exists(bf.file_path):
         return jsonify({'code': 1, 'message': '文件不存在'}), 404
     return send_file(bf.file_path, as_attachment=True, download_name=bf.filename)
+
+
+@version_bp.route('/versions/<int:version_id>/sub-scenarios/<int:ss_id>/<field>/download', methods=['GET'])
+@login_required
+def download_sub_scenario_json(version_id, ss_id, field):
+    """下载子场景JSON字段文件(hardware_params/property_page/software_metrics)"""
+    from flask import Response
+    ss = SubScenario.query.filter_by(id=ss_id, version_id=version_id).first_or_404()
+    if field not in ('hardware_params', 'property_page', 'software_metrics'):
+        return jsonify({'code': 1, 'message': '无效字段'}), 400
+    raw = getattr(ss, field, None) or '{}'
+    try:
+        pretty = json.dumps(json.loads(raw), indent=2, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError):
+        pretty = raw
+    filename = f'{ss.name}_{field}.json'
+    return Response(pretty, mimetype='application/json',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+
+@version_bp.route('/versions/<int:version_id>/archive-items/<int:item_id>/download', methods=['GET'])
+@login_required
+def download_archive_item_json(version_id, item_id):
+    """下载归档条目JSON文件"""
+    from flask import Response
+    ai = VersionArchiveItem.query.filter_by(id=item_id, version_id=version_id).first_or_404()
+    raw = ai.data_snapshot or '{}'
+    try:
+        pretty = json.dumps(json.loads(raw), indent=2, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError):
+        pretty = raw
+    filename = f'archive_{ai.id}_{ai.type}.json'
+    return Response(pretty, mimetype='application/json',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})

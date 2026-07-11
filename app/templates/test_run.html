@@ -2,7 +2,9 @@
 {% block title %}测试执行{% endblock %}
 {% block content %}
 <div class="row" id="station-view">
-    <!-- 左栏：线体列表 -->
+    {% if equipment_id %}
+    <!-- 刷新恢复：直接进入柜框槽视图，不渲染列表 -->
+    {% else %}
     {% if view != 'equipment' %}
     <div class="col-md-12 mb-3" id="lines-panel">
         <div class="card">
@@ -19,7 +21,6 @@
         </div>
     </div>
     {% endif %}
-    <!-- 右栏：装备列表 -->
     {% if view != 'lines' %}
     <div class="col-md-12 mb-3" id="equipments-panel">
         <div class="card">
@@ -35,6 +36,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
     {% endif %}
 </div>
 
@@ -542,13 +544,17 @@ let currentEquipScope = 'all';
 document.addEventListener('DOMContentLoaded', function() {
     setupSocket();
     var view = '{{ view }}';
-    if (view === 'lines') {
+    var params = new URLSearchParams(window.location.search);
+    var eqId = params.get('equipment_id');
+
+    // 如果URL有equipment_id，直接进入柜框槽视图，不加载列表
+    if (eqId) {
+        setTimeout(() => selectEquipment(parseInt(eqId)), 50);
+    } else if (view === 'lines') {
         loadLinesList('all');
     } else if (view === 'equipment') {
         loadEquipmentsList('all');
-        // 如果 URL 有 line_id 参数，加载该线体的装备
-        var p = new URLSearchParams(window.location.search);
-        var li = p.get('line_id');
+        var li = params.get('line_id');
         if (li) fetch('/api/stations?line_id=' + li).then(r=>r.json()).then(r=>renderEquipmentTable(r.data||[]));
     } else {
         loadLinesList('all');
@@ -560,13 +566,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('contextmenu', function() {
         document.getElementById('context-menu').classList.add('d-none');
     });
-
-    // 检查 URL 参数（页面刷新保持 - 仅从URL恢复，不依赖sessionStorage）
-    const params = new URLSearchParams(window.location.search);
-    const eqId = params.get('equipment_id');
-    if (eqId) {
-        setTimeout(() => selectEquipment(parseInt(eqId)), 500);
-    }
 
     // 恢复之前保存的线体/装备视图范围
     const savedLinesScope = sessionStorage.getItem('lines_scope');
@@ -768,39 +767,41 @@ function selectEquipment(stationId) {
     const url = new URL(window.location);
     url.searchParams.set('equipment_id', stationId);
     window.history.replaceState({equipment_id: stationId}, '', url);
-    fetch(`/api/stations/${stationId}/detail`)
-        .then(r => r.json())
-        .then(res => {
-            if (res.code !== 0) return;
-            document.getElementById('station-view').innerHTML = renderEquipmentDetail(res.data);
-            document.title = '测试执行 - ' + (res.data.station.name || '');
-            showLogPanel(true);
-            // 更新悬浮信息面板
-            updateInfoPanel(res.data);
-            // 锁定厂区选择器为当前装备所属厂区
-            const st = res.data.station;
-            if (st.factory_name && typeof setFactoryLocked === 'function') {
-                setFactoryLocked(st.factory_name);
-            }
-            // 打印装备参数到日志
-            fetch(`/api/stations/${stationId}/equipment`).then(r=>r.json()).then(cfg=>{
-                if (cfg.code !== 0 || !cfg.data) return;
-                const d = cfg.data;
-                let modes = [];
-                if (d.test_mode_normal) modes.push('正常测试');
-                if (d.test_mode_verify) modes.push('验证测试');
-                if (d.test_mode_calibration) modes.push('校准测试');
-                addLogEntry('info', `装备 IP: ${d.equipment_ip || '-'}`);
-                addLogEntry('info', `测试模式: ${modes.join(', ') || '无'}`);
-                addLogEntry('info', `条码校验: ${d.barcode_verify_enabled ? '开启' : '关闭'}`);
-                addLogEntry('info', `自动上板: ${d.auto_load_enabled ? '开启' : '关闭'}`);
-                addLogEntry('info', `调试模式: ${d.debug_mode_enabled ? '开启' : '关闭'}`);
-                addLogEntry('info', `工序管控: ${d.process_control_enabled ? '开启' : '关闭'}`);
-            });
+    Promise.all([
+        fetch(`/api/stations/${stationId}/detail`).then(r => r.json()),
+        fetch(`/api/stations/${stationId}/software`).then(r => r.json()),
+    ]).then(([detailRes, softRes]) => {
+        if (detailRes.code !== 0) return;
+        const softData = softRes.code === 0 && softRes.data ? softRes.data : null;
+        document.getElementById('station-view').innerHTML = renderEquipmentDetail(detailRes.data, softData);
+        document.title = '测试执行 - ' + (detailRes.data.station.name || '');
+        showLogPanel(true);
+        // 更新悬浮信息面板
+        updateInfoPanel(detailRes.data);
+        // 锁定厂区选择器为当前装备所属厂区
+        const st = detailRes.data.station;
+        if (st.factory_name && typeof setFactoryLocked === 'function') {
+            setFactoryLocked(st.factory_name);
+        }
+        // 打印装备参数到日志
+        fetch(`/api/stations/${stationId}/equipment`).then(r=>r.json()).then(cfg=>{
+            if (cfg.code !== 0 || !cfg.data) return;
+            const d = cfg.data;
+            let modes = [];
+            if (d.test_mode_normal) modes.push('正常测试');
+            if (d.test_mode_verify) modes.push('验证测试');
+            if (d.test_mode_calibration) modes.push('校准测试');
+            addLogEntry('info', `装备 IP: ${d.equipment_ip || '-'}`);
+            addLogEntry('info', `测试模式: ${modes.join(', ') || '无'}`);
+            addLogEntry('info', `条码校验: ${d.barcode_verify_enabled ? '开启' : '关闭'}`);
+            addLogEntry('info', `自动上板: ${d.auto_load_enabled ? '开启' : '关闭'}`);
+            addLogEntry('info', `调试模式: ${d.debug_mode_enabled ? '开启' : '关闭'}`);
+            addLogEntry('info', `工序管控: ${d.process_control_enabled ? '开启' : '关闭'}`);
         });
+    });
 }
 
-function renderEquipmentDetail(detail) {
+function renderEquipmentDetail(detail, softConfig) {
     if (!detail || !detail.cabinets || detail.cabinets.length === 0) {
         return `<p class="text-muted text-center">该装备暂无机柜</p>`;
     }
@@ -808,14 +809,18 @@ function renderEquipmentDetail(detail) {
     const stationId = st.id;
     let html = '';
     const isSingleCab = detail.cabinets.length === 1 && detail.cabinets[0].chassis.length === 1;
+    // 从软件配置获取工序工位（来自已发行版本的子场景）
+    const procType = (softConfig && softConfig.process_type) || '';
+    const workstn = (softConfig && softConfig.workstation) || '';
     // 测试工站（最外层）
     html += `<div class="station-rect${isSingleCab ? ' single-cab' : ''}" oncontextmenu="showStationMenu(event,${stationId})" title="右键：系统初始化 / 测试日志 / 切换账号 / 强制重启">
         <div class="station-header">
-            <strong class="station-name"><i class="bi bi-cpu"></i> ${st.name}</strong>
+            <div class="station-name">
+                <strong><i class="bi bi-cpu"></i> ${st.name}</strong>
+                ${procType && workstn ? ` <span class="fw-bold text-uppercase" style="font-size:.85rem;color:#4a90d9;">${procType}-${workstn}</span>` : procType ? ` <span class="fw-bold text-uppercase" style="font-size:.85rem;color:#4a90d9;">${procType}</span>` : workstn ? ` <span class="fw-bold text-uppercase" style="font-size:.85rem;color:#4a90d9;">${workstn}</span>` : ''}
+            </div>
             <div class="station-badges">
                 <span class="badge bg-secondary" onclick="event.stopPropagation();showStationParams(${stationId})" title="参数设置"><i class="bi bi-gear"></i> 参数设置</span>
-                <span class="badge bg-info" onclick="event.stopPropagation();showPropertyPageModal(${stationId})" title="属性页"><i class="bi bi-file-text"></i> 属性页</span>
-                <span class="badge bg-success" onclick="event.stopPropagation();showHardwareParamsModal(${stationId})" title="硬件参数"><i class="bi bi-cpu"></i> 硬件参数</span>
             </div>
         </div>`;
         // 机柜（第二层）
@@ -1162,7 +1167,9 @@ function executeTestItems(runId, batchId, items, slotId, stationId, index, hasFa
 // ==================== 参数设置弹窗 ====================
 
 function showStationParams(stationId) {
-    window.location.href = `/station-settings/${stationId}`;
+    const params = new URLSearchParams(window.location.search);
+    const eqId = params.get('equipment_id');
+    window.location.href = eqId ? `/station-settings/${stationId}?equipment_id=${eqId}` : `/station-settings/${stationId}`;
 }
 
 let currentPropertyPageStationId = null;

@@ -30,7 +30,6 @@
 
 <ul class="nav nav-tabs mb-3" id="releaseTabs" role="tablist">
     <li class="nav-item"><button class="nav-link active" id="tab-list" data-bs-toggle="tab" data-bs-target="#panel-list" type="button">版本列表</button></li>
-    <li class="nav-item"><button class="nav-link" id="tab-create" data-bs-toggle="tab" data-bs-target="#panel-create" type="button">创建版本</button></li>
     <li class="nav-item"><button class="nav-link" id="tab-release" data-bs-toggle="tab" data-bs-target="#panel-release" type="button">版本发布</button></li>
     <li class="nav-item"><button class="nav-link" id="tab-deploy" data-bs-toggle="tab" data-bs-target="#panel-deploy" type="button">版本发行</button></li>
 </ul>
@@ -38,34 +37,39 @@
 <div class="tab-content">
     <!-- ========== Tab 1: 版本列表 ========== -->
     <div class="tab-pane fade show active" id="panel-list">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary active" id="scope-mine-btn" onclick="switchVersionScope('mine')">我的待办</button>
+                <button class="btn btn-outline-primary" id="scope-all-btn" onclick="switchVersionScope('all')">全部版本</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="document.querySelector('#tab-release').click();startNewVersionWizard()"><i class="bi bi-plus-lg"></i> 新建版本</button>
+        </div>
         <div id="version-list-container"><p class="text-muted text-center py-3">加载中...</p></div>
     </div>
 
-    <!-- ========== Tab 2: 创建版本（向导） ========== -->
-    <div class="tab-pane fade" id="panel-create">
-        <div class="row">
-            <div class="col-md-8 mx-auto">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong><span id="wizard-step-title">Step 1: 选择版本类型</span></strong>
-                        <div>
-                            <span class="badge bg-secondary me-1" id="wizard-step-indicator">1/2</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="wizard-prev-btn" style="display:none" onclick="wizardPrev()"><i class="bi bi-chevron-left"></i> 上一步</button>
-                            <button class="btn btn-sm btn-outline-primary" id="wizard-next-btn" onclick="wizardNext()">下一步 <i class="bi bi-chevron-right"></i></button>
+    <!-- ========== Tab 2: 版本发布（含创建向导） ========== -->
+    <div class="tab-pane fade" id="panel-release">
+        <!-- Wizard: shown when creating/editing a version -->
+        <div id="release-wizard-wrap" style="display:none">
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong><span id="wizard-step-title">Step 1: 选择版本类型</span></strong>
+                            <div>
+                                <span class="badge bg-secondary me-1" id="wizard-step-indicator">1/2</span>
+                                <button class="btn btn-sm btn-outline-secondary" id="wizard-prev-btn" style="display:none" onclick="wizardPrev()"><i class="bi bi-chevron-left"></i> 上一步</button>
+                                <button class="btn btn-sm btn-outline-primary" id="wizard-next-btn" onclick="wizardNext()">下一步 <i class="bi bi-chevron-right"></i></button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="card-body">
-                        <!-- Step 1: Version Type + Basic Info -->
-                        <div class="wizard-step active" id="wizard-step-1">
+                        <div class="card-body">
+                            <!-- Step 1: Version Type + Basic Info -->
+                            <div class="wizard-step active" id="wizard-step-1">
                             <div class="mb-3">
                                 <label class="form-label">版本类型 <span class="text-danger">*</span></label>
                                 <div class="d-flex gap-3">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="version-type" id="type-standard" value="standard" checked onchange="onVersionTypeChange()">
-                                        <label class="form-check-label" for="type-standard">标准版本</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="version-type" id="type-multi" value="multi_process" onchange="onVersionTypeChange()">
+                                        <input class="form-check-input" type="radio" name="version-type" id="type-multi" value="multi_process" checked onchange="onVersionTypeChange()">
                                         <label class="form-check-label" for="type-multi">多工序版本</label>
                                     </div>
                                     <div class="form-check">
@@ -76,7 +80,8 @@
                             </div>
                             <div class="mb-2">
                                 <label class="form-label">工程名称 <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="wiz-project-name" placeholder="如 ProjectA" required oninput="onWizProjectName(this.value)">
+                                <input type="text" class="form-control" id="wiz-project-name" placeholder="如 ProjectA" list="project-name-list" required oninput="onWizProjectName(this.value)">
+                                <datalist id="project-name-list"></datalist>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label">版本号 <span class="text-danger">*</span></label>
@@ -227,26 +232,23 @@
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- ========== Tab 3: 版本发布 ========== -->
-    <div class="tab-pane fade" id="panel-release">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span><strong>发布流程</strong></span>
-                        <span id="release-version-selector"></span>
-                    </div>
-                    <div class="card-body" id="release-workflow-container">
-                        <p class="text-muted text-center mb-0">请先从版本列表选择一个版本</p>
-                    </div>
+        </div>
+        <!-- Workflow: shown when viewing/releasing an existing version -->
+        <div id="release-workflow-wrap">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">发布流程</h6>
+                <div>
+                    <span id="release-version-selector"></span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="startNewVersionWizard()"><i class="bi bi-plus-lg"></i> 新建版本</button>
                 </div>
+            </div>
+            <div id="release-workflow-container">
+                <p class="text-muted text-center mb-0">请先从版本列表选择一个版本，或点击新建版本</p>
             </div>
         </div>
     </div>
 
-    <!-- ========== Tab 4: 版本发行 ========== -->
+    <!-- ========== Tab 3: 版本发行 ========== -->
     <div class="tab-pane fade" id="panel-deploy">
         <div class="row">
             <div class="col-md-5">
@@ -254,9 +256,10 @@
                     <div class="card-header"><strong>发行目标</strong></div>
                     <div class="card-body">
                         <div class="mb-2">
-                            <label class="form-label">选择版本</label>
-                            <input type="text" class="form-control form-control-sm mb-1" id="deploy-version-search" placeholder="搜索版本号..." oninput="filterDeployVersions(this.value)">
-                            <select class="form-select" id="deploy-version-select" size="6" style="font-size:.85rem"><option value="">-- 请选择版本 --</option></select>
+                            <label class="form-label">搜索版本</label>
+                            <input type="text" class="form-control" id="deploy-version-input" placeholder="输入工程名称或版本号..." list="deploy-version-list" oninput="onDeployVersionInput(this.value)" autocomplete="off">
+                            <datalist id="deploy-version-list"></datalist>
+                            <input type="hidden" id="deploy-version-id" value="">
                         </div>
                         <div class="mb-2">
                             <label class="form-label">厂区（多选）</label>
@@ -328,6 +331,7 @@ let wizBinaryFiles = [];
 const SUB_SCENARIO_PRESETS = ['FT-MP1','FT2-MP2','FT2-MP3','FT2-MP4','FT2-MP5','ST-MP6','ORT-MP1','ESS-MP2'];
 
 document.addEventListener('DOMContentLoaded', function() {
+    currentUserRole = document.getElementById('nav-role-label').textContent === '工艺工程师' ? 'process' : 'production';
     loadVersionList();
     loadUsers();
     loadDeployVersions();
@@ -346,31 +350,55 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('wiz-sequence-select').dataset.loaded = '1';
     });
 
+    // 加载已有工程名称列表（用于自动完成提示）
+    apiFetch('/api/versions').then(res => {
+        if (res.code === 0 && res.data) {
+            const names = [...new Set(res.data.map(v => v.project_name).filter(Boolean))];
+            const datalist = document.getElementById('project-name-list');
+            datalist.innerHTML = names.map(n => `<option value="${n}">`).join('');
+        }
+    });
+
     document.querySelectorAll('#releaseTabs .nav-link').forEach(tab => {
         tab.addEventListener('shown.bs.tab', function(e) {
             const id = e.target.id;
+            sessionStorage.setItem('release_active_tab', id);
             if (id === 'tab-list') loadVersionList();
-            if (id === 'tab-release' && currentVersionId) showReleaseWorkflow(currentVersionId);
-            if (id === 'tab-deploy' && currentVersionId) showDeployWorkflow(currentVersionId);
-            if (id === 'tab-create') {
-                if (!document.getElementById('wiz-sequence-select').dataset.loaded) {
-                    // already loaded in init
+            if (id === 'tab-release') {
+                if (currentVersionId) { sessionStorage.setItem('release_version_id', currentVersionId); showReleaseWorkflow(currentVersionId); }
+                else showReleaseWizardOnly();
+            }
+            if (id === 'tab-deploy') {
+                loadDeployVersions();
+                if (currentVersionId) {
+                    sessionStorage.setItem('release_version_id', currentVersionId);
+                    showDeployWorkflow(currentVersionId);
                 }
             }
         });
     });
 
-    document.getElementById('deploy-version-select').addEventListener('change', function() {
-        if (this.value) { currentVersionId = parseInt(this.value); showDeployWorkflow(this.value); }
-        else document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
+    document.getElementById('deploy-version-input').addEventListener('change', function() {
+        onDeployVersionInput(this.value);
     });
-    document.getElementById('deploy-version-search').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            const sel = document.getElementById('deploy-version-select');
-            const first = [...sel.options].find(o => o.value && !o.hidden);
-            if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change')); }
-        }
-    });
+
+    // 恢复刷新前的 tab 和版本选择
+    const savedTab = sessionStorage.getItem('release_active_tab');
+    const savedVid = sessionStorage.getItem('release_version_id');
+    if (savedTab && savedTab !== 'tab-list') {
+        currentVersionId = savedVid ? parseInt(savedVid) : null;
+        // 延迟恢复，等异步数据（版本列表、deploy选项）加载完成
+        setTimeout(() => {
+            const tabEl = document.getElementById(savedTab);
+            if (tabEl) {
+                if (savedTab === 'tab-deploy' && currentVersionId) {
+                    setDeployVersionId(currentVersionId);
+                }
+                const bsTab = bootstrap.Tab.getOrCreateInstance(tabEl);
+                bsTab.show();
+            }
+        }, 300);
+    }
 });
 
 let allUsers = [];
@@ -579,11 +607,9 @@ function wizardNext() {
             if (!bom) { alert('多工序版本必须填写BOM编码'); return; }
             if (!tps) { alert('多工序版本必须填写TPS名称'); return; }
             if (!wizSubScenarios.length) { alert('请至少添加一个子场景'); return; }
-            // Auto-create draft version with sub-scenarios
-            autoCreateDraft(type, projectName, version, function() {
-                buildSubScenarioConfigTabs();
-                showWizardStep(2); // multi-process config
-            });
+            // Don't create draft yet - collect files in Step 2, create all at once
+            buildSubScenarioConfigTabs();
+            showWizardStep(2); // multi-process config
             return;
         }
         if (type === 'product_family') {
@@ -723,15 +749,15 @@ function buildSubScenarioConfigTabs() {
             </div>
             <div class="mb-2">
                 <label class="form-label">硬件参数（JSON）</label>
-                <input type="file" class="form-control form-control-sm ss-hw-file" accept=".json" data-index="${i}">
+                <input type="file" class="form-control form-control-sm ss-hw-file" accept=".json" data-index="${i}" onchange="onSSFileChange(${i},'hardware_params',this)">
             </div>
             <div class="mb-2">
                 <label class="form-label">软件指标（JSON/INI）</label>
-                <input type="file" class="form-control form-control-sm ss-sw-file" accept=".json,.ini" multiple data-index="${i}">
+                <input type="file" class="form-control form-control-sm ss-sw-file" accept=".json,.ini" multiple data-index="${i}" onchange="onSSSwFilesChange(${i},this)">
             </div>
             <div class="mb-2">
                 <label class="form-label">属性页（JSON）</label>
-                <input type="file" class="form-control form-control-sm ss-pp-file" accept=".json" data-index="${i}">
+                <input type="file" class="form-control form-control-sm ss-pp-file" accept=".json" data-index="${i}" onchange="onSSFileChange(${i},'property_page',this)">
             </div>
             <div class="small text-muted">工序: ${s.process_type || '-'}, 工位: ${s.workstation || '-'}</div>
         </div>`;
@@ -756,6 +782,34 @@ function buildSubScenarioConfigTabs() {
             }
         });
     });
+}
+
+function onSSFileChange(index, field, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        if (wizSubScenarios[index]) wizSubScenarios[index][field] = reader.result;
+    };
+    reader.readAsText(file);
+}
+
+function onSSSwFilesChange(index, input) {
+    const files = input.files;
+    if (!files.length) return;
+    const entries = [];
+    let pending = files.length;
+    for (let j = 0; j < files.length; j++) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            entries[j] = reader.result;
+            pending--;
+            if (pending === 0 && wizSubScenarios[index]) {
+                wizSubScenarios[index].software_metrics = JSON.stringify(entries.filter(Boolean));
+            }
+        };
+        reader.readAsText(files[j]);
+    }
 }
 
 function onSSSequenceChange(index, value) {
@@ -912,21 +966,27 @@ function finishEditVersion(type) {
         Promise.all(ssReadPromises).then(allResults => {
             allResults.forEach((results, i) => {
                 let idx2 = 0;
-                const hw = results[idx2++] || '{}';
+                const fileHw = results[idx2++];
                 const swEntries = [];
                 for (let j = 0; j < results.length - 2; j++) {
                     const content = results[idx2++];
                     if (content && content.trim()) swEntries.push(content.trim());
                 }
-                const pp = results[idx2] || '{}';
+                const filePp = results[idx2];
+                const existingSw = wizSubScenarios[i].software_metrics;
+                let existingSwEntries = [];
+                if (Array.isArray(existingSw)) existingSwEntries = existingSw.map(x => typeof x === 'string' ? x : JSON.stringify(x));
+                else if (typeof existingSw === 'string' && existingSw.trim()) {
+                    try { const p = JSON.parse(existingSw); existingSwEntries = Array.isArray(p) ? p.map(x => typeof x === 'string' ? x : JSON.stringify(x)) : []; } catch(e) {}
+                }
                 data.sub_scenarios.push({
                     name: wizSubScenarios[i].name,
                     process_type: wizSubScenarios[i].process_type,
                     workstation: wizSubScenarios[i].workstation,
                     sequence_id: parseInt(document.querySelector(`.ss-sequence-select[data-index="${i}"]`)?.value) || 0,
-                    hardware_params: hw,
-                    software_metrics: JSON.stringify(swEntries),
-                    property_page: pp,
+                    hardware_params: (fileHw && fileHw.trim()) ? fileHw.trim() : (typeof wizSubScenarios[i].hardware_params === 'string' ? wizSubScenarios[i].hardware_params : JSON.stringify(wizSubScenarios[i].hardware_params || {})),
+                    software_metrics: swEntries.length ? JSON.stringify(swEntries) : (typeof existingSw === 'string' ? existingSw : JSON.stringify(existingSw || [])),
+                    property_page: (filePp && filePp.trim()) ? filePp.trim() : (typeof wizSubScenarios[i].property_page === 'string' ? wizSubScenarios[i].property_page : JSON.stringify(wizSubScenarios[i].property_page || {})),
                 });
             });
             return apiFetch('/api/versions/' + editingVersionId, {
@@ -1104,12 +1164,7 @@ function finishWizardSubmit(res, btn, successMsg) {
     btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
     if (!res || res.code !== 0) { alert((res && res.message) || '创建失败'); return; }
     const vid = res.data.id;
-
-    // Upload binary files for standard version
-    if (wizBinaryFiles.length > 0) {
-        uploadWizBinariesSequentially(vid, 0);
-    }
-
+    const filesToUpload = wizBinaryFiles.slice();
     alert(successMsg);
     resetWizard();
     currentVersionId = vid;
@@ -1117,19 +1172,20 @@ function finishWizardSubmit(res, btn, successMsg) {
     loadDeployVersions();
     document.querySelector('#tab-release').click();
     setTimeout(() => showReleaseWorkflow(vid), 150);
+    if (filesToUpload.length > 0) {
+        uploadBinariesSequentially(vid, filesToUpload, 0);
+    }
 }
 
-function uploadWizBinariesSequentially(vid, idx) {
-    if (idx >= wizBinaryFiles.length) return;
-    const file = wizBinaryFiles[idx];
+function uploadBinariesSequentially(vid, files, idx) {
+    if (idx >= files.length) return;
+    const file = files[idx];
     const formData = new FormData();
     formData.append('file', file);
     apiFetch('/api/versions/' + vid + '/binaries', {
         method: 'POST',
         body: formData,
-    }).then(res => {
-        if (res.code === 0) uploadWizBinariesSequentially(vid, idx + 1);
-    });
+    }).then(() => uploadBinariesSequentially(vid, files, idx + 1));
 }
 
 function resetWizard() {
@@ -1149,16 +1205,30 @@ function resetWizard() {
     document.getElementById('wiz-binary-list').innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
     document.getElementById('ss-config-container').innerHTML = '<p class="text-muted text-center py-3">请先在 Step 1 添加子场景</p>';
     showWizardStep(1);
+    onVersionTypeChange();
 }
 
 // ==================== Tab 1: 版本列表 ====================
+let versionListScope = 'mine';
+let currentUserRole = '';
+
+function switchVersionScope(scope) {
+    versionListScope = scope;
+    document.getElementById('scope-mine-btn').classList.toggle('active', scope === 'mine');
+    document.getElementById('scope-all-btn').classList.toggle('active', scope === 'all');
+    loadVersionList();
+}
+
 function loadVersionList() {
     const container = document.getElementById('version-list-container');
     container.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载中...</p>';
-    apiFetch('/api/versions').then(res => {
+    const url = versionListScope === 'mine' ? '/api/versions?scope=mine' : '/api/versions';
+    apiFetch(url).then(res => {
         if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center py-3">加载失败: ' + (res.message||'') + ' <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadVersionList()">重试</button></p>'; return; }
         const list = res.data || [];
         if (!list.length) { container.innerHTML = '<p class="text-muted text-center py-3">暂无版本</p>'; return; }
+        const isProcess = currentUserRole === 'process';
+        const isAllScope = versionListScope === 'all';
         let html = `<div class="table-responsive"><table class="table table-hover table-bordered">
             <thead class="table-light">
                 <tr><th>类型</th><th>工程名称</th><th>版本号</th><th>描述</th><th>状态</th><th>发布进度</th><th>发行进度</th><th>发行厂区</th><th>创建人</th><th>创建时间</th><th>操作</th></tr>
@@ -1171,6 +1241,8 @@ function loadVersionList() {
             const canDelist = v.status === 'draft' || v.status === 'released' || v.status === 'deployed';
             const canDelete = v.status === 'draft' || v.status === 'delisted';
             const isDelisted = v.status === 'delisted';
+            const canOperate = isProcess || !isAllScope || v.is_mine;
+            const disabledAttr = canOperate ? '' : ' disabled title="无操作权限"';
             const extras = v.type === 'multi_process' ? ` <small class="text-muted">BOM:${(v.bom_code||'-').replace(/[,;，；]+/g,', ')} TPS:${v.tps_name||'-'}</small>` : '';
             html += `<tr>
                 <td><span class="badge bg-secondary">${typeBadge}</span></td>
@@ -1184,13 +1256,13 @@ function loadVersionList() {
                 <td>${v.created_by || '-'}</td>
                 <td style="font-size:.8rem">${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</td>
                 <td>
-                    ${v.status === 'draft' ? `<button class="btn btn-outline-warning btn-sm" onclick="editVersion(${v.id})"><i class="bi bi-pencil"></i> 编辑</button>` : ''}
-                    <button class="btn btn-outline-primary btn-sm" onclick="switchToRelease(${v.id})"><i class="bi bi-send"></i> 发布</button>
-                    <button class="btn btn-outline-success btn-sm" onclick="switchToDeploy(${v.id})"><i class="bi bi-rocket"></i> 发行</button>
+                    ${v.status === 'draft' ? `<button class="btn btn-outline-warning btn-sm" onclick="editVersion(${v.id})"${disabledAttr}><i class="bi bi-pencil"></i> 编辑</button>` : ''}
+                    <button class="btn btn-outline-primary btn-sm" onclick="switchToRelease(${v.id})"${disabledAttr}><i class="bi bi-send"></i> 发布</button>
+                    <button class="btn btn-outline-success btn-sm" onclick="switchToDeploy(${v.id})"${disabledAttr}><i class="bi bi-rocket"></i> 发行</button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="showVersionDetail(${v.id})"><i class="bi bi-info-circle"></i> 详情</button>
-                    ${canDelist ? `<button class="btn btn-outline-dark btn-sm" onclick="delistVersion(${v.id})"><i class="bi bi-archive"></i> 下架</button>` : ''}
-                    ${isDelisted ? `<button class="btn btn-outline-info btn-sm" onclick="restoreVersion(${v.id})"><i class="bi bi-arrow-up-circle"></i> 上架</button>` : ''}
-                    ${canDelete ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id})"><i class="bi bi-trash"></i> 删除</button>` : ''}
+                    ${canDelist ? `<button class="btn btn-outline-dark btn-sm" onclick="delistVersion(${v.id})"${disabledAttr}><i class="bi bi-archive"></i> 下架</button>` : ''}
+                    ${isDelisted ? `<button class="btn btn-outline-info btn-sm" onclick="restoreVersion(${v.id})"${disabledAttr}><i class="bi bi-arrow-up-circle"></i> 上架</button>` : ''}
+                    ${canDelete ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id})"${disabledAttr}><i class="bi bi-trash"></i> 删除</button>` : ''}
                 </td>
             </tr>`;
         });
@@ -1199,17 +1271,44 @@ function loadVersionList() {
     });
 }
 
-function switchToRelease(vid) { currentVersionId = vid; showReleaseWorkflow(vid); document.querySelector('#tab-release').click(); }
+function switchToRelease(vid) { currentVersionId = vid; document.querySelector('#tab-release').click(); showReleaseWorkflow(vid); }
+function setDeployVersionId(vid) {
+    const v = deployVersionList.find(x => x.id == vid);
+    if (v) {
+        const typeTag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
+        const label = (v.project_name || '?') + ' / ' + v.version + typeTag + ' (' + (v.status === 'released' ? '已发布' : '已发行') + ')';
+        document.getElementById('deploy-version-input').value = label;
+        document.getElementById('deploy-version-id').value = vid;
+    }
+}
+
 function switchToDeploy(vid) {
     currentVersionId = vid;
-    document.getElementById('deploy-version-select').value = vid;
+    setDeployVersionId(vid);
     showDeployWorkflow(vid);
     document.querySelector('#tab-deploy').click();
 }
 
-// ==================== Tab 3: 版本发布 ====================
+function showReleaseWizardOnly() {
+    document.getElementById('release-wizard-wrap').style.display = '';
+    document.getElementById('release-workflow-wrap').style.display = 'none';
+}
+
+function showReleaseWorkflowOnly() {
+    document.getElementById('release-wizard-wrap').style.display = 'none';
+    document.getElementById('release-workflow-wrap').style.display = '';
+}
+
+function startNewVersionWizard() {
+    editingVersionId = null;
+    resetWizard();
+    showReleaseWizardOnly();
+}
+
+// ==================== Tab 2: 版本发布 ====================
 function showReleaseWorkflow(versionId) {
     currentVersionId = versionId;
+    showReleaseWorkflowOnly();
     const container = document.getElementById('release-workflow-container');
     const selector = document.getElementById('release-version-selector');
     if (selector) selector.innerHTML = `<button class="btn btn-outline-secondary btn-sm" onclick="showReleaseWorkflow(${versionId})"><i class="bi bi-arrow-repeat"></i> 刷新</button>`;
@@ -1231,12 +1330,40 @@ function renderReleaseWorkflow(v) {
         </div>`;
     // Multi-process summary
     if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-        html += `<div class="mb-2"><strong class="small">子场景：</strong>`;
+        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
         v.sub_scenarios.forEach(s => {
-            html += `<span class="badge bg-light text-dark me-1">${s.name}</span>`;
+            html += `<div class="card mb-2"><div class="card-body py-2">
+                <strong>${escHtml(s.name)}</strong>
+                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
+            ['hardware_params','software_metrics','property_page'].forEach(key => {
+                try {
+                    const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
+                    if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
+                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
+                        const valStr = JSON.stringify(val, null, 2);
+                        const fname = makeFilename(s.name, key);
+                        html += `<div class="mt-1 border rounded p-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                                    <div>
+                                        <span class="small fw-semibold">${escHtml(fname)}</span>
+                                        <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
+                                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                                </div>
+                            </div>
+                            <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
+                        </div>`;
+                    }
+                } catch(e) {}
+            });
+            html += `</div></div>`;
         });
         html += `</div>`;
-        if (v.bom_code) html += `<div class="mb-1 small text-muted">BOM: ${v.bom_code.replace(/[,;，；]+/g,', ')} | TPS: ${v.tps_name || '-'}</div>`;
     }
     // Approver assignment panel
     const tmStep = steps.find(s => s.step_order === 1);
@@ -1272,20 +1399,25 @@ function renderReleaseWorkflow(v) {
         if (tmStep) document.getElementById('rel-test-manager').value = tmStep.assigned_to || '';
         if (pmStep) document.getElementById('rel-project-manager').value = pmStep.assigned_to || '';
     }, 50);
-    html += `<div class="mb-3">
+        html += `<div class="mb-3">
         <p class="mb-1 small"><strong>归档内容（${(v.archive_items||[]).length} 项）：</strong></p>
         <div class="list-group list-group-flush">`;
     (v.archive_items || []).forEach(a => {
         let snap = {};
         try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
-        const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤'};
-        const label = typeLabels[a.type] || a.type;
         const snapStr = JSON.stringify(snap, null, 2);
+        const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
         html += `<div class="list-group-item py-1 px-2">
             <div class="d-flex justify-content-between align-items-center">
-                <span><span class="badge bg-secondary bg-opacity-10 text-dark">${label}</span> <code class="small text-muted">#${a.id}</code></span>
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                    <div>
+                        <span class="small fw-semibold">${escHtml(fname)}</span>
+                        <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
+                    </div>
+                </div>
                 <div>
-                    <button class="btn btn-sm btn-outline-secondary py-0 me-1" onclick="downloadJsonStr('${escHtml(snapStr)}', 'archive_${a.id}_${a.type}.json')" title="下载"><i class="bi bi-download"></i></button>
+                    <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
                     <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                 </div>
             </div>
@@ -1375,37 +1507,33 @@ function loadDeployVersions() {
     apiFetch('/api/versions').then(res => {
         if (res.code !== 0) return;
         deployVersionList = (res.data||[]).filter(v => v.status === 'released' || v.status === 'deployed');
-        document.getElementById('deploy-version-search').value = '';
-        renderDeployVersionOptions('');
+        const datalist = document.getElementById('deploy-version-list');
+        datalist.innerHTML = deployVersionList.map(v => {
+            const typeTag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
+            return `<option value="${(v.project_name || '?') + ' / ' + v.version + typeTag + ' (' + (v.status === 'released' ? '已发布' : '已发行') + ')'}">`;
+        }).join('');
     });
 }
 
-function renderDeployVersionOptions(filter) {
-    const sel = document.getElementById('deploy-version-select');
-    sel.innerHTML = '<option value="">-- 请选择版本 --</option>';
-    const kw = (filter||'').toLowerCase();
-    deployVersionList.forEach(v => {
-        if (kw && !v.version.toLowerCase().includes(kw) && !(v.description||'').toLowerCase().includes(kw) && !(v.project_name||'').toLowerCase().includes(kw)) return;
-        const opt = document.createElement('option');
-        opt.value = v.id;
-        const typeTag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
-        opt.textContent = `${v.version}${typeTag}${v.project_name ? ' [' + v.project_name + ']' : ''} (${v.status === 'released' ? '已发布' : '已发行'})${v.description ? ' - ' + v.description : ''}`;
-        sel.appendChild(opt);
-    });
-    if (sel.options.length <= 1) {
-        sel.innerHTML = '<option value="">-- 无匹配版本 --</option>';
+function onDeployVersionInput(value) {
+    const input = document.getElementById('deploy-version-input');
+    const idInput = document.getElementById('deploy-version-id');
+    // Find exact match in datalist
+    const match = [...document.getElementById('deploy-version-list').options].find(o => o.value === value);
+    if (match) {
+        const v = deployVersionList.find(x => {
+            const typeTag = x.type === 'multi_process' ? '[多工序]' : x.type === 'product_family' ? '[产品族]' : '';
+            const label = (x.project_name || '?') + ' / ' + x.version + typeTag + ' (' + (x.status === 'released' ? '已发布' : '已发行') + ')';
+            return label === value;
+        });
+        if (v) {
+            idInput.value = v.id;
+            showDeployWorkflow(v.id);
+            return;
+        }
     }
-}
-
-function filterDeployVersions(value) {
-    const sel = document.getElementById('deploy-version-select');
-    const currentVal = sel.value;
-    renderDeployVersionOptions(value);
-    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
-        sel.value = currentVal;
-    } else {
-        document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
-    }
+    idInput.value = '';
+    document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
 }
 
 function loadFactories() {
@@ -1465,7 +1593,7 @@ function updateFactoryLines() {
 }
 
 function addDeployTargets() {
-    const vid = document.getElementById('deploy-version-select').value;
+    const vid = document.getElementById('deploy-version-id').value;
     if (!vid) { alert('请选择版本'); return; }
     const fids = getSelectedFactoryIds();
     if (!fids || (Array.isArray(fids) && !fids.length)) { alert('请至少选择一个厂区'); return; }
@@ -1506,7 +1634,7 @@ function renderPendingTargets() {
 function removePendingTarget(i) { pendingTargets.splice(i, 1); renderPendingTargets(); }
 
 function submitDeployTargets() {
-    const vid = document.getElementById('deploy-version-select').value;
+    const vid = document.getElementById('deploy-version-id').value;
     if (!vid || !pendingTargets.length) return;
     const te = document.getElementById('deploy-te').value;
     if (!te) { alert('请选择TE工程师'); return; }
@@ -1553,9 +1681,38 @@ function renderDeployWorkflow(v) {
         </div>`;
     // Multi-process summary
     if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-        html += `<div class="mb-2"><strong class="small">子场景：</strong>`;
+        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
         v.sub_scenarios.forEach(s => {
-            html += `<span class="badge bg-light text-dark me-1">${s.name}</span>`;
+            html += `<div class="card mb-2"><div class="card-body py-2">
+                <strong>${escHtml(s.name)}</strong>
+                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
+            ['hardware_params','software_metrics','property_page'].forEach(key => {
+                try {
+                    const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
+                    if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
+                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
+                        const valStr = JSON.stringify(val, null, 2);
+                        const fname = makeFilename(s.name, key);
+                        html += `<div class="mt-1 border rounded p-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                                    <div>
+                                        <span class="small fw-semibold">${escHtml(fname)}</span>
+                                        <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i> 下载</a>
+                                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                                </div>
+                            </div>
+                            <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
+                        </div>`;
+                    }
+                } catch(e) {}
+            });
+            html += `</div></div>`;
         });
         html += `</div>`;
     }
@@ -1564,14 +1721,19 @@ function renderDeployWorkflow(v) {
     (v.archive_items || []).forEach(a => {
         let snap = {};
         try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
-        const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤'};
-        const label = typeLabels[a.type] || a.type;
         const snapStr = JSON.stringify(snap, null, 2);
+        const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
         html += `<div class="list-group-item py-1 px-2">
             <div class="d-flex justify-content-between align-items-center">
-                <span><span class="badge bg-secondary bg-opacity-10 text-dark">${label}</span> <code class="small text-muted">#${a.id}</code></span>
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                    <div>
+                        <span class="small fw-semibold">${escHtml(fname)}</span>
+                        <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
+                    </div>
+                </div>
                 <div>
-                    <button class="btn btn-sm btn-outline-secondary py-0 me-1" onclick="downloadJsonStr('${escHtml(snapStr)}', 'archive_${a.id}_${a.type}.json')" title="下载"><i class="bi bi-download"></i></button>
+                    <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
                     <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                 </div>
             </div>
@@ -1717,13 +1879,32 @@ function gotoPending(vid) {
 function gotoDeployPending(vid) {
     bootstrap.Modal.getInstance(document.getElementById('pending-modal')).hide();
     currentVersionId = vid;
-    document.getElementById('deploy-version-select').value = vid;
+    setDeployVersionId(vid);
     showDeployWorkflow(vid);
     document.querySelector('#tab-deploy').click();
 }
 
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function jsonPreview(val) {
+    if (!val) return '';
+    const v = typeof val === 'string' ? JSON.parse(val) : val;
+    if (Array.isArray(v)) return `Array(${v.length})`;
+    if (typeof v === 'object' && v !== null) {
+        const keys = Object.keys(v);
+        const shown = keys.slice(0, 4);
+        const rest = keys.length > 4 ? `, ...+${keys.length - 4}` : '';
+        return `{${shown.join(', ')}${rest}}`;
+    }
+    return String(v);
+}
+
+function makeFilename(name, fieldType) {
+    const labels = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页',
+        metrics_ini:'指标文件', metrics_json:'指标文件', test_item:'测试项', sequence_step:'序列步骤'};
+    return `${name}_${labels[fieldType] || fieldType}.json`;
 }
 
 function toggleDetailJson(btn) {
@@ -1743,6 +1924,12 @@ function downloadJsonStr(content, filename) {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+function downloadFromDataBtn(btn) {
+    const content = btn.getAttribute('data-content');
+    const filename = btn.getAttribute('data-filename');
+    if (content != null && filename) downloadJsonStr(content, filename);
 }
 
 function showVersionDetail(vid) {
@@ -1769,31 +1956,38 @@ function showVersionDetail(vid) {
                 </table>
             </div>`;
         // Sub-scenarios (multi-process) with expandable JSON
-        if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-            html += `<div class="mb-3"><h6>子场景</h6>`;
-            v.sub_scenarios.forEach(s => {
-                html += `<div class="card mb-2"><div class="card-body py-2">
-                    <strong>${s.name}</strong>
-                    <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
-                ['hardware_params','software_metrics','property_page'].forEach(key => {
-                    try {
-                        const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
-                        if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
-                            const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
-                            const valStr = JSON.stringify(val, null, 2);
-                            html += `<div class="mt-1 border rounded p-1">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="badge bg-secondary bg-opacity-10 text-dark">${label}</span>
+    if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
+        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
+        v.sub_scenarios.forEach(s => {
+            html += `<div class="card mb-2"><div class="card-body py-2">
+                <strong>${escHtml(s.name)}</strong>
+                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
+            ['hardware_params','software_metrics','property_page'].forEach(key => {
+                try {
+                    const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
+                    if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
+                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
+                        const valStr = JSON.stringify(val, null, 2);
+                        const fname = makeFilename(s.name, key);
+                        html += `<div class="mt-1 border rounded p-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
                                     <div>
-                                        <button class="btn btn-sm btn-outline-secondary py-0 me-1" onclick="downloadJsonStr('${escHtml(valStr)}', 'subscenario_${s.name}_${key}.json')"><i class="bi bi-download"></i></button>
-                                        <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                                        <span class="small fw-semibold">${escHtml(fname)}</span>
+                                        <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
                                     </div>
                                 </div>
-                                <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
-                            </div>`;
-                        }
-                    } catch(e) {}
-                });
+                                <div>
+                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
+                                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                                </div>
+                            </div>
+                            <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
+                        </div>`;
+                    }
+                } catch(e) {}
+            });
                 html += `</div></div>`;
             });
             html += `</div>`;
@@ -1802,18 +1996,23 @@ function showVersionDetail(vid) {
         const items = v.archive_items || [];
         html += `<div class="mb-3"><h6>归档内容 <small class="text-muted">（${items.length} 项）</small></h6>`;
         if (items.length) {
-            const typeLabels = {hardware_params:'硬件参数', metrics_ini:'指标文件(INI)', metrics_json:'指标文件(JSON)', property_page:'属性页', test_item:'测试项', sequence_step:'序列步骤'};
             html += `<div class="list-group list-group-flush">`;
             items.forEach(a => {
                 let snap = {};
                 try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
-                const label = typeLabels[a.type] || a.type;
                 const snapStr = JSON.stringify(snap, null, 2);
-                html += `<div class="list-group-item py-2">
+                const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
+                        html += `<div class="list-group-item py-2">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span><span class="badge bg-secondary bg-opacity-10 text-dark">${label}</span> <code class="small text-muted">#${a.id}</code></span>
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-file-earmark-text text-secondary me-2"></i>
+                            <div>
+                                <span class="small fw-semibold">${escHtml(fname)}</span>
+                                <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
+                            </div>
+                        </div>
                         <div>
-                            <button class="btn btn-sm btn-outline-secondary py-0 me-1" onclick="downloadJsonStr('${escHtml(snapStr)}', 'archive_${a.id}_${a.type}.json')"><i class="bi bi-download"></i></button>
+                            <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i> 下载</a>
                             <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                         </div>
                     </div>
@@ -1893,8 +2092,9 @@ function editVersion(vid) {
         if (res.code !== 0) { alert(res.message); return; }
         const v = res.data;
         editingVersionId = v.id;
-        // Switch to create tab
-        document.querySelector('#tab-create').click();
+        // Switch to release tab with wizard
+        document.querySelector('#tab-release').click();
+        showReleaseWizardOnly();
         document.getElementById('wizard-step-title').textContent = '编辑版本 (Step 1)';
         document.getElementById('wizard-next-btn').textContent = '下一步 \u276F';
         // Populate Step 1
