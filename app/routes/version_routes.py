@@ -8,7 +8,7 @@ from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, Rel
 from app.models import TestItem, User
 from app.models.station import TestStation, ProductionLine, SoftwareConfig, EquipmentMetrics, EquipmentPropertyPage
 from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
-from app.auth import login_required
+from app.auth import login_required, developer_required, super_admin_required
 
 version_bp = Blueprint('versions', __name__)
 
@@ -72,7 +72,7 @@ def list_versions():
 
 
 @version_bp.route('/versions/<int:version_id>', methods=['PUT'])
-@login_required
+@developer_required
 def update_version(version_id):
     """编辑版本基本信息（仅draft状态允许编辑）"""
     v = TestVersion.query.get_or_404(version_id)
@@ -158,7 +158,7 @@ def update_version(version_id):
 
 
 @version_bp.route('/versions', methods=['POST'])
-@login_required
+@developer_required
 def create_version():
     data = request.get_json()
     if not data:
@@ -354,7 +354,7 @@ def get_sub_scenario(ss_id):
 
 
 @version_bp.route('/sub-scenarios', methods=['POST'])
-@login_required
+@developer_required
 def create_sub_scenario():
     data = request.get_json()
     if not data or not data.get('version_id'):
@@ -379,7 +379,7 @@ def create_sub_scenario():
 
 
 @version_bp.route('/sub-scenarios/<int:ss_id>', methods=['PUT'])
-@login_required
+@developer_required
 def update_sub_scenario(ss_id):
     ss = SubScenario.query.get_or_404(ss_id)
     data = request.get_json()
@@ -411,7 +411,7 @@ def update_sub_scenario(ss_id):
 
 
 @version_bp.route('/sub-scenarios/<int:ss_id>', methods=['DELETE'])
-@login_required
+@developer_required
 def delete_sub_scenario(ss_id):
     ss = SubScenario.query.get_or_404(ss_id)
     db.session.delete(ss)
@@ -433,7 +433,7 @@ def get_version(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>/submit-step', methods=['POST'])
-@login_required
+@developer_required
 def submit_step(version_id):
     v = TestVersion.query.get_or_404(version_id)
     data = request.get_json()
@@ -468,7 +468,7 @@ def submit_step(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>/assign-approvers', methods=['POST'])
-@login_required
+@developer_required
 def assign_approvers(version_id):
     """发布流程中设置审批人"""
     v = TestVersion.query.get_or_404(version_id)
@@ -488,7 +488,7 @@ def assign_approvers(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>/deployments', methods=['POST'])
-@login_required
+@developer_required
 def create_deployments(version_id):
     v = TestVersion.query.get_or_404(version_id)
     data = request.get_json()
@@ -526,7 +526,7 @@ def create_deployments(version_id):
 
 
 @version_bp.route('/deployments/<int:dep_id>/approve', methods=['POST'])
-@login_required
+@developer_required
 def approve_deployment(dep_id):
     dep = ReleaseDeployment.query.get_or_404(dep_id)
     data = request.get_json()
@@ -1047,7 +1047,7 @@ def list_station_deployed_versions(station_id):
 
 
 @version_bp.route('/versions/<int:version_id>/delist', methods=['POST'])
-@login_required
+@super_admin_required
 def delist_version(version_id):
     v = TestVersion.query.get_or_404(version_id)
     v.status = 'delisted'
@@ -1057,7 +1057,7 @@ def delist_version(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>/restore', methods=['POST'])
-@login_required
+@super_admin_required
 def restore_version(version_id):
     v = TestVersion.query.get_or_404(version_id)
     v.status = 'draft'
@@ -1067,7 +1067,7 @@ def restore_version(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>', methods=['DELETE'])
-@login_required
+@super_admin_required
 def delete_version(version_id):
     v = TestVersion.query.get_or_404(version_id)
     if v.status not in ('draft', 'delisted'):
@@ -1169,7 +1169,7 @@ def get_archive_configs():
 
 
 @version_bp.route('/versions/<int:version_id>/binaries', methods=['POST'])
-@login_required
+@developer_required
 def upload_version_binary(version_id):
     """上传版本二进制文件 (multipart)"""
     v = TestVersion.query.get_or_404(version_id)
@@ -1210,7 +1210,7 @@ def list_version_binaries(version_id):
 
 
 @version_bp.route('/versions/<int:version_id>/binaries/<int:file_id>', methods=['DELETE'])
-@login_required
+@developer_required
 def delete_version_binary(version_id, file_id):
     """删除版本二进制文件"""
     bf = VersionBinaryFile.query.filter_by(id=file_id, version_id=version_id).first_or_404()

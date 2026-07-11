@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}工站设置{% endblock %}
 {% block content %}
+<div id="page-content">
 <div class="row">
     <div class="col-12 mb-3">
         <div class="d-flex justify-content-between align-items-center">
@@ -209,6 +210,7 @@
         </div>
     </div>
 </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -226,9 +228,13 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('back-to-equipment').href = `/equipment?equipment_id=${eqId}`;
     }
 
-    // 权限检查
+    // 权限检查（process+ 可访问）
     fetch('/api/auth/me').then(r=>r.json()).then(res=>{
-        if (res.code !== 0 || res.data.role !== 'process') { window.location.href = '/'; }
+        const roleLevel = {'operator':0,'process':1,'developer':2,'super_admin':3};
+        if (res.code !== 0 || (roleLevel[res.data.role]||0) < 1) {
+            document.getElementById('page-content').innerHTML = '<div class="alert alert-danger mt-4"><i class="bi bi-shield-exclamation"></i> 无权限访问此页面</div>';
+            return;
+        }
     });
 
     if (stationId) {

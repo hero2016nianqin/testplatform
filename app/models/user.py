@@ -1,16 +1,30 @@
 """
 用户模型
 
-定义系统用户，区分两类角色：
-- production: 生产操作员，仅能执行测试和查看日志
-- process:    工艺工程师，拥有全部权限（设置、初始化、配置管理）
-
-密码使用 Werkzeug 的 pbkdf2:sha256 方式加密存储（兼容 Python 3.9）。
+定义系统用户，区分四类角色（按权限从低到高）：
+- operator:     操作人员，仅能执行测试和查看日志
+- process:      工艺人员，可修改测试装备参数
+- developer:    装备开发人员，可进行版本归档、参数设置等
+- super_admin:  超级管理员，拥有全部权限（含下架版本）
 """
 
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
+
+ROLE_HIERARCHY = {
+    'operator': 0,
+    'process': 1,
+    'developer': 2,
+    'super_admin': 3,
+}
+
+ROLE_LABELS = {
+    'operator': '操作人员',
+    'process': '工艺人员',
+    'developer': '装备开发人员',
+    'super_admin': '超级管理员',
+}
 
 
 class User(db.Model):
@@ -19,48 +33,27 @@ class User(db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
-    # 登录用户名，唯一
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    # 用户显示名称（操作员姓名）
     display_name = db.Column(db.String(100), nullable=False)
-    # 加密后的密码哈希（pbkdf2:sha256 算法）
     password_hash = db.Column(db.String(256), nullable=False)
-    # 角色: production(生产操作员) / process(工艺工程师)
-    role = db.Column(db.String(20), nullable=False, default='production')
-    # 是否启用
+    role = db.Column(db.String(20), nullable=False, default='operator')
     is_active = db.Column(db.Boolean, default=True)
-    # 最后登录时间
     last_login = db.Column(db.DateTime, nullable=True)
-    # 创建时间
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password: str):
-        """设置密码（存储为 pbkdf2:sha256 哈希值）"""
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
     def check_password(self, password: str) -> bool:
-        """校验密码"""
         return check_password_hash(self.password_hash, password)
 
-    @property
-    def is_process(self) -> bool:
-        """是否为工艺工程师"""
-        return self.role == 'process'
-
-    @property
-    def is_production(self) -> bool:
-        """是否为生产操作员"""
-        return self.role == 'production'
-
     def to_dict(self):
-        """序列化为字典（不返回密码哈希）"""
         return {
             'id': self.id,
             'username': self.username,
             'display_name': self.display_name,
             'role': self.role,
-            'role_label': '工艺工程师' if self.role == 'process'
-                          else '生产操作员',
+            'role_label': ROLE_LABELS.get(self.role, self.role),
             'is_active': self.is_active,
             'last_login': self.last_login.isoformat()
                           if self.last_login else None,

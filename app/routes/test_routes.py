@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import TestItem, TestResult, TestRun, TestStation
 from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
-from app.auth import login_required, process_required
+from app.auth import login_required, developer_required
 from app.services.test_executor import TestExecutor
 
 # 测试相关蓝图，URL 前缀为 /api/tests
@@ -47,9 +47,9 @@ def list_test_items():
 
 
 @test_bp.route('/items', methods=['POST'])
-@process_required
+@developer_required
 def create_test_item():
-    """创建新的测试项（仅工艺工程师）"""
+    """创建新的测试项"""
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({'code': 1, 'message': 'name is required'}), 400
@@ -70,9 +70,9 @@ def create_test_item():
 
 
 @test_bp.route('/items/<int:item_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_test_item(item_id):
-    """更新测试项的属性（包括启用/禁用状态，仅工艺工程师）"""
+    """更新测试项的属性（包括启用/禁用状态）"""
     item = TestItem.query.get_or_404(item_id)
     data = request.get_json()
     for field in ['name', 'description', 'unit', 'category']:
@@ -89,9 +89,9 @@ def update_test_item(item_id):
 
 
 @test_bp.route('/items/<int:item_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_test_item(item_id):
-    """删除指定的测试项（仅工艺工程师）"""
+    """删除指定的测试项"""
     item = TestItem.query.get_or_404(item_id)
     db.session.delete(item)
     db.session.commit()
@@ -387,7 +387,7 @@ def list_templates():
 
 
 @test_bp.route('/templates', methods=['POST'])
-@process_required
+@developer_required
 def create_template():
     data = request.get_json() or {}
     if not data.get('name'):
@@ -407,7 +407,7 @@ def create_template():
 
 
 @test_bp.route('/templates/<int:template_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_template(template_id):
     t = TestItemTemplate.query.get_or_404(template_id)
     data = request.get_json() or {}
@@ -426,7 +426,7 @@ def update_template(template_id):
 
 
 @test_bp.route('/templates/<int:template_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_template(template_id):
     t = TestItemTemplate.query.get_or_404(template_id)
     db.session.delete(t)
@@ -448,7 +448,7 @@ def list_sequences():
 
 
 @test_bp.route('/sequences', methods=['POST'])
-@process_required
+@developer_required
 def create_sequence():
     data = request.get_json() or {}
     if not data.get('name'):
@@ -480,7 +480,7 @@ def get_sequence(sequence_id):
 
 
 @test_bp.route('/sequences/<int:sequence_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_sequence(sequence_id):
     seq = TestSequence.query.get_or_404(sequence_id)
     data = request.get_json() or {}
@@ -505,7 +505,7 @@ def update_sequence(sequence_id):
 
 
 @test_bp.route('/sequences/<int:sequence_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_sequence(sequence_id):
     seq = TestSequence.query.get_or_404(sequence_id)
     db.session.delete(seq)

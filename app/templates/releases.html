@@ -331,7 +331,9 @@ let wizBinaryFiles = [];
 const SUB_SCENARIO_PRESETS = ['FT-MP1','FT2-MP2','FT2-MP3','FT2-MP4','FT2-MP5','ST-MP6','ORT-MP1','ESS-MP2'];
 
 document.addEventListener('DOMContentLoaded', function() {
-    currentUserRole = document.getElementById('nav-role-label').textContent === '工艺工程师' ? 'process' : 'production';
+    apiFetch('/api/auth/me').then(r => {
+        if (r.code === 0 && r.data) currentUserRole = r.data.role;
+    });
     loadVersionList();
     loadUsers();
     loadDeployVersions();
@@ -1227,7 +1229,8 @@ function loadVersionList() {
         if (res.code !== 0) { container.innerHTML = '<p class="text-danger text-center py-3">加载失败: ' + (res.message||'') + ' <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadVersionList()">重试</button></p>'; return; }
         const list = res.data || [];
         if (!list.length) { container.innerHTML = '<p class="text-muted text-center py-3">暂无版本</p>'; return; }
-        const isProcess = currentUserRole === 'process';
+        const roleLevel = {'operator':0,'process':1,'developer':2,'super_admin':3};
+        const userLevel = roleLevel[currentUserRole] || 0;
         const isAllScope = versionListScope === 'all';
         let html = `<div class="table-responsive"><table class="table table-hover table-bordered">
             <thead class="table-light">
@@ -1241,7 +1244,7 @@ function loadVersionList() {
             const canDelist = v.status === 'draft' || v.status === 'released' || v.status === 'deployed';
             const canDelete = v.status === 'draft' || v.status === 'delisted';
             const isDelisted = v.status === 'delisted';
-            const canOperate = isProcess || !isAllScope || v.is_mine;
+            const canOperate = userLevel >= 3 || (userLevel >= 2 && (!isAllScope || v.is_mine));
             const disabledAttr = canOperate ? '' : ' disabled title="无操作权限"';
             const extras = v.type === 'multi_process' ? ` <small class="text-muted">BOM:${(v.bom_code||'-').replace(/[,;，；]+/g,', ')} TPS:${v.tps_name||'-'}</small>` : '';
             html += `<tr>

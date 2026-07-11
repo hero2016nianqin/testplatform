@@ -20,7 +20,7 @@ from app.models.station import (
 )
 from app.models import TestItem
 from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
-from app.auth import process_required, login_required, get_current_user
+from app.auth import process_required, developer_required, login_required, get_current_user
 
 station_bp = Blueprint('stations', __name__)
 
@@ -37,7 +37,7 @@ def list_factories():
 
 
 @station_bp.route('/factories', methods=['POST'])
-@process_required
+@developer_required
 def create_factory():
     """创建厂区"""
     data = request.get_json() or {}
@@ -55,7 +55,7 @@ def create_factory():
 
 
 @station_bp.route('/factories/<int:factory_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_factory(factory_id):
     """更新厂区"""
     f = Factory.query.get_or_404(factory_id)
@@ -69,7 +69,7 @@ def update_factory(factory_id):
 
 
 @station_bp.route('/factories/<int:factory_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_factory(factory_id):
     """删除厂区（级联删除线体和装备）"""
     f = Factory.query.get_or_404(factory_id)
@@ -91,7 +91,7 @@ def list_lines(factory_id):
 
 
 @station_bp.route('/lines', methods=['POST'])
-@process_required
+@developer_required
 def create_line():
     """创建线体"""
     data = request.get_json() or {}
@@ -114,7 +114,7 @@ def create_line():
 
 
 @station_bp.route('/lines/<int:line_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_line(line_id):
     """更新线体"""
     line = ProductionLine.query.get_or_404(line_id)
@@ -128,7 +128,7 @@ def update_line(line_id):
 
 
 @station_bp.route('/lines/<int:line_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_line(line_id):
     """删除线体（级联删除装备）"""
     line = ProductionLine.query.get_or_404(line_id)
@@ -181,7 +181,7 @@ def get_definition(def_id):
 
 
 @station_bp.route('/definitions', methods=['POST'])
-@process_required
+@developer_required
 def create_definition():
     """创建装备定义"""
     data = request.get_json() or {}
@@ -207,7 +207,7 @@ def create_definition():
 
 
 @station_bp.route('/definitions/<int:def_id>', methods=['PUT'])
-@process_required
+@developer_required
 def update_definition(def_id):
     """更新装备定义"""
     d = EquipmentDefinition.query.get_or_404(def_id)
@@ -233,7 +233,7 @@ def update_definition(def_id):
 
 
 @station_bp.route('/definitions/<int:def_id>', methods=['DELETE'])
-@process_required
+@developer_required
 def delete_definition(def_id):
     """删除装备定义"""
     d = EquipmentDefinition.query.get_or_404(def_id)
@@ -263,7 +263,7 @@ def check_station_version(station_id):
 
 
 @station_bp.route('/<int:station_id>/update-version', methods=['POST'])
-@process_required
+@developer_required
 def update_station_version(station_id):
     """将装备更新到最新版本"""
     station = TestStation.query.get_or_404(station_id)

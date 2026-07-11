@@ -35,13 +35,13 @@
                             <i class="bi bi-hdd-stack"></i> 装备
                         </a>
                     </li>
-                    <!-- 以下菜单仅工艺工程师可见 -->
-                    <li class="nav-item process-only" style="display:none;">
+                    <!-- 以下菜单仅研发人员及以上可见 -->
+                    <li class="nav-item dev-only" style="display:none;">
                         <a class="nav-link" href="/settings">
                             <i class="bi bi-gear"></i> 参数设置
                         </a>
                     </li>
-                    <li class="nav-item process-only" style="display:none;">
+                    <li class="nav-item dev-only" style="display:none;">
                         <a class="nav-link" href="/init">
                             <i class="bi bi-arrow-repeat"></i> 初始化
                         </a>
@@ -129,12 +129,19 @@
                     if (res.code === 0 && res.data) {
                         const user = res.data;
                         document.getElementById('nav-username').textContent = user.display_name;
+                        const roleLabels = {
+                            'operator': '操作人员',
+                            'process': '工艺人员',
+                            'developer': '装备开发人员',
+                            'super_admin': '超级管理员',
+                        };
                         document.getElementById('nav-role-label').textContent =
-                            user.role === 'process' ? '工艺工程师' : '生产操作员';
+                            roleLabels[user.role] || user.role;
 
-                        // 控制工艺工程师专属菜单显示
-                        if (user.role === 'process') {
-                            document.querySelectorAll('.process-only').forEach(el => el.style.display = '');
+                        // 控制研发人员专属菜单显示（developer+）
+                        const roleLevel = { 'operator': 0, 'process': 1, 'developer': 2, 'super_admin': 3 };
+                        if ((roleLevel[user.role] || 0) >= 2) {
+                            document.querySelectorAll('.dev-only').forEach(el => el.style.display = '');
                         }
                     } else {
                         // 未登录，跳转登录页

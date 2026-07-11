@@ -3,63 +3,65 @@
 
 提供登录状态校验、角色权限检查的装饰器，
 用于保护需要特定权限的 API 路由和页面路由。
+
+角色层级（从低到高）：
+  operator(操作人员) < process(工艺人员) < developer(装备开发人员) < super_admin(超级管理员)
 """
 
 from functools import wraps
 from flask import session, redirect, url_for, jsonify, request
 
+from app.models.user import ROLE_HIERARCHY, ROLE_LABELS
+
 
 def login_required(f):
-    """
-    登录验证装饰器。
-    检查 session 中是否存在 user_id，不存在则返回 401 或重定向。
-
-    用法:
-        @login_required
-        def some_route():
-            ...
-    """
+    """登录验证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            # API 请求返回 JSON，页面请求返回重定向
             if request.path.startswith('/api/'):
-                return jsonify({'code': 401,
-                                'message': '请先登录'}), 401
+                return jsonify({'code': 401, 'message': '请先登录'}), 401
             return redirect('/login')
         return f(*args, **kwargs)
     return decorated_function
 
 
-def process_required(f):
+def role_required(min_role):
     """
-    工艺工程师权限验证装饰器。
-    在 login_required 基础上，额外检查 role 是否为 process。
+    角色权限验证装饰器。
+    在 login_required 基础上，检查用户角色是否 >= min_role。
 
     用法:
-        @process_required
-        def admin_only_route():
-            ...
+        @role_required('process')
+        def some_route(): ...
     """
-    @wraps(f)
-    @login_required
-    def decorated_function(*args, **kwargs):
-        if session.get('role') != 'process':
-            if request.path.startswith('/api/'):
-                return jsonify({'code': 403,
-                                'message': '权限不足，需要工艺工程师权限'}), 403
-            return redirect('/')
-        return f(*args, **kwargs)
-    return decorated_function
+    min_level = ROLE_HIERARCHY.get(min_role, -1)
+
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            user_role = session.get('role', 'operator')
+            user_level = ROLE_HIERARCHY.get(user_role, -1)
+            if user_level < min_level:
+                if request.path.startswith('/api/'):
+                    label = ROLE_LABELS.get(min_role, min_role)
+                    return jsonify({'code': 403,
+                                    'message': f'权限不足，需要 {label} 及以上权限'}), 403
+                return redirect('/')
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+# 保留兼容的快捷装饰器
+process_required = role_required('process')
+developer_required = role_required('developer')
+super_admin_required = role_required('super_admin')
 
 
 def get_current_user():
-    """
-    从 session 中获取当前登录用户信息。
-
-    Returns:
-        包含 username, display_name, role 的字典，未登录返回 None
-    """
+    """获取当前登录用户信息"""
     if 'user_id' not in session:
         return None
     return {
