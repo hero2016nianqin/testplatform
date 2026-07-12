@@ -143,14 +143,14 @@ def update_version(version_id):
         steps_config = data['steps_config']
         existing_steps = ReleaseStep.query.filter_by(version_id=v.id).count()
         if not existing_steps:
-            stage_map = {'test_manager': 1, 'project_manager': 2}
+            order_map = {'test_manager': 1, 'project_manager': 2}
             label_map = {'test_manager': '测试经理', 'project_manager': '项目经理'}
             for role in ('test_manager', 'project_manager'):
                 assignee = (steps_config.get(role) or '').strip()
                 db.session.add(ReleaseStep(
-                    version_id=v.id, stage=role, step_order=stage_map[role],
-                    label=label_map[role],
-                    assignee=assignee,
+                    version_id=v.id, stage=1, step_order=order_map[role],
+                    step_name=label_map[role],
+                    assigned_to=assignee,
                     status='pending',
                 ))
     db.session.commit()
@@ -436,6 +436,8 @@ def get_version(version_id):
 @developer_required
 def submit_step(version_id):
     v = TestVersion.query.get_or_404(version_id)
+    if v.status not in ('draft', 'released'):
+        return jsonify({'code': 1, 'message': '当前版本状态不允许提交审批'}), 400
     data = request.get_json()
     step_id = data.get('step_id')
     action = data.get('action')
@@ -455,14 +457,17 @@ def submit_step(version_id):
     step.approved_at = datetime.utcnow()
     step.comment = comment
     v.updated_at = datetime.utcnow()
-    stage1_done = ReleaseStep.query.filter_by(version_id=version_id, stage=1).count()
-    stage1_approved = ReleaseStep.query.filter_by(version_id=version_id, stage=1, status='approved').count()
-    stage2_done = ReleaseStep.query.filter_by(version_id=version_id, stage=2).count()
-    stage2_approved = ReleaseStep.query.filter_by(version_id=version_id, stage=2, status='approved').count()
-    if stage1_done > 0 and stage1_approved == stage1_done:
+    stage1_steps = ReleaseStep.query.filter_by(version_id=version_id, stage=1).all()
+    stage1_approved = sum(1 for s in stage1_steps if s.status == 'approved')
+    stage1_total = len(stage1_steps)
+    if stage1_total > 0 and stage1_approved == stage1_total:
         v.status = 'released'
-    if stage2_done > 0 and stage2_approved == stage2_done:
-        v.status = 'deployed'
+    else:
+        stage2_steps = ReleaseStep.query.filter_by(version_id=version_id, stage=2).all()
+        stage2_approved = sum(1 for s in stage2_steps if s.status == 'approved')
+        stage2_total = len(stage2_steps)
+        if stage2_total > 0 and stage2_approved == stage2_total:
+            v.status = 'deployed'
     db.session.commit()
     return jsonify({'code': 0, 'data': step.to_dict()})
 
@@ -491,6 +496,8 @@ def assign_approvers(version_id):
 @developer_required
 def create_deployments(version_id):
     v = TestVersion.query.get_or_404(version_id)
+    if v.status not in ('released', 'deployed'):
+        return jsonify({'code': 1, 'message': '仅已发布或已发行的版本可创建发行目标'}), 400
     data = request.get_json()
     targets = data.get('targets', [])
     if not targets:
@@ -707,7 +714,7 @@ def _push_version_to_station(station, v):
 
 
 @version_bp.route('/deployments/<int:dep_id>/execute', methods=['POST'])
-@login_required
+@developer_required
 def execute_deployment(dep_id):
     dep = ReleaseDeployment.query.get_or_404(dep_id)
     if dep.status != 'approved':
@@ -717,9 +724,12 @@ def execute_deployment(dep_id):
     v = TestVersion.query.get(dep.version_id)
     if v:
         v.updated_at = datetime.utcnow()
-        total_deps = ReleaseDeployment.query.filter_by(version_id=v.id).count()
+        active_deps = ReleaseDeployment.query.filter(
+            ReleaseDeployment.version_id == v.id,
+            ReleaseDeployment.status.in_(['pending', 'approved'])
+        ).count()
         done_deps = ReleaseDeployment.query.filter_by(version_id=v.id, status='deployed').count()
-        if total_deps > 0 and total_deps == done_deps:
+        if active_deps == 0 and done_deps > 0:
             v.status = 'deployed'
         # Resolve target scope to stations and push version info
         if dep.station_id:
@@ -1050,6 +1060,8 @@ def list_station_deployed_versions(station_id):
 @super_admin_required
 def delist_version(version_id):
     v = TestVersion.query.get_or_404(version_id)
+    if v.status not in ('released', 'deployed'):
+        return jsonify({'code': 1, 'message': '仅已发布或已发行的版本可下架'}), 400
     v.status = 'delisted'
     v.updated_at = datetime.utcnow()
     db.session.commit()
@@ -1060,6 +1072,8 @@ def delist_version(version_id):
 @super_admin_required
 def restore_version(version_id):
     v = TestVersion.query.get_or_404(version_id)
+    if v.status != 'delisted':
+        return jsonify({'code': 1, 'message': '仅已下架的版本可恢复'}), 400
     v.status = 'draft'
     v.updated_at = datetime.utcnow()
     db.session.commit()
@@ -1184,7 +1198,8 @@ def upload_version_binary(version_id):
         'versions', str(version_id), 'binaries'
     )
     os.makedirs(upload_dir, exist_ok=True)
-    safe_name = file.filename
+    from werkzeug.utils import secure_filename
+    safe_name = secure_filename(file.filename) or 'unnamed_file'
     filepath = os.path.join(upload_dir, safe_name)
     file.save(filepath)
     file_size = os.path.getsize(filepath)

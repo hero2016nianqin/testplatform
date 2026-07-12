@@ -2,21 +2,80 @@
 {% block title %}版本归档 - 测试平台{% endblock %}
 {% block content %}
 <style>
-.stage-card { border-left: 4px solid #0d6efd; }
-.stage-card.stage-2 { border-left-color: #198754; }
-.step-item { padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; background: #f8f9fa; border-left: 3px solid #dee2e6; }
-.step-item.approved { background: #d1e7dd; border-left-color: #198754; }
-.step-item.rejected { background: #f8d7da; border-left-color: #dc3545; }
-.step-item.pending-current { border-left-color: #0d6efd; background: #cfe2ff; }
-.deployment-row td { vertical-align: middle; }
-.approval-comment { font-size: .82rem; color: #6c757d; margin-top: 2px; }
-.target-list { max-height: 300px; overflow-y: auto; }
+/* === Timeline Stepper === */
+.timeline { position: relative; padding: 0; margin: 0; }
+.timeline::before { content: ''; position: absolute; left: 18px; top: 0; bottom: 0; width: 3px; background: #e9ecef; border-radius: 3px; }
+.timeline-step { position: relative; padding-left: 48px; padding-bottom: 20px; }
+.timeline-step:last-child { padding-bottom: 0; }
+.timeline-dot { position: absolute; left: 10px; top: 2px; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #e9ecef; background: #fff; z-index: 1; display: flex; align-items: center; justify-content: center; }
+.timeline-dot.approved { border-color: #198754; background: #198754; color: #fff; }
+.timeline-dot.rejected { border-color: #dc3545; background: #dc3545; color: #fff; }
+.timeline-dot.pending { border-color: #6c757d; background: #fff; }
+.timeline-dot.pending-current { border-color: #0d6efd; background: #cfe2ff; animation: pulse-ring 2s ease infinite; }
+@keyframes pulse-ring { 0%,100%{ box-shadow: 0 0 0 0 rgba(13,110,253,.3); } 50%{ box-shadow: 0 0 0 8px rgba(13,110,253,0); } }
+.timeline-body { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px 16px; }
+.timeline-body.highlight { border-left: 3px solid #0d6efd; background: #f8f9ff; }
+.timeline-body.approved { border-left: 3px solid #198754; background: #f0faf3; }
+.timeline-body.rejected { border-left: 3px solid #dc3545; background: #fff5f5; }
+.timeline-meta { font-size: .8rem; color: #6c757d; margin-top: 4px; }
+
+/* === Version Cards === */
+.version-card { border: 1px solid #e9ecef; border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; background: #fff; transition: box-shadow .15s, border-color .15s; }
+.version-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); border-color: #c5c9d0; }
+.version-card .vc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.version-card .vc-title { font-weight: 600; font-size: 1.05rem; margin: 0; }
+.version-card .vc-meta { font-size: .82rem; color: #6c757d; margin-top: 2px; }
+.version-card .vc-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.version-card .vc-progress { margin-top: 8px; }
+.version-card .progress { height: 6px; border-radius: 3px; }
+.version-card .progress-bar { border-radius: 3px; }
+
+/* === Status Chips === */
+.status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: .78rem; font-weight: 500; white-space: nowrap; }
+.status-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.status-chip.draft { background: #f1f3f5; color: #495057; } .status-chip.draft .dot { background: #868e96; }
+.status-chip.released { background: #d3f9d8; color: #087f23; } .status-chip.released .dot { background: #2b8a3e; }
+.status-chip.deployed { background: #d0ebff; color: #1864ab; } .status-chip.deployed .dot { background: #1971c2; }
+.status-chip.delisted { background: #f1f3f5; color: #495057; } .status-chip.delisted .dot { background: #495057; }
+.status-chip.pending { background: #fff3bf; color: #856404; } .status-chip.pending .dot { background: #e67700; }
+.status-chip.approved { background: #d3f9d8; color: #087f23; } .status-chip.approved .dot { background: #2b8a3e; }
+.status-chip.deployed-dep { background: #d0ebff; color: #1864ab; } .status-chip.deployed-dep .dot { background: #1971c2; }
+.status-chip.rejected { background: #ffe3e3; color: #c92a2a; } .status-chip.rejected .dot { background: #e03131; }
+
+/* === Wizard Stepper Indicator === */
+.wizard-indicator { display: flex; align-items: center; gap: 0; margin-bottom: 0; }
+.wizard-indicator .wi-step { display: flex; align-items: center; gap: 6px; }
+.wizard-indicator .wi-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; border: 2px solid #dee2e6; background: #f8f9fa; color: #adb5bd; }
+.wizard-indicator .wi-step.active .wi-circle { border-color: #0d6efd; background: #0d6efd; color: #fff; }
+.wizard-indicator .wi-step.done .wi-circle { border-color: #198754; background: #198754; color: #fff; }
+.wizard-indicator .wi-label { font-size: .82rem; color: #adb5bd; }
+.wizard-indicator .wi-step.active .wi-label { color: #0d6efd; font-weight: 600; }
+.wizard-indicator .wi-step.done .wi-label { color: #198754; }
+.wizard-indicator .wi-connector { width: 40px; height: 2px; background: #dee2e6; margin: 0 4px; flex-shrink: 0; }
+.wizard-indicator .wi-step.done + .wi-connector { background: #198754; }
+
+/* === Deploy Target Cards === */
+.deploy-card { border: 1px solid #e9ecef; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; background: #fff; }
+.deploy-card .dc-row { display: flex; justify-content: space-between; align-items: center; }
+.deploy-card .dc-info { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.deploy-card .dc-info-item { font-size: .85rem; }
+.deploy-card .dc-info-item .label { color: #868e96; margin-right: 4px; }
+
+/* === Misc === */
+.step-approval-info { background: #f8f9fa; border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: .82rem; color: #495057; border-left: 3px solid #dee2e6; }
+.step-approval-info.approved { border-left-color: #198754; background: #f0faf3; }
+.step-approval-info.rejected { border-left-color: #dc3545; background: #fff5f5; }
+.version-detail-table th { width: 110px; color: #495057; font-weight: 500; }
+.file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #e9ecef; border-radius: 6px; margin-bottom: 6px; background: #fff; }
+.file-item:hover { background: #f8f9fa; }
+.file-item .file-info { display: flex; align-items: center; gap: 8px; }
 .wizard-step { display: none; }
 .wizard-step.active { display: block; }
 .sub-scenario-tab { cursor: pointer; }
 .sub-scenario-tab.active { font-weight: bold; }
 .ss-config-pane { display: none; }
 .ss-config-pane.active { display: block; }
+.target-list { max-height: 300px; overflow-y: auto; }
 </style>
 
 <div class="row">
@@ -37,7 +96,7 @@
 <div class="tab-content">
     <!-- ========== Tab 1: 版本列表 ========== -->
     <div class="tab-pane fade show active" id="panel-list">
-        <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="btn-group btn-group-sm">
                 <button class="btn btn-outline-primary active" id="scope-mine-btn" onclick="switchVersionScope('mine')">我的待办</button>
                 <button class="btn btn-outline-primary" id="scope-all-btn" onclick="switchVersionScope('all')">全部版本</button>
@@ -53,20 +112,23 @@
         <div id="release-wizard-wrap" style="display:none">
             <div class="row">
                 <div class="col-md-8 mx-auto">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <strong><span id="wizard-step-title">Step 1: 选择版本类型</span></strong>
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <div class="wizard-indicator">
+                                <div class="wi-step active" id="wi-step1"><div class="wi-circle">1</div><span class="wi-label">基本信息</span></div>
+                                <div class="wi-connector" id="wi-conn1"></div>
+                                <div class="wi-step" id="wi-step2"><div class="wi-circle">2</div><span class="wi-label">参数配置</span></div>
+                            </div>
                             <div>
-                                <span class="badge bg-secondary me-1" id="wizard-step-indicator">1/2</span>
                                 <button class="btn btn-sm btn-outline-secondary" id="wizard-prev-btn" style="display:none" onclick="wizardPrev()"><i class="bi bi-chevron-left"></i> 上一步</button>
-                                <button class="btn btn-sm btn-outline-primary" id="wizard-next-btn" onclick="wizardNext()">下一步 <i class="bi bi-chevron-right"></i></button>
+                                <button class="btn btn-sm btn-primary ms-1" id="wizard-next-btn" onclick="wizardNext()">下一步 <i class="bi bi-chevron-right"></i></button>
                             </div>
                         </div>
                         <div class="card-body">
                             <!-- Step 1: Version Type + Basic Info -->
                             <div class="wizard-step active" id="wizard-step-1">
                             <div class="mb-3">
-                                <label class="form-label">版本类型 <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">版本类型 <span class="text-danger">*</span></label>
                                 <div class="d-flex gap-3">
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="version-type" id="type-multi" value="multi_process" checked onchange="onVersionTypeChange()">
@@ -79,12 +141,12 @@
                                 </div>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label">工程名称 <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">工程名称 <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="wiz-project-name" placeholder="如 ProjectA" list="project-name-list" required oninput="onWizProjectName(this.value)">
                                 <datalist id="project-name-list"></datalist>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label">版本号 <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">版本号 <span class="text-danger">*</span></label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="wiz-version" placeholder="自动生成或手动输入" required>
                                     <span class="input-group-text bg-light text-muted small" id="wiz-version-hint" style="font-size:.75rem"></span>
@@ -120,12 +182,12 @@
                             <!-- Multi-process version fields -->
                             <div id="wiz-multi-fields" style="display:none">
                                 <div class="mb-2">
-                                    <label class="form-label">BOM编码 <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">BOM编码 <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control" id="wiz-bom-code" placeholder="多个以逗号/分号分隔，如 02315001,02315002">
                                     <div class="form-text small text-muted">多个BOM编码用逗号或分号分隔，它们可共用相同的子场景参数</div>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label">TPS名称 <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">TPS名称 <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control" id="wiz-tps-name" placeholder="如 TPS-FT-001">
                                 </div>
                                 <div class="mb-2">
@@ -133,7 +195,7 @@
                                     <input type="text" class="form-control" id="wiz-domain-tags" placeholder="如 FT,ESS,ORT（逗号分隔）">
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label">子场景列表 <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">子场景列表 <span class="text-danger">*</span></label>
                                     <div class="small text-muted mb-1">选择预设子场景或自定义输入</div>
                                     <div id="sub-scenario-list" class="mb-2">
                                         <p class="text-muted small mb-0">暂无子场景，请添加</p>
@@ -218,7 +280,7 @@
                             <p class="text-muted small">产品族版本创建成功即可，无需额外配置。</p>
                         </div>
                     </div>
-                    <div class="card-footer">
+                    <div class="card-footer bg-white">
                         <div class="d-flex justify-content-between">
                             <div>
                                 <button class="btn btn-success" id="wiz-submit-btn" style="display:none" onclick="wizardSubmit()"><i class="bi bi-check-lg"></i> 确认创建</button>
@@ -252,45 +314,52 @@
     <div class="tab-pane fade" id="panel-deploy">
         <div class="row">
             <div class="col-md-5">
-                <div class="card mb-3">
-                    <div class="card-header"><strong>发行目标</strong></div>
+                <div class="card mb-3 shadow-sm">
+                    <div class="card-header bg-white"><strong><i class="bi bi-crosshair me-1"></i> 发行目标</strong></div>
                     <div class="card-body">
                         <div class="mb-2">
-                            <label class="form-label">搜索版本</label>
-                            <input type="text" class="form-control" id="deploy-version-input" placeholder="输入工程名称或版本号..." list="deploy-version-list" oninput="onDeployVersionInput(this.value)" autocomplete="off">
+                            <label class="form-label small fw-semibold">搜索版本</label>
+                            <input type="text" class="form-control form-control-sm" id="deploy-version-input" placeholder="输入工程名称或版本号..." list="deploy-version-list" oninput="onDeployVersionInput(this.value)" autocomplete="off">
                             <datalist id="deploy-version-list"></datalist>
                             <input type="hidden" id="deploy-version-id" value="">
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">厂区（多选）</label>
+                            <label class="form-label small fw-semibold">厂区（多选）</label>
+                            <div class="d-flex align-items-center mb-1">
+                                <input class="form-check-input" type="checkbox" id="factory-select-all" onchange="toggleAllFactories(this.checked)">
+                                <label class="form-check-label small ms-1" for="factory-select-all">全选</label>
+                            </div>
                             <div id="factory-checkboxes" class="border rounded p-2" style="max-height:150px;overflow-y:auto;font-size:.85rem">
                                 <p class="text-muted mb-0 small">加载中...</p>
                             </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">线体（可选）</label>
-                            <select class="form-select" id="deploy-line-select"><option value="">所有线体</option></select>
+                            <label class="form-label small fw-semibold">线体（可选）</label>
+                            <select class="form-select form-select-sm" id="deploy-line-select"><option value="">所有线体</option></select>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label">装备（可选）</label>
-                            <select class="form-select" id="deploy-station-select"><option value="">所有装备</option></select>
+                            <label class="form-label small fw-semibold">装备（可选）</label>
+                            <select class="form-select form-select-sm" id="deploy-station-select"><option value="">所有装备</option></select>
                         </div>
                         <hr>
                         <div class="mb-2">
-                            <label class="form-label">TE工程师 <span class="text-danger">*</span></label>
-                            <select class="form-select" id="deploy-te"><option value="">-- 选择 --</option></select>
+                            <label class="form-label small fw-semibold">TE工程师 <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="deploy-te"><option value="">-- 选择 --</option></select>
                         </div>
-                        <button class="btn btn-primary w-100" onclick="addDeployTargets()"><i class="bi bi-plus"></i> 添加发行目标</button>
+                        <button class="btn btn-primary btn-sm w-100" onclick="addDeployTargets()"><i class="bi bi-plus"></i> 添加发行目标</button>
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-header"><strong>已添加目标</strong></div>
-                    <div class="card-body p-0" id="pending-targets" style="max-height:250px;overflow-y:auto"><p class="text-muted text-center mb-0 small py-2">暂无</p></div>
+                    <div class="card-header bg-white"><strong><i class="bi bi-list-check me-1"></i> 已添加目标</strong></div>
+                    <div class="card-body p-2" id="pending-targets" style="max-height:250px;overflow-y:auto"><p class="text-muted text-center mb-0 small py-2">暂无</p></div>
+                    <div class="card-footer bg-white">
+                        <button class="btn btn-primary btn-sm w-100" onclick="submitDeployTargets()"><i class="bi bi-plus"></i> 提交发行目标</button>
+                    </div>
                 </div>
             </div>
             <div class="col-md-7">
-                <div class="card">
-                    <div class="card-header"><strong>发行流程</strong></div>
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white"><strong><i class="bi bi-rocket me-1"></i> 发行流程</strong></div>
                     <div class="card-body" id="deploy-workflow-container">
                         <p class="text-muted text-center mb-0">请先选择版本并添加发行目标</p>
                     </div>
@@ -352,12 +421,11 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('wiz-sequence-select').dataset.loaded = '1';
     });
 
-    // 加载已有工程名称列表（用于自动完成提示）
     apiFetch('/api/versions').then(res => {
         if (res.code === 0 && res.data) {
             const names = [...new Set(res.data.map(v => v.project_name).filter(Boolean))];
             const datalist = document.getElementById('project-name-list');
-            datalist.innerHTML = names.map(n => `<option value="${n}">`).join('');
+            datalist.innerHTML = names.map(n => `<option value="${escHtml(n)}">`).join('');
         }
     });
 
@@ -384,12 +452,10 @@ document.addEventListener('DOMContentLoaded', function() {
         onDeployVersionInput(this.value);
     });
 
-    // 恢复刷新前的 tab 和版本选择
     const savedTab = sessionStorage.getItem('release_active_tab');
     const savedVid = sessionStorage.getItem('release_version_id');
     if (savedTab && savedTab !== 'tab-list') {
         currentVersionId = savedVid ? parseInt(savedVid) : null;
-        // 延迟恢复，等异步数据（版本列表、deploy选项）加载完成
         setTimeout(() => {
             const tabEl = document.getElementById(savedTab);
             if (tabEl) {
@@ -409,7 +475,7 @@ function loadUsers() {
     apiFetch('/api/all-users').then(res => {
         if (res.code !== 0) return;
         allUsers = res.data || [];
-        const opts = allUsers.map(u => `<option value="${u.display_name}">${u.display_name}</option>`).join('');
+        const opts = allUsers.map(u => `<option value="${escHtml(u.display_name)}">${escHtml(u.display_name)}</option>`).join('');
         ['step-test-manager','step-project-manager','deploy-te','wiz-test-manager','wiz-project-manager'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<option value="">-- 选择 --</option>' + opts;
@@ -459,7 +525,6 @@ function onWizProjectName(value) {
             }
         }
     });
-    // Fill inherit dropdown with versions matching this project
     apiFetch('/api/versions').then(res => {
         const sel = document.getElementById('wiz-inherit-from');
         const currentVal = sel.value;
@@ -473,8 +538,7 @@ function onWizProjectName(value) {
         if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
             sel.value = currentVal;
         } else if (sel.options.length > 1) {
-            // Auto-select latest version
-            sel.value = sel.options[sel.options.length - 1].value;
+            sel.value = sel.options[1].value;
         }
     });
 }
@@ -488,7 +552,7 @@ function onWizSequenceChange(seqId) {
         if (!steps.length) { container.style.display = 'none'; return; }
         let html = `<div class="text-muted mb-1">包含 ${steps.length} 个测试步骤：</div><ol class="mb-0" style="padding-left:1.2rem">`;
         steps.forEach(s => {
-            html += `<li>${s.template_name || '步骤 ' + s.step_order}</li>`;
+            html += `<li>${escHtml(s.template_name || '步骤 ' + s.step_order)}</li>`;
         });
         html += '</ol>';
         container.innerHTML = html;
@@ -497,723 +561,38 @@ function onWizSequenceChange(seqId) {
 }
 
 function onInheritToggle() {
-    const checked = document.getElementById('wiz-inherit-enable').checked;
-    document.getElementById('wiz-inherit-from').disabled = !checked;
-    if (checked) {
-        onInheritSourceChange();
-    }
+    const enabled = document.getElementById('wiz-inherit-enable').checked;
+    document.getElementById('wiz-inherit-from').disabled = !enabled;
+    if (enabled) onInheritSourceChange();
 }
-
 function onInheritSourceChange() {
-    const vid = document.getElementById('wiz-inherit-from').value;
-    if (!vid) return;
-    const type = document.querySelector('input[name="version-type"]:checked').value;
-    apiFetch(`/api/versions/${vid}/inherit-data`).then(res => {
+    const srcId = document.getElementById('wiz-inherit-from').value;
+    if (!srcId) return;
+    apiFetch('/api/versions/' + srcId).then(res => {
         if (res.code !== 0 || !res.data) return;
-        const src = res.data;
-        document.getElementById('wiz-description').value = src.description || '';
-        if (type === 'multi_process') {
-            document.getElementById('wiz-bom-code').value = src.bom_code || '';
-            document.getElementById('wiz-tps-name').value = src.tps_name || '';
-            document.getElementById('wiz-domain-tags').value = src.domain_tags || '';
-            if (src.sub_scenarios && src.sub_scenarios.length) {
-                wizSubScenarios = src.sub_scenarios.map(s => ({
-                    name: s.name,
-                    process_type: s.process_type || s.name.split('-')[0] || '',
-                    workstation: s.workstation || s.name.split('-')[1] || '',
-                    sequence_id: s.sequence_id || 0,
-                }));
-                renderSubScenarioList();
-            }
-        } else if (type === 'standard') {
-            if (src.sequence_id) {
-                const seqSel = document.getElementById('wiz-sequence-select');
-                if ([...seqSel.options].some(o => parseInt(o.value) === src.sequence_id)) {
-                    seqSel.value = src.sequence_id;
-                }
-            }
+        const v = res.data;
+        if (v.project_name) document.getElementById('wiz-project-name').value = v.project_name;
+        if (v.bom_code) document.getElementById('wiz-bom-code').value = v.bom_code;
+        if (v.tps_name) document.getElementById('wiz-tps-name').value = v.tps_name;
+        if (v.domain_tags) document.getElementById('wiz-domain-tags').value = v.domain_tags;
+        if (v.description) document.getElementById('wiz-description').value = v.description;
+        if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
+            wizSubScenarios = v.sub_scenarios.map(s => ({
+                name: s.name,
+                process_type: s.process_type || '',
+                workstation: s.workstation || '',
+                sequence_id: s.sequence_id || null,
+                hardware_params: s.hardware_params || null,
+                software_metrics: s.software_metrics || null,
+                property_page: s.property_page || null,
+            }));
+            renderSubScenarios();
+            renderSSConfig();
         }
     });
 }
 
-// ==================== 子场景管理 ====================
-function addSubScenarioFromPreset() {
-    const sel = document.getElementById('sub-scenario-preset');
-    const name = sel.value;
-    if (!name) return;
-    if (wizSubScenarios.some(s => s.name === name)) { alert('子场景已存在'); return; }
-    wizSubScenarios.push({name, process_type: name.split('-')[0] || '', workstation: name.split('-')[1] || '', sequence_id: 0});
-    renderSubScenarioList();
-    sel.value = '';
-}
-
-function addSubScenarioCustom() {
-    const input = document.getElementById('sub-scenario-custom');
-    let name = input.value.trim().toUpperCase();
-    if (!name) return;
-    const parts = name.split('-');
-    if (parts.length !== 2 || !parts[0] || !parts[1]) {
-        alert('子场景名称格式必须为"工序-工位"，如 FT-MP1、ORT-MP1');
-        return;
-    }
-    if (wizSubScenarios.some(s => s.name === name)) { alert('子场景已存在'); return; }
-    wizSubScenarios.push({name, process_type: name.split('-')[0] || '', workstation: name.split('-')[1] || '', sequence_id: 0});
-    renderSubScenarioList();
-    input.value = '';
-}
-
-function removeSubScenario(index) {
-    wizSubScenarios.splice(index, 1);
-    renderSubScenarioList();
-}
-
-function renderSubScenarioList() {
-    const container = document.getElementById('sub-scenario-list');
-    if (!wizSubScenarios.length) {
-        container.innerHTML = '<p class="text-muted small mb-0">暂无子场景，请添加</p>';
-        return;
-    }
-    let html = '<div style="max-height:200px;overflow-y:auto">';
-    wizSubScenarios.forEach((s, i) => {
-        html += `<div class="d-flex justify-content-between align-items-center mb-1 p-1 border rounded">
-            <span><strong>${i+1}.</strong> ${s.name} <small class="text-muted">(${s.process_type || '?'}/${s.workstation || '?'})</small></span>
-            <button class="btn btn-sm btn-outline-danger py-0" onclick="removeSubScenario(${i})"><i class="bi bi-x"></i></button>
-        </div>`;
-    });
-    html += '</div>';
-    container.innerHTML = html;
-}
-
-// ==================== 向导导航 ====================
-let wizardStep = 1;
-
-function wizardNext() {
-    if (wizardStep === 1) {
-        const type = document.querySelector('input[name="version-type"]:checked').value;
-        const projectName = document.getElementById('wiz-project-name').value.trim();
-        const version = document.getElementById('wiz-version').value.trim();
-        if (!projectName) { alert('请输入工程名称'); return; }
-        if (!version) { alert('请输入版本号'); return; }
-        if (type === 'standard') {
-            const seqId = document.getElementById('wiz-sequence-select').value;
-            if (!seqId) { alert('标准版本必须选择测试序列'); return; }
-            // Auto-create draft version
-            autoCreateDraft(type, projectName, version, function() {
-                showWizardStep(2); // standard config
-            });
-            return;
-        }
-        if (type === 'multi_process') {
-            const bom = document.getElementById('wiz-bom-code').value.trim();
-            const tps = document.getElementById('wiz-tps-name').value.trim();
-            if (!bom) { alert('多工序版本必须填写BOM编码'); return; }
-            if (!tps) { alert('多工序版本必须填写TPS名称'); return; }
-            if (!wizSubScenarios.length) { alert('请至少添加一个子场景'); return; }
-            // Don't create draft yet - collect files in Step 2, create all at once
-            buildSubScenarioConfigTabs();
-            showWizardStep(2); // multi-process config
-            return;
-        }
-        if (type === 'product_family') {
-            autoCreateDraft(type, projectName, version, function() {
-                showWizardStep(2); // family - just show submit
-            });
-            return;
-        }
-    }
-}
-
-function autoCreateDraft(type, projectName, version, onSuccess) {
-    if (editingVersionId) {
-        // Already have a draft, update it
-        updateDraftSubScenarios(onSuccess);
-        return;
-    }
-    const description = document.getElementById('wiz-description').value.trim();
-    const data = {version, project_name: projectName, description, type};
-    if (type === 'multi_process') {
-        data.bom_code = document.getElementById('wiz-bom-code').value.trim();
-        data.tps_name = document.getElementById('wiz-tps-name').value.trim();
-        data.domain_tags = document.getElementById('wiz-domain-tags').value.trim();
-        data.sub_scenarios = wizSubScenarios.map(s => ({
-            name: s.name, process_type: s.process_type, workstation: s.workstation,
-        }));
-    }
-    if (type === 'standard') {
-        data.sequence_id = parseInt(document.getElementById('wiz-sequence-select').value) || 0;
-    }
-    const btn = document.getElementById('wizard-next-btn');
-    btn.disabled = true; btn.textContent = '保存中...';
-    apiFetch('/api/versions', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-    }).then(res => {
-        btn.disabled = false; btn.textContent = '下一步 \u276F';
-        if (res.code !== 0) { alert(res.message); return; }
-        editingVersionId = res.data.id;
-        document.getElementById('wiz-version').readOnly = true;
-        document.querySelectorAll('input[name="version-type"]').forEach(r => r.disabled = true);
-        loadVersionList();
-        onSuccess();
-    }).catch(() => {
-        btn.disabled = false; btn.textContent = '下一步 \u276F';
-        alert('创建草稿失败，请重试');
-    });
-}
-
-function updateDraftSubScenarios(onSuccess) {
-    const data = {sub_scenarios: wizSubScenarios.map(s => ({
-        name: s.name, process_type: s.process_type, workstation: s.workstation,
-    }))};
-    apiFetch('/api/versions/' + editingVersionId, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-    }).then(res => {
-        if (res.code !== 0) { alert(res.message); return; }
-        loadVersionList();
-        onSuccess();
-    });
-}
-
-function wizardPrev() {
-    showWizardStep(1);
-}
-
-function showWizardStep(step) {
-    wizardStep = step;
-    const type = document.querySelector('input[name="version-type"]:checked').value;
-    document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
-
-    const step1 = document.getElementById('wizard-step-1');
-    const step2 = document.getElementById('wizard-step-2');
-    const step2s = document.getElementById('wizard-step-2-standard');
-    const step2f = document.getElementById('wizard-step-2-family');
-
-    step1.classList.remove('active');
-    step2.classList.remove('active');
-    step2s.classList.remove('active');
-    step2f.classList.remove('active');
-
-    if (step === 1) {
-        step1.classList.add('active');
-        document.getElementById('wizard-step-title').textContent = editingVersionId ? '编辑版本 (Step 1)' : 'Step 1: 选择版本类型与基本信息';
-        document.getElementById('wizard-step-indicator').textContent = editingVersionId ? '' : '1/2';
-        document.getElementById('wizard-prev-btn').style.display = 'none';
-        document.getElementById('wizard-prev-btn-bottom').style.display = 'none';
-        document.getElementById('wizard-next-btn').style.display = '';
-        document.getElementById('wizard-next-btn-bottom').style.display = '';
-        document.getElementById('wiz-submit-btn').style.display = 'none';
-    } else {
-        if (type === 'multi_process') {
-            step2.classList.add('active');
-            document.getElementById('wizard-step-title').textContent = editingVersionId ? '编辑版本 (Step 2): 配置子场景参数' : 'Step 2: 配置子场景参数';
-        } else if (type === 'standard') {
-            step2s.classList.add('active');
-            document.getElementById('wizard-step-title').textContent = editingVersionId ? '编辑版本 (Step 2): 配置参数文件' : 'Step 2: 配置参数文件';
-        } else {
-            step2f.classList.add('active');
-            document.getElementById('wizard-step-title').textContent = editingVersionId ? '编辑版本 (Step 2): 确认保存' : 'Step 2: 确认创建';
-        }
-        document.getElementById('wizard-step-indicator').textContent = editingVersionId ? '' : '2/2';
-        document.getElementById('wizard-prev-btn').style.display = '';
-        document.getElementById('wizard-prev-btn-bottom').style.display = '';
-        document.getElementById('wizard-next-btn').style.display = 'none';
-        document.getElementById('wizard-next-btn-bottom').style.display = 'none';
-        document.getElementById('wiz-submit-btn').style.display = '';
-        document.getElementById('wiz-submit-btn').innerHTML = editingVersionId
-            ? '<i class="bi bi-check-lg"></i> 保存修改'
-            : '<i class="bi bi-check-lg"></i> 确认创建';
-    }
-}
-
-// ==================== 子场景配置标签页 ====================
-function buildSubScenarioConfigTabs() {
-    const container = document.getElementById('ss-config-container');
-    if (!wizSubScenarios.length) {
-        container.innerHTML = '<p class="text-muted text-center py-3">请先在 Step 1 添加子场景</p>';
-        return;
-    }
-    // Build tabs and panes
-    let tabsHtml = '<ul class="nav nav-tabs mb-2" id="ss-config-tabs">';
-    let panesHtml = '<div class="tab-content">';
-    wizSubScenarios.forEach((s, i) => {
-        const active = i === 0 ? 'active' : '';
-        tabsHtml += `<li class="nav-item"><button class="nav-link sub-scenario-tab ${active}" data-bs-toggle="tab" data-bs-target="#ss-pane-${i}" type="button">${s.name}</button></li>`;
-        panesHtml += `<div class="tab-pane fade ${i === 0 ? 'show active' : ''}" id="ss-pane-${i}">
-            <div class="mb-2">
-                <label class="form-label">测试序列</label>
-                <select class="form-select form-select-sm ss-sequence-select" data-index="${i}" onchange="onSSSequenceChange(${i}, this.value)">
-                    <option value="">-- 选择测试序列 --</option>
-                </select>
-                <div id="ss-steps-${i}" class="small" style="display:none"></div>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">硬件参数（JSON）</label>
-                <input type="file" class="form-control form-control-sm ss-hw-file" accept=".json" data-index="${i}" onchange="onSSFileChange(${i},'hardware_params',this)">
-            </div>
-            <div class="mb-2">
-                <label class="form-label">软件指标（JSON/INI）</label>
-                <input type="file" class="form-control form-control-sm ss-sw-file" accept=".json,.ini" multiple data-index="${i}" onchange="onSSSwFilesChange(${i},this)">
-            </div>
-            <div class="mb-2">
-                <label class="form-label">属性页（JSON）</label>
-                <input type="file" class="form-control form-control-sm ss-pp-file" accept=".json" data-index="${i}" onchange="onSSFileChange(${i},'property_page',this)">
-            </div>
-            <div class="small text-muted">工序: ${s.process_type || '-'}, 工位: ${s.workstation || '-'}</div>
-        </div>`;
-    });
-    tabsHtml += '</ul>';
-    panesHtml += '</div>';
-    container.innerHTML = tabsHtml + panesHtml;
-
-    // Load sequences into each tab
-    apiFetch('/api/tests/sequences?active_only=true').then(res => {
-        if (res.code !== 0 || !res.data) return;
-        document.querySelectorAll('.ss-sequence-select').forEach(sel => {
-            const idx = parseInt(sel.dataset.index);
-            let opts = '<option value="">-- 选择测试序列 --</option>';
-            res.data.forEach(s => {
-                opts += `<option value="${s.id}">${s.name} (v${s.version})</option>`;
-            });
-            sel.innerHTML = opts;
-            if (wizSubScenarios[idx] && wizSubScenarios[idx].sequence_id) {
-                sel.value = wizSubScenarios[idx].sequence_id;
-                onSSSequenceChange(idx, sel.value);
-            }
-        });
-    });
-}
-
-function onSSFileChange(index, field, input) {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-        if (wizSubScenarios[index]) wizSubScenarios[index][field] = reader.result;
-    };
-    reader.readAsText(file);
-}
-
-function onSSSwFilesChange(index, input) {
-    const files = input.files;
-    if (!files.length) return;
-    const entries = [];
-    let pending = files.length;
-    for (let j = 0; j < files.length; j++) {
-        const reader = new FileReader();
-        reader.onload = () => {
-            entries[j] = reader.result;
-            pending--;
-            if (pending === 0 && wizSubScenarios[index]) {
-                wizSubScenarios[index].software_metrics = JSON.stringify(entries.filter(Boolean));
-            }
-        };
-        reader.readAsText(files[j]);
-    }
-}
-
-function onSSSequenceChange(index, value) {
-    if (wizSubScenarios[index]) {
-        wizSubScenarios[index].sequence_id = parseInt(value) || 0;
-    }
-    // Show steps for this sub-scenario
-    const container = document.getElementById('ss-steps-' + index);
-    if (!container) return;
-    if (!value) { container.style.display = 'none'; return; }
-    apiFetch('/api/tests/sequences/' + value).then(res => {
-        if (res.code !== 0 || !res.data) { container.style.display = 'none'; return; }
-        const steps = res.data.steps || [];
-        if (!steps.length) { container.style.display = 'none'; return; }
-        let html = `<div class="small text-muted mt-1">包含 ${steps.length} 个步骤：</div><ol class="small mb-0" style="padding-left:1.1rem">`;
-        steps.forEach(s => {
-            html += `<li>${s.template_name || '步骤 ' + s.step_order}</li>`;
-        });
-        html += '</ol>';
-        container.innerHTML = html;
-        container.style.display = '';
-    }).catch(() => { container.style.display = 'none'; });
-}
-
-// ==================== 二进制文件 ====================
-function handleWizBinaryUpload() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.onchange = function() {
-        for (const f of input.files) wizBinaryFiles.push(f);
-        renderWizBinaryFiles();
-    };
-    input.click();
-}
-
-function renderWizBinaryFiles() {
-    const container = document.getElementById('wiz-binary-list');
-    if (!wizBinaryFiles.length) {
-        container.innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
-        return;
-    }
-    let html = '<div style="max-height:120px;overflow-y:auto">';
-    wizBinaryFiles.forEach((f, i) => {
-        html += `<div class="d-flex justify-content-between align-items-center mb-1">
-            <small><i class="bi bi-file-earmark"></i> ${f.name} (${(f.size/1024).toFixed(1)} KB)</small>
-            <button class="btn btn-sm btn-outline-danger py-0" onclick="wizBinaryFiles.splice(${i},1);renderWizBinaryFiles()"><i class="bi bi-x"></i></button>
-        </div>`;
-    });
-    html += '</div>';
-    html += `<button class="btn btn-outline-primary btn-sm w-100 mt-1" onclick="handleWizBinaryUpload()"><i class="bi bi-plus"></i> 添加文件</button>`;
-    container.innerHTML = html;
-}
-
-// ==================== 向导提交 ====================
-function wizardSubmit() {
-    const type = document.querySelector('input[name="version-type"]:checked').value;
-    if (editingVersionId) {
-        finishEditVersion(type);
-        return;
-    }
-    const project_name = document.getElementById('wiz-project-name').value.trim();
-    const version = document.getElementById('wiz-version').value.trim();
-    const description = document.getElementById('wiz-description').value.trim();
-    const steps_config = {
-        test_manager: document.getElementById('wiz-test-manager').value,
-        project_manager: document.getElementById('wiz-project-manager').value,
-    };
-    if (type === 'standard') {
-        submitStandardVersion(project_name, version, description, steps_config);
-    } else if (type === 'multi_process') {
-        submitMultiProcessVersion(project_name, version, description, steps_config);
-    } else {
-        submitProductFamilyVersion(project_name, version, description, steps_config);
-    }
-}
-
-function finishEditVersion(type) {
-    const btn = document.getElementById('wiz-submit-btn');
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 保存中...';
-
-    if (type === 'standard') {
-        const sequence_id = parseInt(document.getElementById('wiz-sequence-select').value) || 0;
-        const steps_config = {
-            test_manager: document.getElementById('wiz-test-manager').value,
-            project_manager: document.getElementById('wiz-project-manager').value,
-        };
-        const hwFile = document.getElementById('wiz-hw-file').files[0];
-        const swFiles = document.getElementById('wiz-sw-file').files;
-        const propFile = document.getElementById('wiz-pp-file').files[0];
-        const readFile = (file) => new Promise((resolve) => {
-            if (!file) { resolve(null); return; }
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsText(file);
-        });
-        const readTasks = [readFile(hwFile)];
-        for (let i = 0; i < swFiles.length; i++) readTasks.push(readFile(swFiles[i]));
-        readTasks.push(readFile(propFile));
-        Promise.all(readTasks).then(results => {
-            const archive_items = [];
-            let idx = 0;
-            const hwContent = results[idx++];
-            if (hwContent && hwContent.trim()) {
-                archive_items.push({type: 'hardware_params', item_id: 0, data_snapshot: hwContent.trim()});
-            }
-            for (let i = 0; i < swFiles.length; i++) {
-                const swContent = results[idx++];
-                if (swContent && swContent.trim()) {
-                    const isIni = swFiles[i].name.toLowerCase().endsWith('.ini');
-                    archive_items.push({type: isIni ? 'metrics_ini' : 'metrics_json', item_id: 0, data_snapshot: swContent.trim()});
-                }
-            }
-            const propContent = results[idx];
-            if (propContent && propContent.trim()) {
-                archive_items.push({type: 'property_page', item_id: 0, data_snapshot: propContent.trim()});
-            }
-            return apiFetch('/api/versions/' + editingVersionId, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({archive_items, steps_config, sequence_id, type: 'standard'}),
-            }).then(res => doFinishEdit(res, btn));
-        }).catch(err => {
-            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 保存修改';
-            alert('读取文件失败: ' + (err.message || err));
-        });
-        return;
-    }
-
-    if (type === 'multi_process') {
-        const data = {
-            bom_code: document.getElementById('wiz-bom-code').value.trim(),
-            tps_name: document.getElementById('wiz-tps-name').value.trim(),
-            domain_tags: document.getElementById('wiz-domain-tags').value.trim(),
-            sub_scenarios: [],
-        };
-        const ssReadPromises = wizSubScenarios.map((s, i) => {
-            const hwFile = document.querySelector(`.ss-hw-file[data-index="${i}"]`)?.files?.[0];
-            const swFiles = document.querySelector(`.ss-sw-file[data-index="${i}"]`)?.files || [];
-            const ppFile = document.querySelector(`.ss-pp-file[data-index="${i}"]`)?.files?.[0];
-            const readFile = (file) => new Promise((resolve) => {
-                if (!file) { resolve(null); return; }
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => resolve(null);
-                reader.readAsText(file);
-            });
-            const reads = [readFile(hwFile)];
-            for (let j = 0; j < swFiles.length; j++) reads.push(readFile(swFiles[j]));
-            reads.push(readFile(ppFile));
-            return Promise.all(reads);
-        });
-        Promise.all(ssReadPromises).then(allResults => {
-            allResults.forEach((results, i) => {
-                let idx2 = 0;
-                const fileHw = results[idx2++];
-                const swEntries = [];
-                for (let j = 0; j < results.length - 2; j++) {
-                    const content = results[idx2++];
-                    if (content && content.trim()) swEntries.push(content.trim());
-                }
-                const filePp = results[idx2];
-                const existingSw = wizSubScenarios[i].software_metrics;
-                let existingSwEntries = [];
-                if (Array.isArray(existingSw)) existingSwEntries = existingSw.map(x => typeof x === 'string' ? x : JSON.stringify(x));
-                else if (typeof existingSw === 'string' && existingSw.trim()) {
-                    try { const p = JSON.parse(existingSw); existingSwEntries = Array.isArray(p) ? p.map(x => typeof x === 'string' ? x : JSON.stringify(x)) : []; } catch(e) {}
-                }
-                data.sub_scenarios.push({
-                    name: wizSubScenarios[i].name,
-                    process_type: wizSubScenarios[i].process_type,
-                    workstation: wizSubScenarios[i].workstation,
-                    sequence_id: parseInt(document.querySelector(`.ss-sequence-select[data-index="${i}"]`)?.value) || 0,
-                    hardware_params: (fileHw && fileHw.trim()) ? fileHw.trim() : (typeof wizSubScenarios[i].hardware_params === 'string' ? wizSubScenarios[i].hardware_params : JSON.stringify(wizSubScenarios[i].hardware_params || {})),
-                    software_metrics: swEntries.length ? JSON.stringify(swEntries) : (typeof existingSw === 'string' ? existingSw : JSON.stringify(existingSw || [])),
-                    property_page: (filePp && filePp.trim()) ? filePp.trim() : (typeof wizSubScenarios[i].property_page === 'string' ? wizSubScenarios[i].property_page : JSON.stringify(wizSubScenarios[i].property_page || {})),
-                });
-            });
-            return apiFetch('/api/versions/' + editingVersionId, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data),
-            }).then(res => doFinishEdit(res, btn));
-        }).catch(err => {
-            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 保存修改';
-            alert('读取文件失败: ' + (err.message || err));
-        });
-        return;
-    }
-
-    // product_family
-    const data = {
-        bom_code: document.getElementById('wiz-bom-code').value.trim(),
-        tps_name: document.getElementById('wiz-tps-name').value.trim(),
-        domain_tags: document.getElementById('wiz-domain-tags').value.trim(),
-    };
-    apiFetch('/api/versions/' + editingVersionId, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-    }).then(res => doFinishEdit(res, btn));
-}
-
-function doFinishEdit(res, btn) {
-    btn.disabled = false;
-    if (res.code !== 0) { alert(res.message); btn.innerHTML = '<i class="bi bi-check-lg"></i> 保存修改'; return; }
-    const vid = editingVersionId;
-    editingVersionId = null;
-    document.querySelectorAll('input[name="version-type"]').forEach(r => r.disabled = false);
-    document.getElementById('wiz-version').readOnly = false;
-    resetWizard();
-    loadVersionList();
-    currentVersionId = vid;
-    document.querySelector('#tab-release').click();
-    setTimeout(() => showReleaseWorkflow(vid), 150);
-}
-
-function submitStandardVersion(project_name, version, description, steps_config) {
-    const sequence_id = parseInt(document.getElementById('wiz-sequence-select').value) || 0;
-    const btn = document.getElementById('wiz-submit-btn');
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 读取文件中...';
-
-    const hwFile = document.getElementById('wiz-hw-file').files[0];
-    const swFiles = document.getElementById('wiz-sw-file').files;
-    const propFile = document.getElementById('wiz-pp-file').files[0];
-    const readFile = (file) => new Promise((resolve, reject) => {
-        if (!file) { resolve(null); return; }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsText(file);
-    });
-
-    const readTasks = [readFile(hwFile)];
-    for (let i = 0; i < swFiles.length; i++) readTasks.push(readFile(swFiles[i]));
-    readTasks.push(readFile(propFile));
-
-    Promise.all(readTasks).then(results => {
-        const archive_items = [];
-        let idx = 0;
-        const hwContent = results[idx++];
-        if (hwContent && hwContent.trim()) {
-            archive_items.push({type: 'hardware_params', item_id: 0, data_snapshot: hwContent.trim()});
-        }
-        for (let i = 0; i < swFiles.length; i++) {
-            const swContent = results[idx++];
-            if (swContent && swContent.trim()) {
-                const isIni = swFiles[i].name.toLowerCase().endsWith('.ini');
-                archive_items.push({type: isIni ? 'metrics_ini' : 'metrics_json', item_id: 0, data_snapshot: swContent.trim()});
-            }
-        }
-        const propContent = results[idx];
-        if (propContent && propContent.trim()) {
-            archive_items.push({type: 'property_page', item_id: 0, data_snapshot: propContent.trim()});
-        }
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
-        return apiFetch('/api/versions', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({version, project_name, description, archive_items, steps_config, sequence_id, type: 'standard'}),
-        });
-    }).then(res => {
-        finishWizardSubmit(res, btn, '标准版本创建成功');
-    }).catch(err => {
-        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
-        alert('读取文件失败: ' + (err.message || err));
-    });
-}
-
-function submitMultiProcessVersion(project_name, version, description, steps_config) {
-    const bom_code = document.getElementById('wiz-bom-code').value.trim();
-    const tps_name = document.getElementById('wiz-tps-name').value.trim();
-    const domain_tags = document.getElementById('wiz-domain-tags').value.trim();
-    const inherit_from_id = document.getElementById('wiz-inherit-from').value || null;
-
-    // Collect sub-scenario configs from file inputs
-    const sub_scenarios = wizSubScenarios.map((s, i) => ({
-        name: s.name,
-        process_type: s.process_type,
-        workstation: s.workstation,
-        sequence_id: parseInt(document.querySelector(`.ss-sequence-select[data-index="${i}"]`)?.value) || 0,
-    }));
-
-    const btn = document.getElementById('wiz-submit-btn');
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 读取文件中...';
-
-    // Read files from each sub-scenario tab
-    const ssReadPromises = wizSubScenarios.map((s, i) => {
-        const hwFile = document.querySelector(`.ss-hw-file[data-index="${i}"]`)?.files?.[0];
-        const swFiles = document.querySelector(`.ss-sw-file[data-index="${i}"]`)?.files || [];
-        const ppFile = document.querySelector(`.ss-pp-file[data-index="${i}"]`)?.files?.[0];
-        const readFile = (file) => new Promise((resolve) => {
-            if (!file) { resolve(null); return; }
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsText(file);
-        });
-        const reads = [readFile(hwFile)];
-        for (let j = 0; j < swFiles.length; j++) reads.push(readFile(swFiles[j]));
-        reads.push(readFile(ppFile));
-        return Promise.all(reads);
-    });
-
-    Promise.all(ssReadPromises).then(allResults => {
-        allResults.forEach((results, i) => {
-            let idx = 0;
-            const hw = results[idx++] || '{}';
-            const swEntries = [];
-            for (let j = 0; j < results.length - 2; j++) {
-                const content = results[idx++];
-                if (content && content.trim()) swEntries.push(content.trim());
-            }
-            const pp = results[idx] || '{}';
-            sub_scenarios[i].hardware_params = hw;
-            sub_scenarios[i].software_metrics = JSON.stringify(swEntries);
-            sub_scenarios[i].property_page = pp;
-        });
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
-        return apiFetch('/api/versions', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                version, project_name, description, steps_config,
-                type: 'multi_process', bom_code, tps_name, domain_tags,
-                inherit_from_id: inherit_from_id ? parseInt(inherit_from_id) : null,
-                sub_scenarios,
-            }),
-        });
-    }).then(res => {
-        finishWizardSubmit(res, btn, '多工序版本创建成功');
-    }).catch(err => {
-        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
-        alert('读取文件失败: ' + (err.message || err));
-    });
-}
-
-function submitProductFamilyVersion(project_name, version, description, steps_config) {
-    const btn = document.getElementById('wiz-submit-btn');
-    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
-    apiFetch('/api/versions', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({version, project_name, description, steps_config, type: 'product_family'}),
-    }).then(res => {
-        finishWizardSubmit(res, btn, '产品族版本创建成功');
-    });
-}
-
-function finishWizardSubmit(res, btn, successMsg) {
-    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
-    if (!res || res.code !== 0) { alert((res && res.message) || '创建失败'); return; }
-    const vid = res.data.id;
-    const filesToUpload = wizBinaryFiles.slice();
-    alert(successMsg);
-    resetWizard();
-    currentVersionId = vid;
-    loadVersionList();
-    loadDeployVersions();
-    document.querySelector('#tab-release').click();
-    setTimeout(() => showReleaseWorkflow(vid), 150);
-    if (filesToUpload.length > 0) {
-        uploadBinariesSequentially(vid, filesToUpload, 0);
-    }
-}
-
-function uploadBinariesSequentially(vid, files, idx) {
-    if (idx >= files.length) return;
-    const file = files[idx];
-    const formData = new FormData();
-    formData.append('file', file);
-    apiFetch('/api/versions/' + vid + '/binaries', {
-        method: 'POST',
-        body: formData,
-    }).then(() => uploadBinariesSequentially(vid, files, idx + 1));
-}
-
-function resetWizard() {
-    editingVersionId = null;
-    wizSubScenarios = [];
-    wizBinaryFiles = [];
-    renderSubScenarioList();
-    document.getElementById('wiz-project-name').value = '';
-    document.getElementById('wiz-version').value = '';
-    document.getElementById('wiz-description').value = '';
-    document.getElementById('wiz-bom-code').value = '';
-    document.getElementById('wiz-tps-name').value = '';
-    document.getElementById('wiz-domain-tags').value = '';
-    document.getElementById('wiz-hw-file').value = '';
-    document.getElementById('wiz-sw-file').value = '';
-    document.getElementById('wiz-pp-file').value = '';
-    document.getElementById('wiz-binary-list').innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
-    document.getElementById('ss-config-container').innerHTML = '<p class="text-muted text-center py-3">请先在 Step 1 添加子场景</p>';
-    showWizardStep(1);
-    onVersionTypeChange();
-}
-
-// ==================== Tab 1: 版本列表 ====================
 let versionListScope = 'mine';
-let currentUserRole = '';
-
 function switchVersionScope(scope) {
     versionListScope = scope;
     document.getElementById('scope-mine-btn').classList.toggle('active', scope === 'mine');
@@ -1221,6 +600,7 @@ function switchVersionScope(scope) {
     loadVersionList();
 }
 
+// ==================== 版本列表 ====================
 function loadVersionList() {
     const container = document.getElementById('version-list-container');
     container.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载中...</p>';
@@ -1246,26 +626,26 @@ function loadVersionList() {
             const isDelisted = v.status === 'delisted';
             const canOperate = userLevel >= 3 || (userLevel >= 2 && (!isAllScope || v.is_mine));
             const disabledAttr = canOperate ? '' : ' disabled title="无操作权限"';
-            const extras = v.type === 'multi_process' ? ` <small class="text-muted">BOM:${(v.bom_code||'-').replace(/[,;，；]+/g,', ')} TPS:${v.tps_name||'-'}</small>` : '';
+            const extras = v.type === 'multi_process' ? ` <small class="text-muted">BOM:${escHtml((v.bom_code||'-').replace(/[,;，；]+/g,', '))} TPS:${escHtml(v.tps_name||'-')}</small>` : '';
             html += `<tr>
                 <td><span class="badge bg-secondary">${typeBadge}</span></td>
-                <td><span class="badge bg-info bg-opacity-10 text-dark">${v.project_name || '-'}</span></td>
-                <td><strong>${v.version}</strong>${extras}</td>
-                <td>${v.description || '-'}</td>
+                <td><span class="badge bg-info bg-opacity-10 text-dark">${escHtml(v.project_name || '-')}</span></td>
+                <td><strong>${escHtml(v.version || '')}</strong>${extras}</td>
+                <td>${escHtml(v.description || '-')}</td>
                 <td><span class="badge bg-${clMap[v.status] || 'secondary'}">${stMap[v.status] || v.status}</span></td>
-                <td>${v.step_progress}</td>
-                <td>${v.deploy_progress}</td>
-                <td>${(v.deploy_factories||[]).length ? v.deploy_factories.map(f => `<span class="badge bg-info bg-opacity-25 text-dark me-1">${f}</span>`).join('') : '-'}</td>
-                <td>${v.created_by || '-'}</td>
+                <td>${v.step_progress || ''}</td>
+                <td>${v.deploy_progress || ''}</td>
+                <td>${(v.deploy_factories||[]).length ? v.deploy_factories.map(f => `<span class="badge bg-info bg-opacity-25 text-dark me-1">${escHtml(f)}</span>`).join('') : '-'}</td>
+                <td>${escHtml(v.created_by || '-')}</td>
                 <td style="font-size:.8rem">${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</td>
                 <td>
-                    ${v.status === 'draft' ? `<button class="btn btn-outline-warning btn-sm" onclick="editVersion(${v.id})"${disabledAttr}><i class="bi bi-pencil"></i> 编辑</button>` : ''}
-                    <button class="btn btn-outline-primary btn-sm" onclick="switchToRelease(${v.id})"${disabledAttr}><i class="bi bi-send"></i> 发布</button>
-                    <button class="btn btn-outline-success btn-sm" onclick="switchToDeploy(${v.id})"${disabledAttr}><i class="bi bi-rocket"></i> 发行</button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="showVersionDetail(${v.id})"><i class="bi bi-info-circle"></i> 详情</button>
-                    ${canDelist ? `<button class="btn btn-outline-dark btn-sm" onclick="delistVersion(${v.id})"${disabledAttr}><i class="bi bi-archive"></i> 下架</button>` : ''}
-                    ${isDelisted ? `<button class="btn btn-outline-info btn-sm" onclick="restoreVersion(${v.id})"${disabledAttr}><i class="bi bi-arrow-up-circle"></i> 上架</button>` : ''}
-                    ${canDelete ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id})"${disabledAttr}><i class="bi bi-trash"></i> 删除</button>` : ''}
+                    ${v.status === 'draft' ? `<button class="btn btn-outline-warning btn-sm" onclick="editVersion(${v.id})"${disabledAttr} title="编辑"><i class="bi bi-pencil"></i></button> ` : ''}
+                    <button class="btn btn-outline-primary btn-sm" onclick="switchToRelease(${v.id})"${disabledAttr} title="版本发布"><i class="bi bi-send"></i></button>
+                    <button class="btn btn-outline-success btn-sm" onclick="switchToDeploy(${v.id})"${disabledAttr} title="版本发行"><i class="bi bi-rocket"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="showVersionDetail(${v.id})" title="详情"><i class="bi bi-info-circle"></i></button>
+                    ${canDelist ? `<button class="btn btn-outline-dark btn-sm" onclick="delistVersion(${v.id})"${disabledAttr} title="下架"><i class="bi bi-archive"></i></button> ` : ''}
+                    ${isDelisted ? `<button class="btn btn-outline-info btn-sm" onclick="restoreVersion(${v.id})"${disabledAttr} title="上架"><i class="bi bi-arrow-up-circle"></i></button> ` : ''}
+                    ${canDelete ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id})"${disabledAttr} title="删除"><i class="bi bi-trash"></i></button>` : ''}
                 </td>
             </tr>`;
         });
@@ -1295,6 +675,8 @@ function switchToDeploy(vid) {
 function showReleaseWizardOnly() {
     document.getElementById('release-wizard-wrap').style.display = '';
     document.getElementById('release-workflow-wrap').style.display = 'none';
+    updateWizardStepIndicator();
+    onVersionTypeChange();
 }
 
 function showReleaseWorkflowOnly() {
@@ -1327,22 +709,24 @@ function renderReleaseWorkflow(v) {
     const currentUser = document.getElementById('nav-username').textContent.trim();
     const typeMap = {standard:'标准',multi_process:'多工序',product_family:'产品族'};
     let html = `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">${v.version} <span class="badge bg-secondary me-1">${typeMap[v.type]||v.type}</span> <span class="badge bg-${v.status==='released'?'success':v.status==='deployed'?'primary':v.status==='delisted'?'dark':'secondary'}">${v.status==='draft'?'草稿':v.status==='released'?'已发布':v.status==='deployed'?'已发行':'已下架'}</span> ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${v.project_name}</span>` : ''}</h6>
-            <small class="text-muted">${v.description || ''}</small>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h6 class="mb-0">${escHtml(v.version)} <span class="badge bg-secondary ms-1">${typeMap[v.type]||v.type}</span></h6>
+                <div class="small text-muted mt-1">${v.project_name ? escHtml(v.project_name) + ' &middot; ' : ''}${escHtml(v.description || '')}</div>
+            </div>
+            <span class="status-chip ${v.status}"><span class="dot"></span>${v.status==='draft'?'草稿':v.status==='released'?'已发布':v.status==='deployed'?'已发行':'已下架'}</span>
         </div>`;
-    // Multi-process summary
+    // Multi-process sub-scenarios
     if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
+        html += `<div class="mb-3"><strong class="small d-block mb-2"><i class="bi bi-layers me-1"></i>子场景（${v.sub_scenarios.length}）</strong>`;
         v.sub_scenarios.forEach(s => {
             html += `<div class="card mb-2"><div class="card-body py-2">
                 <strong>${escHtml(s.name)}</strong>
-                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
+                <span class="text-muted ms-2 small">工序: ${escHtml(s.process_type||'-')} / 工位: ${escHtml(s.workstation||'-')} / 序列ID: ${escHtml(s.sequence_id||'-')}</span>`;
             ['hardware_params','software_metrics','property_page'].forEach(key => {
                 try {
                     const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
                     if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
-                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
                         const valStr = JSON.stringify(val, null, 2);
                         const fname = makeFilename(s.name, key);
                         html += `<div class="mt-1 border rounded p-1">
@@ -1355,7 +739,7 @@ function renderReleaseWorkflow(v) {
                                     </div>
                                 </div>
                                 <div>
-                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
+                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i></a>
                                     <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                                 </div>
                             </div>
@@ -1372,9 +756,9 @@ function renderReleaseWorkflow(v) {
     const tmStep = steps.find(s => s.step_order === 1);
     const pmStep = steps.find(s => s.step_order === 2);
     const allPending = steps.every(s => s.status === 'pending');
-    const userOptions = allUsers.map(u => `<option value="${u.display_name}">${u.display_name}</option>`).join('');
+    const userOptions = allUsers.map(u => `<option value="${escHtml(u.display_name)}">${escHtml(u.display_name)}</option>`).join('');
     html += `<div class="card mb-3 border-primary">
-        <div class="card-header py-2"><strong><i class="bi bi-person-check"></i> 审批人设置</strong></div>
+        <div class="card-header py-2 bg-white"><strong><i class="bi bi-person-check me-1"></i>审批人设置</strong></div>
         <div class="card-body py-2">
             <div class="row align-items-center">
                 <div class="col-md-4 mb-1">
@@ -1397,79 +781,94 @@ function renderReleaseWorkflow(v) {
             </div>
         </div>
     </div>`;
-    // Pre-select current assignees
     setTimeout(() => {
-        if (tmStep) document.getElementById('rel-test-manager').value = tmStep.assigned_to || '';
-        if (pmStep) document.getElementById('rel-project-manager').value = pmStep.assigned_to || '';
+        if (tmStep && tmStep.assigned_to) document.getElementById('rel-test-manager').value = tmStep.assigned_to;
+        if (pmStep && pmStep.assigned_to) document.getElementById('rel-project-manager').value = pmStep.assigned_to;
     }, 50);
-        html += `<div class="mb-3">
-        <p class="mb-1 small"><strong>归档内容（${(v.archive_items||[]).length} 项）：</strong></p>
-        <div class="list-group list-group-flush">`;
+    // Archive items
+    html += `<div class="mb-3">
+        <p class="mb-2 small fw-semibold"><i class="bi bi-archive me-1"></i>归档内容（${(v.archive_items||[]).length} 项）</p>`;
     (v.archive_items || []).forEach(a => {
         let snap = {};
         try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
         const snapStr = JSON.stringify(snap, null, 2);
         const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
-        html += `<div class="list-group-item py-1 px-2">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
-                    <div>
-                        <span class="small fw-semibold">${escHtml(fname)}</span>
-                        <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
-                    </div>
-                </div>
+        html += `<div class="file-item">
+            <div class="file-info">
+                <i class="bi bi-file-earmark-text text-secondary"></i>
                 <div>
-                    <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
-                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                    <span class="small fw-semibold">${escHtml(fname)}</span>
+                    <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
                 </div>
+            </div>
+            <div>
+                <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i></a>
+                <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
             </div>
             <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(snapStr)}</pre>
         </div>`;
     });
-    html += `</div></div>`;
+    html += `</div>`;
     // Binary files
     const bins = v.binaries || [];
-    html += `<div class="mb-3"><p class="mb-1 small"><strong>二进制文件（${bins.length} 个）：</strong></p>`;
+    html += `<div class="mb-3"><p class="mb-2 small fw-semibold"><i class="bi bi-file-earmark-binary me-1"></i>二进制文件（${bins.length} 个）</p>`;
     if (bins.length) {
-        html += `<div class="list-group list-group-flush">`;
         bins.forEach(f => {
             const size = f.file_size ? (f.file_size > 1024*1024 ? (f.file_size/1024/1024).toFixed(1)+'MB' : (f.file_size/1024).toFixed(0)+'KB') : '-';
-            html += `<div class="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
-                <div><i class="bi bi-file-earmark-binary me-1"></i><strong>${escHtml(f.filename)}</strong> <small class="text-muted ms-2">${size}</small>${f.description ? `<br><small class="text-muted">${escHtml(f.description)}</small>` : ''}</div>
-                <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i> 下载</a>
+            html += `<div class="file-item">
+                <div class="file-info">
+                    <i class="bi bi-file-earmark-binary text-primary"></i>
+                    <div>
+                        <strong class="small">${escHtml(f.filename)}</strong>
+                        <small class="text-muted ms-2">${size}</small>
+                        ${f.description ? `<br><small class="text-muted">${escHtml(f.description)}</small>` : ''}
+                    </div>
+                </div>
+                <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i></a>
             </div>`;
         });
-        html += `</div>`;
     } else {
         html += '<span class="text-muted small">无</span>';
     }
     html += `</div>`;
-    html += `<p class="small text-muted mb-2"><strong>发布流程（${steps.length} 步）</strong></p>`;
+    // === Timeline Stepper ===
+    html += `<p class="mb-2 small fw-semibold"><i class="bi bi-list-check me-1"></i>发布流程（${steps.length} 步）</p><div class="timeline">`;
     steps.forEach(s => {
         const isAssigned = s.assigned_to && s.assigned_to === currentUser;
         const canAct = s.status === 'pending' && (!s.assigned_to || isAssigned);
-        const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'pending-current' : ''));
-        html += `<div class="step-item ${cls}">
-            <div class="d-flex justify-content-between align-items-center">
-                <span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : '<small class="text-muted">→ 未指定</small>'}</span>
-                <span>
-                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span>
-                    ${canAct ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')">通过</button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')">拒绝</button>` : ''}
-                </span>
+        const dotCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'pending-current' : 'pending'));
+        const bodyCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'highlight' : ''));
+        const icon = s.status === 'approved' ? '<i class="bi bi-check" style="font-size:.7rem"></i>' : (s.status === 'rejected' ? '<i class="bi bi-x" style="font-size:.7rem"></i>' : s.step_order);
+        const badgeCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+        const statusLabel = s.status === 'pending' ? '待处理' : (s.status === 'approved' ? '已通过' : '已拒绝');
+        html += `<div class="timeline-step">
+            <div class="timeline-dot ${dotCls}">${icon}</div>
+            <div class="timeline-body ${bodyCls}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong class="small">${escHtml(s.step_name)}</strong>
+                        <span class="text-muted ms-2 small">${s.assigned_to ? '<i class="bi bi-person me-1"></i>' + escHtml(s.assigned_to) : '<i class="bi bi-person-dash me-1"></i>未指定'}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="status-chip ${badgeCls}"><span class="dot"></span>${statusLabel}</span>
+                        ${canAct ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')"><i class="bi bi-check-lg"></i></button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')"><i class="bi bi-x-lg"></i></button>` : ''}
+                    </div>
+                </div>
+                ${s.approved_by ? `<div class="step-approval-info ${s.status}"><i class="bi bi-person-badge me-1"></i>${escHtml(s.approved_by)} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' &mdash; ' + escHtml(s.comment) : ''}</div>` : ''}
             </div>
-            ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
         </div>`;
     });
-    html += `<hr><h6>发行目标</h6>`;
+    html += `</div>`;
+    // Deployments summary
+    html += `<hr><p class="mb-2 small fw-semibold"><i class="bi bi-rocket me-1"></i>发行目标</p>`;
     if (v.deployments && v.deployments.length) {
-        html += `<table class="table table-sm"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>状态</th></tr></thead><tbody>`;
+        html += `<div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-light"><tr><th>厂区</th><th>线体</th><th>装备</th><th>状态</th></tr></thead><tbody>`;
         v.deployments.forEach(d => {
             const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
-            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
-            html += `<tr><td>${d.factory_name||'-'}</td><td>${d.line_name||'-'}</td><td>${d.station_name||'-'}</td><td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span></td></tr>`;
+            const chipCls = d.status === 'deployed' ? 'deployed-dep' : d.status;
+            html += `<tr><td>${escHtml(d.factory_name||'-')}</td><td>${escHtml(d.line_name||'-')}</td><td>${escHtml(d.station_name||'-')}</td><td><span class="status-chip ${chipCls}"><span class="dot"></span>${stMap[d.status]}</span></td></tr>`;
         });
-        html += `</tbody></table>`;
+        html += `</tbody></table></div>`;
     } else {
         html += `<p class="text-muted small">暂无发行目标</p>`;
     }
@@ -1504,160 +903,118 @@ function submitStep(stepId, action) {
     });
 }
 
-// ==================== Tab 4: 版本发行 ====================
+// ==================== Tab 3: 版本发行 ====================
 let deployVersionList = [];
 function loadDeployVersions() {
     apiFetch('/api/versions').then(res => {
         if (res.code !== 0) return;
-        deployVersionList = (res.data||[]).filter(v => v.status === 'released' || v.status === 'deployed');
-        const datalist = document.getElementById('deploy-version-list');
-        datalist.innerHTML = deployVersionList.map(v => {
-            const typeTag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
-            return `<option value="${(v.project_name || '?') + ' / ' + v.version + typeTag + ' (' + (v.status === 'released' ? '已发布' : '已发行') + ')'}">`;
+        deployVersionList = res.data || [];
+        const dl = document.getElementById('deploy-version-list');
+        dl.innerHTML = deployVersionList.map(v => {
+            const tag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
+            const st = v.status === 'released' ? '已发布' : v.status === 'deployed' ? '已发行' : v.status;
+            return `<option value="${escHtml((v.project_name||'?') + ' / ' + v.version + tag + ' (' + st + ')')}">`;
         }).join('');
     });
 }
 
-function onDeployVersionInput(value) {
-    const input = document.getElementById('deploy-version-input');
-    const idInput = document.getElementById('deploy-version-id');
-    // Find exact match in datalist
-    const match = [...document.getElementById('deploy-version-list').options].find(o => o.value === value);
+function onDeployVersionInput(val) {
+    const match = deployVersionList.find(v => {
+        const tag = v.type === 'multi_process' ? '[多工序]' : v.type === 'product_family' ? '[产品族]' : '';
+        const st = v.status === 'released' ? '已发布' : v.status === 'deployed' ? '已发行' : v.status;
+        return (v.project_name||'?') + ' / ' + v.version + tag + ' (' + st + ')' === val;
+    });
+    document.getElementById('deploy-version-id').value = match ? match.id : '';
     if (match) {
-        const v = deployVersionList.find(x => {
-            const typeTag = x.type === 'multi_process' ? '[多工序]' : x.type === 'product_family' ? '[产品族]' : '';
-            const label = (x.project_name || '?') + ' / ' + x.version + typeTag + ' (' + (x.status === 'released' ? '已发布' : '已发行') + ')';
-            return label === value;
-        });
-        if (v) {
-            idInput.value = v.id;
-            showDeployWorkflow(v.id);
-            return;
-        }
+        showDeployWorkflow(match.id);
+        const prevVersions = deployVersionList.filter(v => v.project_name === match.project_name && v.id !== match.id);
+        const prevFactoryNames = [...new Set(prevVersions.flatMap(v => v.deploy_factories || []))];
+        loadFactories(prevFactoryNames);
+    } else {
+        loadFactories();
     }
-    idInput.value = '';
-    document.getElementById('deploy-workflow-container').innerHTML = '<p class="text-muted text-center mb-0">请选择版本</p>';
 }
 
-function loadFactories() {
+function loadFactories(preCheckNames) {
     apiFetch('/api/stations/factories').then(res => {
+        if (res.code !== 0) return;
         const container = document.getElementById('factory-checkboxes');
-        if (res.code !== 0) { container.innerHTML = '<p class="text-muted mb-0 small">加载失败</p>'; return; }
-        const factories = res.data || [];
-        if (!factories.length) { container.innerHTML = '<p class="text-muted mb-0 small">暂无厂区</p>'; return; }
-        let html = `<div class="form-check"><input class="form-check-input factory-cb" type="checkbox" id="factory-all" value="" onchange="toggleAllFactories(this.checked)"><label class="form-check-label" for="factory-all"><strong>全厂区</strong></label></div>`;
-        factories.forEach(f => {
-            html += `<div class="form-check"><input class="form-check-input factory-cb" type="checkbox" value="${f.id}" data-name="${f.name}"><label class="form-check-label">${f.name}</label></div>`;
-        });
-        container.innerHTML = html;
-        container.querySelectorAll('.factory-cb:not(#factory-all)').forEach(cb => {
-            cb.addEventListener('change', function() { syncFactoryAllCheckbox(); updateFactoryLines(); });
-        });
+        const list = res.data || [];
+        container.innerHTML = list.map(f => {
+            const checked = (preCheckNames||[]).includes(f.name) ? ' checked' : '';
+            return `<div class="form-check"><input class="form-check-input factory-cb" type="checkbox" value="${f.id}" id="fc-${f.id}" onchange="onFactoryCheck()"${checked}><label class="form-check-label" for="fc-${f.id}">${escHtml(f.name)}</label></div>`;
+        }).join('') || '<p class="text-muted small mb-0">无厂区</p>';
+        onFactoryCheck();
     });
 }
 
 function toggleAllFactories(checked) {
     document.querySelectorAll('.factory-cb').forEach(cb => cb.checked = checked);
-    updateFactoryLines();
+    onFactoryCheck();
 }
 
-function syncFactoryAllCheckbox() {
-    const allCb = document.getElementById('factory-all');
-    const individual = document.querySelectorAll('.factory-cb:not(#factory-all)');
-    const allChecked = [...individual].every(cb => cb.checked);
-    const anyUnchecked = [...individual].some(cb => !cb.checked);
-    if (allChecked) { allCb.checked = true; }
-    else if (anyUnchecked) { allCb.checked = false; }
-}
-
-function getSelectedFactoryIds() {
-    const allChecked = document.getElementById('factory-all').checked;
-    if (allChecked) return 'all';
-    const ids = [];
-    document.querySelectorAll('.factory-cb:not(#factory-all):checked').forEach(cb => ids.push(parseInt(cb.value)));
-    return ids;
-}
-
-function updateFactoryLines() {
-    const sel = document.getElementById('deploy-line-select');
-    sel.innerHTML = '<option value="">所有线体</option>';
-    document.getElementById('deploy-station-select').innerHTML = '<option value="">所有装备</option>';
-    const fids = getSelectedFactoryIds();
-    if (fids === 'all' || fids.length > 0) {
-        sel.innerHTML += '<option value="all-lines">所有线体（全部厂区）</option>';
-    }
-    if (Array.isArray(fids) && fids.length === 1) {
-        apiFetch('/api/stations/factories/' + fids[0] + '/lines').then(res => {
-            if (res.code === 0 && res.data) {
-                res.data.forEach(l => sel.innerHTML += `<option value="${l.id}" data-factory-id="${fids[0]}">${l.name}</option>`);
-            }
+function onFactoryCheck() {
+    const checked = [...document.querySelectorAll('.factory-cb:checked')].map(cb => cb.value);
+    const allCbs = document.querySelectorAll('.factory-cb');
+    const selectAll = document.getElementById('factory-select-all');
+    if (selectAll) selectAll.checked = allCbs.length > 0 && checked.length === allCbs.length;
+    const lineSel = document.getElementById('deploy-line-select');
+    const stationSel = document.getElementById('deploy-station-select');
+    lineSel.innerHTML = '<option value="">所有线体</option>';
+    stationSel.innerHTML = '<option value="">所有装备</option>';
+    if (!checked.length) return;
+    checked.forEach(fid => {
+        apiFetch('/api/stations/factories/' + fid + '/lines').then(res => {
+            (res.data||[]).forEach(l => {
+                lineSel.innerHTML += `<option value="${l.id}">${escHtml(l.name)}</option>`;
+            });
         });
-    }
+    });
 }
 
 function addDeployTargets() {
     const vid = document.getElementById('deploy-version-id').value;
-    if (!vid) { alert('请选择版本'); return; }
-    const fids = getSelectedFactoryIds();
-    if (!fids || (Array.isArray(fids) && !fids.length)) { alert('请至少选择一个厂区'); return; }
-    const lineVal = document.getElementById('deploy-line-select').value;
-    const stationVal = document.getElementById('deploy-station-select').value;
-    if (stationVal) {
-        pendingTargets.push({version_id: parseInt(vid), station_id: parseInt(stationVal), station_name: document.getElementById('deploy-station-select').options[document.getElementById('deploy-station-select').selectedIndex].text});
-        renderPendingTargets(); return;
-    }
-    if (lineVal && lineVal !== 'all-lines') {
-        pendingTargets.push({version_id: parseInt(vid), line_id: parseInt(lineVal), line_name: document.getElementById('deploy-line-select').options[document.getElementById('deploy-line-select').selectedIndex].text});
-        renderPendingTargets(); return;
-    }
-    if (fids === 'all') {
-        pendingTargets.push({version_id: parseInt(vid), factory_id: null, factory_name: '全厂区'});
-    } else {
-        fids.forEach(fid => {
-            const name = document.querySelector(`.factory-cb[value="${fid}"]`).dataset.name;
-            pendingTargets.push({version_id: parseInt(vid), factory_id: fid, factory_name: name});
-        });
-    }
+    if (!vid) { alert('请先选择版本'); return; }
+    const checked = [...document.querySelectorAll('.factory-cb:checked')].map(cb => parseInt(cb.value));
+    if (!checked.length) { alert('请至少选择一个厂区'); return; }
+    const lineId = document.getElementById('deploy-line-select').value || null;
+    const stationId = document.getElementById('deploy-station-select').value || null;
+    const te = document.getElementById('deploy-te').value;
+    if (!te) { alert('请选择TE工程师'); return; }
+    const lineName = lineId ? document.getElementById('deploy-line-select').selectedOptions[0]?.text : '所有线体';
+    const stationName = stationId ? document.getElementById('deploy-station-select').selectedOptions[0]?.text : '所有装备';
+    checked.forEach(fid => {
+        const factoryName = document.getElementById('fc-'+fid)?.nextElementSibling?.textContent || fid;
+        pendingTargets.push({factory_id: fid, factory_name: factoryName, line_id: lineId, line_name: lineName, station_id: stationId, station_name: stationName, te_engineer: te});
+    });
     renderPendingTargets();
 }
 
 function renderPendingTargets() {
     const container = document.getElementById('pending-targets');
     if (!pendingTargets.length) { container.innerHTML = '<p class="text-muted text-center mb-0 small py-2">暂无</p>'; return; }
-    let html = `<table class="table table-sm mb-0"><thead><tr><th>目标</th><th></th></tr></thead><tbody>`;
-    pendingTargets.forEach((t, i) => {
-        const label = t.factory_name ? (t.line_name ? t.factory_name + '/' + t.line_name : t.factory_name) : (t.station_name || '-');
-        html += `<tr><td>${label}</td><td><button class="btn btn-sm btn-outline-danger" onclick="removePendingTarget(${i})"><i class="bi bi-x"></i></button></td></tr>`;
-    });
-    html += `</tbody></table>`;
-    html += `<div class="p-2"><button class="btn btn-primary btn-sm w-100" onclick="submitDeployTargets()"><i class="bi bi-send"></i> 提交发行</button></div>`;
-    container.innerHTML = html;
+    container.innerHTML = pendingTargets.map((t, i) =>
+        `<div class="d-flex justify-content-between align-items-center border-bottom py-1 px-2">
+            <div class="small"><strong>${escHtml(t.factory_name)}</strong> / ${escHtml(t.line_name)} / ${escHtml(t.station_name)} <span class="text-muted ms-1">TE: ${escHtml(t.te_engineer)}</span></div>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="pendingTargets.splice(${i},1);renderPendingTargets()"><i class="bi bi-x"></i></button>
+        </div>`
+    ).join('');
 }
-
-function removePendingTarget(i) { pendingTargets.splice(i, 1); renderPendingTargets(); }
 
 function submitDeployTargets() {
     const vid = document.getElementById('deploy-version-id').value;
-    if (!vid || !pendingTargets.length) return;
-    const te = document.getElementById('deploy-te').value;
-    if (!te) { alert('请选择TE工程师'); return; }
-    const btn = document.querySelector('#pending-targets .btn-primary');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 提交中...'; }
-    apiFetch('/api/versions/' + vid + '/deployments', {
+    if (!vid) { alert('请先选择版本'); return; }
+    if (!pendingTargets.length) { alert('请添加发行目标'); return; }
+    const targets = pendingTargets.map(t => ({factory_id: t.factory_id, line_id: t.line_id, station_id: t.station_id, te_engineer: t.te_engineer}));
+    apiFetch(`/api/versions/${vid}/deployments`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            te_engineer: te,
-            targets: pendingTargets.map(t => ({
-                factory_id: t.factory_id, factory_name: t.factory_name || '',
-                line_id: t.line_id, line_name: t.line_name || '',
-                station_id: t.station_id, station_name: t.station_name || '',
-            })),
-        }),
+        body: JSON.stringify({targets}),
     }).then(res => {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send"></i> 提交发行'; }
         if (res.code !== 0) { alert(res.message); return; }
-        pendingTargets = []; renderPendingTargets();
+        alert('发行目标创建成功');
+        pendingTargets = [];
+        renderPendingTargets();
         showDeployWorkflow(parseInt(vid));
         loadVersionList();
     });
@@ -1678,35 +1035,35 @@ function renderDeployWorkflow(v) {
     const currentUser = document.getElementById('nav-username').textContent.trim();
     const isReleased = v.status === 'released' || v.status === 'deployed';
     let html = `
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">${v.version} <span class="badge bg-${v.status==='deployed'?'primary':'secondary'}">${v.status==='deployed'?'已发行':(v.status==='released'?'已发布':'草稿')}</span> ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${v.project_name}</span>` : ''}</h6>
-            <small class="text-muted">${v.description || ''}</small>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h6 class="mb-0">${escHtml(v.version)} ${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark ms-1">${escHtml(v.project_name)}</span>` : ''}</h6>
+                <div class="small text-muted mt-1">${escHtml(v.description || '')}</div>
+            </div>
+            <span class="status-chip ${v.status==='deployed'?'deployed-dep':v.status}"><span class="dot"></span>${v.status==='deployed'?'已发行':(v.status==='released'?'已发布':'草稿')}</span>
         </div>`;
-    // Multi-process summary
+    // Multi-process sub-scenarios (compact)
     if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
+        html += `<div class="mb-3"><strong class="small d-block mb-2"><i class="bi bi-layers me-1"></i>子场景（${v.sub_scenarios.length}）</strong>`;
         v.sub_scenarios.forEach(s => {
             html += `<div class="card mb-2"><div class="card-body py-2">
                 <strong>${escHtml(s.name)}</strong>
-                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
+                <span class="text-muted ms-2 small">工序: ${escHtml(s.process_type||'-')} / 工位: ${escHtml(s.workstation||'-')}</span>`;
             ['hardware_params','software_metrics','property_page'].forEach(key => {
                 try {
                     const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
                     if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
-                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
                         const valStr = JSON.stringify(val, null, 2);
                         const fname = makeFilename(s.name, key);
                         html += `<div class="mt-1 border rounded p-1">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center">
                                     <i class="bi bi-file-earmark-text text-secondary me-2"></i>
-                                    <div>
-                                        <span class="small fw-semibold">${escHtml(fname)}</span>
-                                        <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
-                                    </div>
+                                    <span class="small fw-semibold">${escHtml(fname)}</span>
+                                    <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
                                 </div>
                                 <div>
-                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i> 下载</a>
+                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i></a>
                                     <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                                 </div>
                             </div>
@@ -1720,93 +1077,108 @@ function renderDeployWorkflow(v) {
         html += `</div>`;
     }
     // Archive items
-    html += `<div class="mb-2"><p class="mb-1 small"><strong>归档内容（${(v.archive_items||[]).length} 项）：</strong></p><div class="list-group list-group-flush">`;
+    html += `<div class="mb-3"><p class="mb-2 small fw-semibold"><i class="bi bi-archive me-1"></i>归档内容（${(v.archive_items||[]).length} 项）</p>`;
     (v.archive_items || []).forEach(a => {
         let snap = {};
         try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
         const snapStr = JSON.stringify(snap, null, 2);
         const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
-        html += `<div class="list-group-item py-1 px-2">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
-                    <div>
-                        <span class="small fw-semibold">${escHtml(fname)}</span>
-                        <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
-                    </div>
-                </div>
+        html += `<div class="file-item">
+            <div class="file-info">
+                <i class="bi bi-file-earmark-text text-secondary"></i>
                 <div>
-                    <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
-                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                    <span class="small fw-semibold">${escHtml(fname)}</span>
+                    <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
                 </div>
+            </div>
+            <div>
+                <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i></a>
+                <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
             </div>
             <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(snapStr)}</pre>
         </div>`;
     });
-    html += `</div></div>`;
+    html += `</div>`;
     // Binary files
     const bins = v.binaries || [];
-    html += `<div class="mb-2"><p class="mb-1 small"><strong>二进制文件（${bins.length} 个）：</strong></p>`;
+    html += `<div class="mb-3"><p class="mb-2 small fw-semibold"><i class="bi bi-file-earmark-binary me-1"></i>二进制文件（${bins.length} 个）</p>`;
     if (bins.length) {
-        html += `<div class="list-group list-group-flush">`;
         bins.forEach(f => {
             const size = f.file_size ? (f.file_size > 1024*1024 ? (f.file_size/1024/1024).toFixed(1)+'MB' : (f.file_size/1024).toFixed(0)+'KB') : '-';
-            html += `<div class="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
-                <div><i class="bi bi-file-earmark-binary me-1"></i><strong>${escHtml(f.filename)}</strong> <small class="text-muted ms-2">${size}</small>${f.description ? `<br><small class="text-muted">${escHtml(f.description)}</small>` : ''}</div>
-                <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i> 下载</a>
+            html += `<div class="file-item">
+                <div class="file-info">
+                    <i class="bi bi-file-earmark-binary text-primary"></i>
+                    <div><strong class="small">${escHtml(f.filename)}</strong> <small class="text-muted ms-2">${size}</small></div>
+                </div>
+                <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i></a>
             </div>`;
         });
-        html += `</div>`;
     } else {
         html += '<span class="text-muted small">无</span>';
     }
-    html += `</div>`
-    + `<p class="small text-muted mb-2"><strong>发行流程（${steps.length} 步）</strong></p>`;
+    html += `</div>`;
+    // === Timeline Stepper ===
+    html += `<p class="mb-2 small fw-semibold"><i class="bi bi-list-check me-1"></i>发行流程（${steps.length} 步）</p>`;
     if (steps.length === 0) {
         html += `<p class="text-muted small">尚未创建发行步骤，请提交发行目标</p>`;
     } else {
+        html += `<div class="timeline">`;
         steps.forEach(s => {
             const isAssigned = s.assigned_to && s.assigned_to === currentUser;
             const canAct = s.status === 'pending' && (!s.assigned_to || isAssigned);
-            const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'pending-current' : ''));
-            html += `<div class="step-item ${cls}">
-                <div class="d-flex justify-content-between align-items-center">
-                    <span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : '<small class="text-muted">→ 未指定</small>'}</span>
-                    <span>
-                        <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span>
-                        ${canAct && isReleased ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')">通过</button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')">拒绝</button>` : ''}
-                    </span>
+            const dotCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'pending-current' : 'pending'));
+            const bodyCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : (canAct ? 'highlight' : ''));
+            const icon = s.status === 'approved' ? '<i class="bi bi-check" style="font-size:.7rem"></i>' : (s.status === 'rejected' ? '<i class="bi bi-x" style="font-size:.7rem"></i>' : s.step_order);
+            const badgeCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+            const statusLabel = s.status === 'pending' ? '待处理' : (s.status === 'approved' ? '已通过' : '已拒绝');
+            html += `<div class="timeline-step">
+                <div class="timeline-dot ${dotCls}">${icon}</div>
+                <div class="timeline-body ${bodyCls}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong class="small">${escHtml(s.step_name)}</strong>
+                            <span class="text-muted ms-2 small">${s.assigned_to ? '<i class="bi bi-person me-1"></i>' + escHtml(s.assigned_to) : '<i class="bi bi-person-dash me-1"></i>未指定'}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="status-chip ${badgeCls}"><span class="dot"></span>${statusLabel}</span>
+                            ${canAct && isReleased ? `<button class="btn btn-sm btn-success ms-1" onclick="submitStep(${s.id},'approve')"><i class="bi bi-check-lg"></i></button><button class="btn btn-sm btn-danger ms-1" onclick="submitStep(${s.id},'reject')"><i class="bi bi-x-lg"></i></button>` : ''}
+                        </div>
+                    </div>
+                    ${s.approved_by ? `<div class="step-approval-info ${s.status}"><i class="bi bi-person-badge me-1"></i>${escHtml(s.approved_by)} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' &mdash; ' + escHtml(s.comment) : ''}</div>` : ''}
                 </div>
-                ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
             </div>`;
         });
+        html += `</div>`;
     }
-    html += `<hr><h6>发行目标</h6>`;
+    // Deploy targets
     const deps = v.deployments || [];
+    html += `<hr><p class="mb-2 small fw-semibold"><i class="bi bi-crosshair me-1"></i>发行目标（${deps.length}）</p>`;
     if (deps.length) {
-        html += `<div class="target-list"><table class="table table-sm"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>TE工程师</th><th>状态</th><th>操作</th></tr></thead><tbody>`;
         deps.forEach(d => {
             const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
-            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
-            html += `<tr>
-                <td>${d.factory_name||'-'}</td>
-                <td>${d.line_name||'-'}</td>
-                <td>${d.station_name||'-'}</td>
-                <td><small>${d.assigned_to || '-'}</small></td>
-                <td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span>
-                    ${d.approved_by ? `<br><small class="text-muted">${d.approved_by}</small>` : ''}
-                </td>
-                <td>
-                    ${d.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="approveDeployment(${d.id})">TE审批</button><button class="btn btn-sm btn-danger ms-1" onclick="rejectDeployment(${d.id})">拒绝</button>` : ''}
-                    ${d.status === 'approved' ? `<button class="btn btn-sm btn-primary" onclick="executeDeployment(${d.id})">执行发行</button>` : ''}
-                    ${d.status === 'deployed' ? `<small class="text-muted">${d.deployed_at ? new Date(d.deployed_at).toLocaleString() : ''}</small>` : ''}
-                </td>
-            </tr>`;
+            const chipCls = d.status === 'deployed' ? 'deployed-dep' : d.status;
+            html += `<div class="deploy-card">
+                <div class="dc-row">
+                    <div class="dc-info">
+                        <div class="dc-info-item"><span class="label">厂区</span><strong>${escHtml(d.factory_name||'-')}</strong></div>
+                        <div class="dc-info-item"><span class="label">线体</span>${escHtml(d.line_name||'-')}</div>
+                        <div class="dc-info-item"><span class="label">装备</span>${escHtml(d.station_name||'-')}</div>
+                        <div class="dc-info-item"><span class="label">TE</span>${escHtml(d.assigned_to || '-')}</div>
+                        <span class="status-chip ${chipCls}"><span class="dot"></span>${stMap[d.status]}</span>
+                    </div>
+                    <div class="d-flex gap-1">
+                        ${d.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="approveDeployment(${d.id})"><i class="bi bi-check-lg"></i> TE审批</button><button class="btn btn-sm btn-danger" onclick="rejectDeployment(${d.id})"><i class="bi bi-x-lg"></i></button>` : ''}
+                        ${d.status === 'approved' ? `<button class="btn btn-sm btn-primary" onclick="executeDeployment(${d.id})"><i class="bi bi-rocket"></i> 执行发行</button>` : ''}
+                        ${d.status === 'deployed' ? `<small class="text-muted">${d.deployed_at ? new Date(d.deployed_at).toLocaleString() : ''}</small>` : ''}
+                    </div>
+                </div>
+                ${d.approved_by ? `<div class="small text-muted mt-1"><i class="bi bi-person-badge me-1"></i>${escHtml(d.approved_by)} ${d.comment ? '— ' + escHtml(d.comment) : ''}</div>` : ''}
+            </div>`;
         });
-        html += `</tbody></table></div>`;
     } else {
         html += `<p class="text-muted small">暂无发行目标</p>`;
     }
+    html += `</div>`;
     document.getElementById('deploy-workflow-container').innerHTML = html;
 }
 
@@ -1862,7 +1234,7 @@ function showPendingApprovals() {
                 : `gotoPending(${item.version.id})`;
             html += `<div class="card mb-2"><div class="card-body py-2">
                 <div class="d-flex justify-content-between">
-                    <span><strong>${label}</strong></span>
+                    <span><strong>${escHtml(label)}</strong></span>
                     <button class="btn btn-sm btn-outline-primary" onclick="${clickHandler}">前往处理</button>
                 </div>
             </div></div>`;
@@ -1893,15 +1265,19 @@ function escHtml(s) {
 
 function jsonPreview(val) {
     if (!val) return '';
-    const v = typeof val === 'string' ? JSON.parse(val) : val;
-    if (Array.isArray(v)) return `Array(${v.length})`;
-    if (typeof v === 'object' && v !== null) {
-        const keys = Object.keys(v);
-        const shown = keys.slice(0, 4);
-        const rest = keys.length > 4 ? `, ...+${keys.length - 4}` : '';
-        return `{${shown.join(', ')}${rest}}`;
+    try {
+        const v = typeof val === 'string' ? JSON.parse(val) : val;
+        if (Array.isArray(v)) return `Array(${v.length})`;
+        if (typeof v === 'object' && v !== null) {
+            const keys = Object.keys(v);
+            const shown = keys.slice(0, 4);
+            const rest = keys.length > 4 ? `, ...+${keys.length - 4}` : '';
+            return `{${shown.join(', ')}${rest}}`;
+        }
+        return String(v);
+    } catch (e) {
+        return typeof val === 'string' ? val.substring(0, 50) : String(val);
     }
-    return String(v);
 }
 
 function makeFilename(name, fieldType) {
@@ -1936,6 +1312,7 @@ function downloadFromDataBtn(btn) {
 }
 
 function showVersionDetail(vid) {
+    if (!vid) return;
     const modal = new bootstrap.Modal(document.getElementById('version-detail-modal'));
     const body = document.getElementById('version-detail-body');
     body.innerHTML = '<p class="text-muted text-center py-3"><i class="bi bi-arrow-repeat bi-spin me-1"></i>加载中...</p>';
@@ -1944,234 +1321,621 @@ function showVersionDetail(vid) {
         if (res.code !== 0) { body.innerHTML = '<p class="text-danger">加载失败</p>'; return; }
         const v = res.data;
         const stMap = {draft:'草稿',released:'已发布',deployed:'已发行',delisted:'已下架'};
-        const clMap = {draft:'secondary',released:'success',deployed:'primary',delisted:'dark'};
         const typeMap = {standard:'标准',multi_process:'多工序',product_family:'产品族'};
         let html = `
             <div class="mb-3">
-                <table class="table table-sm table-bordered mb-0">
-                    <tr><th style="width:100px">版本号</th><td><strong>${v.version}</strong> <span class="badge bg-secondary ms-1">${typeMap[v.type]||v.type}</span> <span class="badge bg-${clMap[v.status]} ms-1">${stMap[v.status]||v.status}</span></td></tr>
-                    <tr><th>工程名称</th><td>${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark">${v.project_name}</span>` : '-'}</td></tr>
-                    ${v.type === 'multi_process' ? `<tr><th>BOM编码</th><td>${(v.bom_code||'-').replace(/[,;，；]+/g,', ')}</td></tr><tr><th>TPS名称</th><td>${v.tps_name || '-'}</td></tr><tr><th>领域标签</th><td>${v.domain_tags || '-'}</td></tr>` : ''}
-                    <tr><th>描述</th><td>${v.description||'-'}</td></tr>
-                    <tr><th>创建人</th><td>${v.created_by||'-'}</td></tr>
+                <table class="table table-sm table-bordered mb-0 version-detail-table">
+                    <tr><th>版本号</th><td><strong>${escHtml(v.version)}</strong> <span class="badge bg-secondary ms-1">${typeMap[v.type]||v.type}</span> <span class="status-chip ${v.status} ms-1"><span class="dot"></span>${stMap[v.status]||v.status}</span></td></tr>
+                    <tr><th>工程名称</th><td>${v.project_name ? `<span class="badge bg-info bg-opacity-10 text-dark">${escHtml(v.project_name)}</span>` : '-'}</td></tr>
+                    ${v.type === 'multi_process' ? `<tr><th>BOM编码</th><td>${escHtml((v.bom_code||'-').replace(/[,;，；]+/g,', '))}</td></tr><tr><th>TPS名称</th><td>${escHtml(v.tps_name || '-')}</td></tr><tr><th>领域标签</th><td>${escHtml(v.domain_tags || '-')}</td></tr>` : ''}
+                    <tr><th>描述</th><td>${escHtml(v.description||'-')}</td></tr>
+                    <tr><th>创建人</th><td>${escHtml(v.created_by||'-')}</td></tr>
                     <tr><th>创建时间</th><td>${v.created_at ? new Date(v.created_at).toLocaleString() : '-'}</td></tr>
                     ${v.updated_at ? `<tr><th>更新时间</th><td>${new Date(v.updated_at).toLocaleString()}</td></tr>` : ''}
                 </table>
             </div>`;
-        // Sub-scenarios (multi-process) with expandable JSON
-    if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
-        html += `<div class="mb-2"><strong class="small">子场景</strong>`;
-        v.sub_scenarios.forEach(s => {
-            html += `<div class="card mb-2"><div class="card-body py-2">
-                <strong>${escHtml(s.name)}</strong>
-                <span class="text-muted ms-2 small">工序: ${s.process_type||'-'} / 工位: ${s.workstation||'-'} / 序列ID: ${s.sequence_id||'-'}</span>`;
-            ['hardware_params','software_metrics','property_page'].forEach(key => {
-                try {
-                    const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
-                    if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
-                        const label = {hardware_params:'硬件参数', software_metrics:'软件指标', property_page:'属性页'}[key];
-                        const valStr = JSON.stringify(val, null, 2);
-                        const fname = makeFilename(s.name, key);
-                        html += `<div class="mt-1 border rounded p-1">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="d-flex align-items-center">
-                                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>
-                                    <div>
+        if (v.type === 'multi_process' && v.sub_scenarios && v.sub_scenarios.length) {
+            html += `<div class="mb-2"><strong class="small">子场景</strong>`;
+            v.sub_scenarios.forEach(s => {
+                html += `<div class="card mb-2"><div class="card-body py-2">
+                    <strong>${escHtml(s.name)}</strong>
+                    <span class="text-muted ms-2 small">工序: ${escHtml(s.process_type||'-')} / 工位: ${escHtml(s.workstation||'-')} / 序列ID: ${escHtml(s.sequence_id||'-')}</span>`;
+                ['hardware_params','software_metrics','property_page'].forEach(key => {
+                    try {
+                        const val = typeof s[key] === 'string' ? JSON.parse(s[key]) : s[key];
+                        if (val && ((Array.isArray(val) && val.length) || (typeof val === 'object' && Object.keys(val).length))) {
+                            const valStr = JSON.stringify(val, null, 2);
+                            const fname = makeFilename(s.name, key);
+                            html += `<div class="mt-1 border rounded p-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-text text-secondary me-2"></i>
                                         <span class="small fw-semibold">${escHtml(fname)}</span>
                                         <span class="text-muted ms-2 small">${jsonPreview(val)}</span>
                                     </div>
+                                    <div>
+                                        <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i></a>
+                                        <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                                    </div>
                                 </div>
-                                <div>
-                                    <a href="/api/versions/${v.id}/sub-scenarios/${s.id}/${key}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download title="下载"><i class="bi bi-download"></i> 下载</a>
-                                    <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
-                                </div>
-                            </div>
-                            <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
-                        </div>`;
-                    }
-                } catch(e) {}
-            });
+                                <pre class="mb-0 mt-1 small" style="display:none;max-height:200px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(valStr)}</pre>
+                            </div>`;
+                        }
+                    } catch(e) {}
+                });
                 html += `</div></div>`;
             });
             html += `</div>`;
         }
-        // Archive items with full JSON content
         const items = v.archive_items || [];
         html += `<div class="mb-3"><h6>归档内容 <small class="text-muted">（${items.length} 项）</small></h6>`;
         if (items.length) {
-            html += `<div class="list-group list-group-flush">`;
             items.forEach(a => {
                 let snap = {};
                 try { snap = JSON.parse(a.data_snapshot || '{}'); } catch(e) { snap = {raw: a.data_snapshot}; }
                 const snapStr = JSON.stringify(snap, null, 2);
                 const fname = makeFilename(v.version || v.name || ('V'+v.id), a.type);
-                        html += `<div class="list-group-item py-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-file-earmark-text text-secondary me-2"></i>
-                            <div>
-                                <span class="small fw-semibold">${escHtml(fname)}</span>
-                                <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
-                            </div>
-                        </div>
+                html += `<div class="file-item">
+                    <div class="file-info">
+                        <i class="bi bi-file-earmark-text text-secondary"></i>
                         <div>
-                            <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i> 下载</a>
-                            <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
+                            <span class="small fw-semibold">${escHtml(fname)}</span>
+                            <span class="text-muted ms-2 small">${jsonPreview(snap)}</span>
                         </div>
+                    </div>
+                    <div>
+                        <a href="/api/versions/${v.id}/archive-items/${a.id}/download" class="btn btn-sm btn-outline-primary py-0 me-1" download><i class="bi bi-download"></i></a>
+                        <button class="btn btn-sm btn-outline-secondary py-0" onclick="toggleDetailJson(this)" data-expanded="false">展开</button>
                     </div>
                     <pre class="mb-0 mt-1 small" style="display:none;max-height:300px;overflow:auto;background:#f8f9fa;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escHtml(snapStr)}</pre>
                 </div>`;
             });
-            html += `</div>`;
         } else {
             html += '<p class="text-muted small">无</p>';
         }
         html += `</div>`;
-        // Binary files
         const bins = v.binaries || [];
         html += `<div class="mb-3"><h6>二进制文件 <small class="text-muted">（${bins.length} 个）</small></h6>`;
         if (bins.length) {
-            html += `<div class="list-group list-group-flush">`;
             bins.forEach(f => {
                 const size = f.file_size ? (f.file_size > 1024*1024 ? (f.file_size/1024/1024).toFixed(1)+'MB' : (f.file_size/1024).toFixed(0)+'KB') : '-';
-                html += `<div class="list-group-item py-2 d-flex justify-content-between align-items-center">
-                    <div><i class="bi bi-file-earmark-binary me-1"></i><strong>${escHtml(f.filename)}</strong> <small class="text-muted ms-2">${size}</small>${f.description ? `<br><small class="text-muted">${escHtml(f.description)}</small>` : ''}</div>
-                    <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i> 下载</a>
+                html += `<div class="file-item">
+                    <div class="file-info">
+                        <i class="bi bi-file-earmark-binary text-primary"></i>
+                        <div><strong class="small">${escHtml(f.filename)}</strong> <small class="text-muted ms-2">${size}</small></div>
+                    </div>
+                    <a href="/api/versions/${v.id}/binaries/${f.id}/download" class="btn btn-sm btn-outline-primary py-0" download><i class="bi bi-download"></i></a>
                 </div>`;
             });
-            html += `</div>`;
         } else {
             html += '<p class="text-muted small">无</p>';
         }
         html += `</div>`;
-        // Workflow steps
         const allSteps = v.steps || [];
         const stage1 = allSteps.filter(s => s.stage === 1);
         const stage2 = allSteps.filter(s => s.stage === 2);
         if (stage1.length) {
-            html += `<div class="mb-3"><h6>发布流程（${stage1.length} 步）</h6>`;
+            html += `<div class="mb-3"><h6>发布流程</h6><div class="timeline">`;
             stage1.forEach(s => {
-                const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '');
-                html += `<div class="step-item ${cls}">
-                    <div class="d-flex justify-content-between"><span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
-                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span></div>
-                    ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+                const dotCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+                const icon = s.status === 'approved' ? '<i class="bi bi-check" style="font-size:.7rem"></i>' : (s.status === 'rejected' ? '<i class="bi bi-x" style="font-size:.7rem"></i>' : s.step_order);
+                const badgeCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+                const statusLabel = s.status === 'pending' ? '待处理' : (s.status === 'approved' ? '已通过' : '已拒绝');
+                html += `<div class="timeline-step">
+                    <div class="timeline-dot ${dotCls}">${icon}</div>
+                    <div class="timeline-body ${s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '')}">
+                        <div class="d-flex justify-content-between">
+                            <span><strong class="small">${escHtml(s.step_name)}</strong> ${s.assigned_to ? `<span class="text-muted small ms-1"><i class="bi bi-person me-1"></i>${escHtml(s.assigned_to)}</span>` : ''}</span>
+                            <span class="status-chip ${badgeCls}"><span class="dot"></span>${statusLabel}</span>
+                        </div>
+                        ${s.approved_by ? `<div class="step-approval-info ${s.status}"><i class="bi bi-person-badge me-1"></i>${escHtml(s.approved_by)} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + escHtml(s.comment) : ''}</div>` : ''}
+                    </div>
                 </div>`;
             });
-            html += `</div>`;
+            html += `</div></div>`;
         }
         if (stage2.length) {
-            html += `<div class="mb-3"><h6>发行流程（${stage2.length} 步）</h6>`;
+            html += `<div class="mb-3"><h6>发行流程</h6><div class="timeline">`;
             stage2.forEach(s => {
-                const cls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '');
-                html += `<div class="step-item stage-2 ${cls}">
-                    <div class="d-flex justify-content-between"><span><strong>${s.step_order}.</strong> ${s.step_name} ${s.assigned_to ? `<small class="text-muted">→ ${s.assigned_to}</small>` : ''}</span>
-                    <span class="badge bg-${s.status==='approved'?'success':s.status==='rejected'?'danger':'secondary'}">${s.status==='pending'?'待处理':s.status==='approved'?'已通过':'已拒绝'}</span></div>
-                    ${s.approved_by ? `<div class="approval-comment">${s.approved_by} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + s.comment : ''}</div>` : ''}
+                const dotCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+                const icon = s.status === 'approved' ? '<i class="bi bi-check" style="font-size:.7rem"></i>' : (s.status === 'rejected' ? '<i class="bi bi-x" style="font-size:.7rem"></i>' : s.step_order);
+                const badgeCls = s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : 'pending');
+                const statusLabel = s.status === 'pending' ? '待处理' : (s.status === 'approved' ? '已通过' : '已拒绝');
+                html += `<div class="timeline-step">
+                    <div class="timeline-dot ${dotCls}">${icon}</div>
+                    <div class="timeline-body ${s.status === 'approved' ? 'approved' : (s.status === 'rejected' ? 'rejected' : '')}">
+                        <div class="d-flex justify-content-between">
+                            <span><strong class="small">${escHtml(s.step_name)}</strong> ${s.assigned_to ? `<span class="text-muted small ms-1"><i class="bi bi-person me-1"></i>${escHtml(s.assigned_to)}</span>` : ''}</span>
+                            <span class="status-chip ${badgeCls}"><span class="dot"></span>${statusLabel}</span>
+                        </div>
+                        ${s.approved_by ? `<div class="step-approval-info ${s.status}"><i class="bi bi-person-badge me-1"></i>${escHtml(s.approved_by)} ${s.approved_at ? new Date(s.approved_at).toLocaleString() : ''}${s.comment ? ' — ' + escHtml(s.comment) : ''}</div>` : ''}
+                    </div>
                 </div>`;
             });
-            html += `</div>`;
-        }
-        // Deploy targets
-        const deps = v.deployments || [];
-        html += `<h6>发行目标（${deps.length}）</h6>`;
-        if (deps.length) {
-            const stMap = {pending:'待审批',approved:'已审批',deployed:'已发行',rejected:'已拒绝'};
-            const clMap = {pending:'secondary',approved:'info',deployed:'success',rejected:'danger'};
-            html += `<table class="table table-sm table-bordered mb-0"><thead><tr><th>厂区</th><th>线体</th><th>装备</th><th>状态</th></tr></thead><tbody>`;
-            deps.forEach(d => {
-                html += `<tr><td>${d.factory_name||'-'}</td><td>${d.line_name||'-'}</td><td>${d.station_name||'-'}</td><td><span class="badge bg-${clMap[d.status]}">${stMap[d.status]}</span></td></tr>`;
-            });
-            html += `</tbody></table>`;
-        } else {
-            html += '<p class="text-muted small">暂无发行目标</p>';
+            html += `</div></div>`;
         }
         body.innerHTML = html;
     });
 }
 
+// ==================== 版本编辑 ====================
 function editVersion(vid) {
+    editingVersionId = vid;
     apiFetch('/api/versions/' + vid).then(res => {
-        if (res.code !== 0) { alert(res.message); return; }
+        if (res.code !== 0) { alert('加载失败'); return; }
         const v = res.data;
-        editingVersionId = v.id;
-        // Switch to release tab with wizard
-        document.querySelector('#tab-release').click();
-        showReleaseWizardOnly();
-        document.getElementById('wizard-step-title').textContent = '编辑版本 (Step 1)';
-        document.getElementById('wizard-next-btn').textContent = '下一步 \u276F';
-        // Populate Step 1
+        const typeRadio = v.type === 'product_family' ? 'type-family' : 'type-multi';
+        document.getElementById(typeRadio).checked = true;
+        onVersionTypeChange();
         document.getElementById('wiz-project-name').value = v.project_name || '';
         document.getElementById('wiz-version').value = v.version || '';
-        document.getElementById('wiz-version').readOnly = true;
         document.getElementById('wiz-description').value = v.description || '';
-        const typeRadio = document.querySelector(`input[name="version-type"][value="${v.type}"]`);
-        if (typeRadio) typeRadio.checked = true;
-        onVersionTypeChange();
-        // Pre-select inherit source
-        if (v.inherit_from_id) {
-            document.getElementById('wiz-inherit-enable').checked = true;
-            onInheritToggle();
-            setTimeout(() => {
-                const sel = document.getElementById('wiz-inherit-from');
-                if ([...sel.options].some(o => o.value == v.inherit_from_id)) {
-                    sel.value = v.inherit_from_id;
-                }
-            }, 300);
-        }
-        if (v.type === 'multi_process' || v.type === 'product_family') {
+        if (v.type === 'multi_process') {
             document.getElementById('wiz-bom-code').value = v.bom_code || '';
             document.getElementById('wiz-tps-name').value = v.tps_name || '';
             document.getElementById('wiz-domain-tags').value = v.domain_tags || '';
-            // Populate sub-scenarios
-            wizSubScenarios = (v.sub_scenarios || []).map(s => ({
-                name: s.name,
-                process_type: s.process_type || s.name.split('-')[0] || '',
-                workstation: s.workstation || s.name.split('-')[1] || '',
-                sequence_id: s.sequence_id || 0,
-                hardware_params: s.hardware_params || '{}',
-                software_metrics: s.software_metrics || '[]',
-                property_page: s.property_page || '{}',
-            }));
-            renderSubScenarioList();
+            if (v.sub_scenarios) {
+                wizSubScenarios = v.sub_scenarios.map(s => ({name: s.name, process_type: s.process_type, workstation: s.workstation}));
+                renderSubScenarios();
+            }
         }
-        if (v.type === 'standard' && v.sequence_id) {
-            setTimeout(() => {
-                const sel = document.getElementById('wiz-sequence-select');
-                if ([...sel.options].some(o => o.value == v.sequence_id)) {
-                    sel.value = v.sequence_id;
-                }
-            }, 300);
-        }
-        // Disable type radio in edit mode
-        document.querySelectorAll('input[name="version-type"]').forEach(r => r.disabled = !!editingVersionId);
-        wizardStep = 1;
-        showWizardStep(1);
+        showReleaseWizardOnly();
+        document.getElementById('wiz-submit-btn').innerHTML = '<i class="bi bi-check-lg"></i> 保存修改';
+        document.getElementById('wiz-submit-btn').style.display = '';
     });
 }
 
+// ==================== Wizard Steps ====================
+let wizardCurrentStep = 1;
+let wizardMaxStep = 2;
+
+function updateWizardStepIndicator() {
+    const isMulti = document.querySelector('input[name="version-type"]:checked')?.value === 'multi_process';
+    wizardMaxStep = isMulti ? 2 : 2;
+    const s1 = document.getElementById('wi-step1');
+    const s2 = document.getElementById('wi-step2');
+    const conn = document.getElementById('wi-conn1');
+    s1.className = wizardCurrentStep === 1 ? 'wi-step active' : 'wi-step done';
+    s2.className = wizardCurrentStep === 2 ? 'wi-step active' : (wizardCurrentStep > 2 ? 'wi-step done' : 'wi-step');
+    conn.className = wizardCurrentStep > 1 ? 'wi-connector' : 'wi-connector';
+    document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
+    const stepEl = document.getElementById('wizard-step-' + wizardCurrentStep);
+    if (stepEl) stepEl.classList.add('active');
+    if (wizardCurrentStep === 2) {
+        const type = document.querySelector('input[name="version-type"]:checked')?.value;
+        if (type === 'product_family') {
+            document.getElementById('wizard-step-2-family').classList.add('active');
+        } else if (type === 'standard') {
+            document.getElementById('wizard-step-2-standard').classList.add('active');
+        } else {
+            document.getElementById('wizard-step-2').classList.add('active');
+        }
+    }
+    document.getElementById('wizard-prev-btn').style.display = wizardCurrentStep > 1 ? '' : 'none';
+    document.getElementById('wizard-prev-btn-bottom').style.display = wizardCurrentStep > 1 ? '' : 'none';
+    const showSubmit = wizardCurrentStep === wizardMaxStep;
+    document.getElementById('wiz-submit-btn').style.display = showSubmit ? '' : 'none';
+    document.getElementById('wizard-next-btn').style.display = showSubmit ? 'none' : '';
+    document.getElementById('wizard-next-btn-bottom').style.display = showSubmit ? 'none' : '';
+}
+
+function wizardNext() {
+    if (wizardCurrentStep === 1) {
+        const name = document.getElementById('wiz-project-name').value.trim();
+        const ver = document.getElementById('wiz-version').value.trim();
+        if (!name || !ver) { alert('请填写工程名称和版本号'); return; }
+        const type = document.querySelector('input[name="version-type"]:checked')?.value;
+        if (type === 'multi_process') {
+            if (!wizSubScenarios.length) { alert('请至少添加一个子场景'); return; }
+            renderSSConfig();
+        }
+    }
+    if (wizardCurrentStep < wizardMaxStep) {
+        wizardCurrentStep++;
+        updateWizardStepIndicator();
+    }
+}
+
+function wizardPrev() {
+    if (wizardCurrentStep > 1) {
+        wizardCurrentStep--;
+        updateWizardStepIndicator();
+    }
+}
+
+function resetWizard() {
+    wizardCurrentStep = 1;
+    document.getElementById('wiz-project-name').value = '';
+    document.getElementById('wiz-version').value = '';
+    document.getElementById('wiz-version-hint').textContent = '';
+    document.getElementById('wiz-description').value = '';
+    document.getElementById('wiz-bom-code').value = '';
+    document.getElementById('wiz-tps-name').value = '';
+    document.getElementById('wiz-domain-tags').value = '';
+    document.getElementById('wiz-inherit-enable').checked = false;
+    document.getElementById('wiz-inherit-from').disabled = true;
+    document.getElementById('wiz-inherit-from').value = '';
+    wizSubScenarios = [];
+    renderSubScenarios();
+    wizBinaryFiles = [];
+    renderWizBinaryFiles();
+    document.getElementById('type-multi').checked = true;
+    onVersionTypeChange();
+    updateWizardStepIndicator();
+}
+
+function wizardSubmit() {
+    if (editingVersionId) {
+        apiFetch('/api/versions/' + editingVersionId, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(buildVersionPayload()),
+        }).then(res => {
+            if (res.code !== 0) { alert(res.message || '保存失败'); return; }
+            alert('版本已更新');
+            editingVersionId = null;
+            resetWizard();
+            loadVersionList();
+            showReleaseWorkflow(res.data.id);
+        });
+        return;
+    }
+    const type = document.querySelector('input[name="version-type"]:checked')?.value;
+    if (type === 'multi_process') {
+        submitMultiProcessVersion();
+    } else {
+        const project_name = document.getElementById('wiz-project-name').value.trim();
+        const version = document.getElementById('wiz-version').value.trim();
+        const description = document.getElementById('wiz-description').value.trim();
+        const test_manager = document.getElementById('wiz-test-manager').value;
+        const project_manager = document.getElementById('wiz-project-manager').value;
+        const steps_config = {test_manager, project_manager};
+        if (type === 'standard') {
+            submitStandardVersion(project_name, version, description, steps_config);
+        } else {
+            submitProductFamilyVersion(project_name, version, description, steps_config);
+        }
+    }
+}
+
+function buildVersionPayload() {
+    const type = document.querySelector('input[name="version-type"]:checked')?.value;
+    const payload = {
+        version: document.getElementById('wiz-version').value.trim(),
+        project_name: document.getElementById('wiz-project-name').value.trim(),
+        description: document.getElementById('wiz-description').value.trim(),
+        type: type,
+    };
+    if (type === 'multi_process') {
+        payload.bom_code = document.getElementById('wiz-bom-code').value.trim();
+        payload.tps_name = document.getElementById('wiz-tps-name').value.trim();
+        payload.domain_tags = document.getElementById('wiz-domain-tags').value.trim();
+        payload.sub_scenarios = wizSubScenarios;
+    }
+    return payload;
+}
+
+function submitMultiProcessVersion() {
+    const project_name = document.getElementById('wiz-project-name').value.trim();
+    const version = document.getElementById('wiz-version').value.trim();
+    const description = document.getElementById('wiz-description').value.trim();
+    const bom_code = document.getElementById('wiz-bom-code').value.trim();
+    const tps_name = document.getElementById('wiz-tps-name').value.trim();
+    const domain_tags = document.getElementById('wiz-domain-tags').value.trim();
+    const sub_scenarios = wizSubScenarios.map((s, i) => ({
+        name: s.name,
+        process_type: s.process_type || '',
+        workstation: s.workstation || '',
+        sequence_id: s.sequence_id || null,
+        hardware_params: s.hardware_params || null,
+        software_metrics: s.software_metrics || null,
+        property_page: s.property_page || null,
+    }));
+    const test_manager = document.getElementById('wiz-test-manager').value;
+    const project_manager = document.getElementById('wiz-project-manager').value;
+    const steps_config = {test_manager, project_manager};
+    const btn = document.getElementById('wiz-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+    apiFetch('/api/versions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({version, project_name, description, bom_code, tps_name, domain_tags, sub_scenarios, steps_config, type: 'multi_process'}),
+    }).then(res => {
+        finishWizardSubmit(res, btn, '多工序版本创建成功');
+    }).catch(err => {
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
+        alert('网络错误: ' + err.message);
+    });
+}
+
+function submitStandardVersion(project_name, version, description, steps_config) {
+    const btn = document.getElementById('wiz-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+    const sequence_id = document.getElementById('wiz-sequence-select').value;
+    apiFetch('/api/versions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({version, project_name, description, steps_config, type: 'standard', sequence_id: sequence_id || null}),
+    }).then(res => {
+        finishWizardSubmit(res, btn, '标准版本创建成功');
+    }).catch(err => {
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
+        alert('网络错误: ' + err.message);
+    });
+}
+
+function submitProductFamilyVersion(project_name, version, description, steps_config) {
+    const btn = document.getElementById('wiz-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 创建中...';
+    apiFetch('/api/versions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({version, project_name, description, steps_config, type: 'product_family'}),
+    }).then(res => {
+        finishWizardSubmit(res, btn, '产品族版本创建成功');
+    }).catch(err => {
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
+        alert('网络错误: ' + err.message);
+    });
+}
+
+function finishWizardSubmit(res, btn, successMsg) {
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> 确认创建';
+    if (!res || res.code !== 0) { alert((res && res.message) || '创建失败'); return; }
+    const vid = res.data.id;
+    const filesToUpload = wizBinaryFiles.slice();
+    // Collect sub-scenario binary and INI files for upload
+    const ssFilesToUpload = [];
+    wizSubScenarios.forEach(s => {
+        if (s._bin_data) ssFilesToUpload.push({file: s._bin_data, description: s.name + ' 二进制文件'});
+        if (s._ini_data) ssFilesToUpload.push({file: s._ini_data, description: s.name + ' 指标INI'});
+        if (s._sw_ini_data) ssFilesToUpload.push({file: s._sw_ini_data, description: s.name + ' 软件指标INI'});
+    });
+    alert(successMsg);
+    resetWizard();
+    currentVersionId = vid;
+    loadVersionList();
+    loadInheritVersions();
+    showReleaseWorkflow(vid);
+    document.querySelector('#tab-release').click();
+    const allFiles = filesToUpload.concat(ssFilesToUpload);
+    if (allFiles.length) {
+        uploadBinaryFiles(vid, allFiles);
+    }
+}
+
+function uploadBinaryFiles(vid, files) {
+    if (!files.length) return;
+    const f = files.shift();
+    const fd = new FormData();
+    fd.append('file', f.file);
+    fd.append('description', f.description || '');
+    fetch('/api/versions/' + vid + '/binaries', {method: 'POST', body: fd})
+        .then(r => r.json())
+        .then(() => uploadBinaryFiles(vid, files))
+        .catch(() => uploadBinaryFiles(vid, files));
+}
+
+// ==================== Sub-Scenario Management ====================
+function renderSubScenarios() {
+    const container = document.getElementById('sub-scenario-list');
+    if (!wizSubScenarios.length) {
+        container.innerHTML = '<p class="text-muted small mb-0">暂无子场景，请添加</p>';
+        return;
+    }
+    container.innerHTML = wizSubScenarios.map((s, i) => {
+        const hasFiles = s.hardware_params || s.software_metrics || s.property_page;
+        return `<div class="d-flex align-items-center justify-content-between border rounded p-2 mb-1 bg-light">
+            <div>
+                <strong class="small">${escHtml(s.name)}</strong>
+                <span class="text-muted ms-2 small">${escHtml(s.process_type||'-')} / ${escHtml(s.workstation||'-')}</span>
+                ${hasFiles ? '<span class="badge bg-success bg-opacity-10 text-success ms-1"><i class="bi bi-paperclip"></i> 已配置</span>' : ''}
+            </div>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="wizSubScenarios.splice(${i},1);renderSubScenarios()"><i class="bi bi-x"></i></button>
+        </div>`;
+    }).join('');
+}
+
+function addSubScenarioFromPreset() {
+    const preset = document.getElementById('sub-scenario-preset').value;
+    if (!preset) return;
+    const parts = preset.split('-');
+    wizSubScenarios.push({name: preset, process_type: parts[0] || '', workstation: parts[1] || ''});
+    renderSubScenarios();
+}
+
+function addSubScenarioCustom() {
+    const input = document.getElementById('sub-scenario-custom');
+    const val = input.value.trim();
+    if (!val) return;
+    const parts = val.split('-');
+    wizSubScenarios.push({name: val, process_type: parts[0] || '', workstation: parts[1] || ''});
+    input.value = '';
+    renderSubScenarios();
+}
+
+function renderSSConfig() {
+    const container = document.getElementById('ss-config-container');
+    if (!wizSubScenarios.length) {
+        container.innerHTML = '<p class="text-muted text-center py-3">请先在 Step 1 添加子场景</p>';
+        return;
+    }
+    let html = '';
+    wizSubScenarios.forEach((s, i) => {
+        const hwName = s._hw_file || '';
+        const swName = s._sw_file || '';
+        const ppName = s._pp_file || '';
+        const binName = s._bin_file || '';
+        const iniName = s._ini_file || '';
+        const hwInherited = !hwName && s.hardware_params && ((typeof s.hardware_params === 'object' && Object.keys(s.hardware_params).length) || (typeof s.hardware_params === 'string' && s.hardware_params !== '{}'));
+        const swInherited = !swName && s.software_metrics && ((Array.isArray(s.software_metrics) && s.software_metrics.length) || (typeof s.software_metrics === 'object' && Object.keys(s.software_metrics).length));
+        const ppInherited = !ppName && s.property_page && ((typeof s.property_page === 'object' && Object.keys(s.property_page).length) || (typeof s.property_page === 'string' && s.property_page !== '{}'));
+        html += `<div class="card mb-3" id="ss-card-${i}">
+            <div class="card-header py-2 bg-white d-flex justify-content-between align-items-center">
+                <strong class="small"><i class="bi bi-layers me-1"></i>${escHtml(s.name)}</strong>
+                <span class="text-muted small">${escHtml(s.process_type||'-')} / ${escHtml(s.workstation||'-')}</span>
+            </div>
+            <div class="card-body py-2">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small fw-semibold">测试序列</label>
+                        <select class="form-select form-select-sm" id="ss-seq-${i}" onchange="wizSubScenarios[${i}].sequence_id=this.value||null">
+                            <option value="">-- 选择 --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-cpu me-1"></i>硬件参数 <span class="text-muted fw-normal">(JSON 文件)</span></label>
+                        <input type="file" class="form-control form-control-sm" accept=".json" id="ss-hw-file-${i}" onchange="onSSFileUpload(${i},'hw',this)">
+                        ${hwName ? `<div class="form-text text-success small"><i class="bi bi-check-circle"></i> 已加载: ${escHtml(hwName)}</div>` : (hwInherited ? `<div class="form-text text-primary small"><i class="bi bi-arrow-repeat me-1"></i>已继承: ${escHtml(typeof s.hardware_params === 'string' ? s.hardware_params : JSON.stringify(s.hardware_params).substring(0,80) + '...')}</div>` : '')}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-speedometer me-1"></i>属性页 <span class="text-muted fw-normal">(JSON 文件)</span></label>
+                        <input type="file" class="form-control form-control-sm" accept=".json" id="ss-pp-file-${i}" onchange="onSSFileUpload(${i},'pp',this)">
+                        ${ppName ? `<div class="form-text text-success small"><i class="bi bi-check-circle"></i> 已加载: ${escHtml(ppName)}</div>` : (ppInherited ? `<div class="form-text text-primary small"><i class="bi bi-arrow-repeat me-1"></i>已继承: ${escHtml(typeof s.property_page === 'string' ? s.property_page : JSON.stringify(s.property_page).substring(0,80) + '...')}</div>` : '')}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-file-earmark-bar-graph me-1"></i>软件指标 <span class="text-muted fw-normal">(JSON/INI 文件)</span></label>
+                        <input type="file" class="form-control form-control-sm" accept=".json,.ini" id="ss-sw-file-${i}" onchange="onSSFileUpload(${i},'sw',this)">
+                        ${swName ? `<div class="form-text text-success small"><i class="bi bi-check-circle"></i> 已加载: ${escHtml(swName)}</div>` : (swInherited ? `<div class="form-text text-primary small"><i class="bi bi-arrow-repeat me-1"></i>已继承: ${escHtml(Array.isArray(s.software_metrics) ? JSON.stringify(s.software_metrics).substring(0,80) + '...' : (typeof s.software_metrics === 'string' ? s.software_metrics : JSON.stringify(s.software_metrics).substring(0,80) + '...'))}</div>` : '')}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-file-earmark-binary me-1"></i>指标 INI 文件 <span class="text-muted fw-normal">(INI 文件)</span></label>
+                        <input type="file" class="form-control form-control-sm" accept=".ini" id="ss-ini-file-${i}" onchange="onSSFileUpload(${i},'ini',this)">
+                        ${iniName ? `<div class="form-text text-success small"><i class="bi bi-check-circle"></i> 已加载: ${escHtml(iniName)}</div>` : ''}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12 mb-2">
+                        <label class="form-label small fw-semibold"><i class="bi bi-hdd me-1"></i>二进制文件 <span class="text-muted fw-normal">(任意格式)</span></label>
+                        <input type="file" class="form-control form-control-sm" id="ss-bin-file-${i}" onchange="onSSFileUpload(${i},'bin',this)">
+                        ${binName ? `<div class="form-text text-success small"><i class="bi bi-check-circle"></i> 已加载: ${escHtml(binName)}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+    // Load sequences into each dropdown
+    apiFetch('/api/tests/sequences?active_only=true').then(res => {
+        if (res.code !== 0 || !res.data) return;
+        wizSubScenarios.forEach((s, i) => {
+            const sel = document.getElementById('ss-seq-' + i);
+            if (!sel) return;
+            res.data.forEach(seq => {
+                const opt = document.createElement('option');
+                opt.value = seq.id;
+                opt.textContent = `${seq.name} (v${seq.version})`;
+                sel.appendChild(opt);
+            });
+            if (s.sequence_id) sel.value = s.sequence_id;
+        });
+    });
+}
+
+function onSSFileUpload(idx, field, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const ss = wizSubScenarios[idx];
+    if (field === 'bin') {
+        ss._bin_file = file.name;
+        ss._bin_data = file;
+    } else if (field === 'ini') {
+        ss._ini_file = file.name;
+        ss._ini_data = file;
+    } else if (field === 'sw') {
+        ss._sw_file = file.name;
+        if (file.name.endsWith('.ini')) {
+            ss._sw_ini_data = file;
+            ss.software_metrics = null;
+        } else {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try { ss.software_metrics = JSON.parse(e.target.result); }
+                catch(err) { alert('软件指标 JSON 解析失败: ' + err.message); ss.software_metrics = null; }
+            };
+            reader.readAsText(file);
+        }
+    } else if (field === 'hw') {
+        ss._hw_file = file.name;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try { ss.hardware_params = JSON.parse(e.target.result); }
+            catch(err) { alert('硬件参数 JSON 解析失败: ' + err.message); ss.hardware_params = null; }
+        };
+        reader.readAsText(file);
+    } else if (field === 'pp') {
+        ss._pp_file = file.name;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try { ss.property_page = JSON.parse(e.target.result); }
+            catch(err) { alert('属性页 JSON 解析失败: ' + err.message); ss.property_page = null; }
+        };
+        reader.readAsText(file);
+    }
+    renderSSConfig();
+}
+
+// ==================== Binary File Upload ====================
+function handleWizBinaryUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = function() {
+        [...this.files].forEach(f => {
+            const desc = prompt(`文件 ${f.name} 的描述（可选）：`) || '';
+            wizBinaryFiles.push({file: f, description: desc});
+        });
+        renderWizBinaryFiles();
+    };
+    input.click();
+}
+
+function renderWizBinaryFiles() {
+    const container = document.getElementById('wiz-binary-list');
+    if (!wizBinaryFiles.length) {
+        container.innerHTML = '<p class="text-muted small mb-0">暂无文件</p>';
+        return;
+    }
+    container.innerHTML = wizBinaryFiles.map((f, i) => {
+        const size = f.file.size > 1024*1024 ? (f.file.size/1024/1024).toFixed(1)+'MB' : (f.file.size/1024).toFixed(0)+'KB';
+        return `<div class="d-flex justify-content-between align-items-center border rounded p-1 mb-1">
+            <span class="small"><i class="bi bi-file-earmark-binary me-1"></i>${escHtml(f.file.name)} <span class="text-muted">${size}</span></span>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="wizBinaryFiles.splice(${i},1);renderWizBinaryFiles()"><i class="bi bi-x"></i></button>
+        </div>`;
+    }).join('');
+}
+
+// ==================== Version Management ====================
 function delistVersion(vid) {
-    if (!confirm('确认下架该版本？')) return;
-    apiFetch('/api/versions/' + vid + '/delist', {method:'POST'}).then(res => {
+    if (!confirm('确认下架此版本？')) return;
+    apiFetch('/api/versions/' + vid + '/delist', {method: 'POST'}).then(res => {
         if (res.code !== 0) { alert(res.message); return; }
         loadVersionList();
     });
 }
 
 function restoreVersion(vid) {
-    if (!confirm('确认重新上架该版本？')) return;
-    apiFetch('/api/versions/' + vid + '/restore', {method:'POST'}).then(res => {
+    if (!confirm('确认恢复此版本？')) return;
+    apiFetch('/api/versions/' + vid + '/restore', {method: 'POST'}).then(res => {
         if (res.code !== 0) { alert(res.message); return; }
         loadVersionList();
     });
 }
 
 function deleteVersion(vid) {
-    if (!confirm('确认永久删除该版本？此操作不可恢复！')) return;
-    apiFetch('/api/versions/' + vid, {method:'DELETE'}).then(res => {
+    if (!confirm('确认永久删除此版本？此操作不可恢复。')) return;
+    apiFetch('/api/versions/' + vid, {method: 'DELETE'}).then(res => {
         if (res.code !== 0) { alert(res.message); return; }
         loadVersionList();
     });
+}
+
+function initReleasePage() {
+    updateWizardStepIndicator();
 }
 </script>
 {% endblock %}

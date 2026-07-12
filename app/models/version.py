@@ -173,7 +173,6 @@ class VersionBinaryFile(db.Model):
             'id': self.id,
             'version_id': self.version_id,
             'filename': self.filename,
-            'file_path': self.file_path,
             'file_size': self.file_size,
             'description': self.description,
         }
