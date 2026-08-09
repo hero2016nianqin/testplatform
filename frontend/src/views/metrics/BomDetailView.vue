@@ -2110,9 +2110,11 @@ async function loadAll() {
        
        testItems.value = fullItems.map((item: any) => {
          // 为每个指标构建 _param_map 供表格单元格编辑使用
-         const indicatorList = item.indicators.map((ind: any) => {
-           const sourceParams = ind.has_override ? (ind.params || []) : (ind.dict_params || [])
-           const paramMap: Record<string, any> = {}
+const indicatorList = item.indicators.map((ind: any) => {
+            // 兼容：has_override 可能为 undefined；params/dict_params 可能缺失
+            const hasOverride = Boolean(ind.has_override)
+            const sourceParams = hasOverride ? (ind.params ?? []) : (ind.dict_params ?? [])
+            const paramMap: Record<string, any> = {}
            for (const p of sourceParams) {
              const key = p.param_key || p.key
              if (!key) continue
