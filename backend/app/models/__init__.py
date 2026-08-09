@@ -1,6 +1,7 @@
 from app.core.database import Base
 from .user import User
 from .registration import AccountRegistration
+from .permission import UserDomain, AuditLog
 from .station import Factory, ProductionLine, TestStation, Cabinet, TestChassis, TestSlot
 from .station_config import EquipmentConfig, HardwareParam, SoftwareConfig, ScenarioConfig
 from .equipment import EquipmentDefinition, EquipmentMetrics, EquipmentPropertyPage
@@ -23,6 +24,7 @@ __all__ = [
     "Base",
     "User",
     "AccountRegistration",
+    "UserDomain", "AuditLog",
     "Factory", "ProductionLine", "TestStation", "Cabinet", "TestChassis", "TestSlot",
     "EquipmentConfig", "HardwareParam", "SoftwareConfig", "ScenarioConfig",
     "EquipmentDefinition", "EquipmentMetrics", "EquipmentPropertyPage",
