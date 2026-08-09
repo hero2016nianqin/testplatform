@@ -12,7 +12,6 @@ router = APIRouter(tags=["WebSocket"])
 
 from app.websockets.bom_ws import (
     online_users as bom_online_users,
-    editing_cells as bom_editing_cells,
     broadcast_to_room as broadcast_bom_room,
     get_online_users as get_bom_online_users,
     get_editing_cells as get_bom_editing_cells,
@@ -70,7 +69,7 @@ async def get_bom_editing_cells_http(bom_code: str, version: int):
     """获取 BOM 协同编辑中正在被编辑的单元格状态（HTTP 接口）"""
     from app.websockets.bom_ws import get_editing_cells
     room_key = f"{bom_code}:{version}"
-    cells = get_editing_cells(room_key)
+    cells = await get_editing_cells(room_key)
     return {"editing_cells": cells, "count": len(cells)}
 
 

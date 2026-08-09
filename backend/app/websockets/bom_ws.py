@@ -1,41 +1,104 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from typing import Dict, List, Set, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from typing import Dict, List, Optional
 from collections import defaultdict
 import json
 from datetime import datetime
-from dataclasses import dataclass, asdict
-from typing import Any
+
+from redis.asyncio import Redis
+
+from app.core.redis import get_redis_pool
+from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 # 在线用户存储：room_key -> {user_id: {user_id, user_name, connected_at, websocket}}
+# 在线用户列表仅用于展示（丢失可接受），编辑锁已移至 Redis（跨实例共享 + 自动过期）。
 online_users: Dict[str, Dict[int, dict]] = defaultdict(dict)
 
-# 正在编辑的单元格：room_key -> {cell_key: {user_id, user_name, test_item_id, indicator_id, param_key, started_at}}
-editing_cells: Dict[str, Dict[str, dict]] = defaultdict(dict)
-
 HEARTBEAT_INTERVAL = 30
+EDIT_LOCK_TTL = 300  # 秒，超时自动释放（断线/崩溃不残留）
+
+# 锁粒度：与后端乐观锁（测试项级 CAS）保持一致，避免"单元格可编辑、保存却冲突"的错位。
+def make_cell_key(test_item_id: int) -> str:
+    return f"item:{test_item_id}"
 
 
-@dataclass
-class EditingInfo:
-    user_id: int
-    user_name: str
-    test_item_id: int
-    indicator_id: int
-    param_key: str
-    started_at: str
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @property
-    def cell_key(self) -> str:
-        return f"{self.test_item_id}:{self.indicator_id}:{self.param_key}"
+def _lock_key(room_key: str, cell_key: str) -> str:
+    return f"bom:lock:{room_key}:{cell_key}"
 
 
-def make_cell_key(test_item_id: int, indicator_id: int, param_key: str) -> str:
-    return f"{test_item_id}:{indicator_id}:{param_key}"
+async def _redis() -> Redis:
+    return Redis(connection_pool=get_redis_pool())
+
+
+async def acquire_edit_lock(room_key: str, cell_key: str, user_id: int, user_name: str) -> Optional[dict]:
+    """原子获取测试项级编辑锁（SET NX EX）。返回 None 表示成功；否则返回占用者信息。"""
+    r = await _redis()
+    try:
+        key = _lock_key(room_key, cell_key)
+        payload = json.dumps({
+            "user_id": user_id,
+            "user_name": user_name,
+            "cell_key": cell_key,
+            "started_at": datetime.utcnow().isoformat(),
+        }, ensure_ascii=False)
+        ok = await r.set(key, payload, nx=True, ex=EDIT_LOCK_TTL)
+        if ok:
+            return None
+        raw = await r.get(key)
+        return json.loads(raw) if raw else None
+    finally:
+        await r.aclose()
+
+
+async def release_edit_lock(room_key: str, cell_key: str, user_id: int):
+    """释放编辑锁（仅限锁持有者）。"""
+    r = await _redis()
+    try:
+        key = _lock_key(room_key, cell_key)
+        raw = await r.get(key)
+        if raw:
+            data = json.loads(raw)
+            if data.get("user_id") == user_id:
+                await r.delete(key)
+    finally:
+        await r.aclose()
+
+
+async def release_user_editing(room_key: str, user_id: int):
+    """断开连接时清理该用户持有的所有编辑锁。"""
+    r = await _redis()
+    try:
+        prefix = f"bom:lock:{room_key}:"
+        async for key in r.scan_iter(prefix + "*"):
+            raw = await r.get(key)
+            if raw:
+                data = json.loads(raw)
+                if data.get("user_id") == user_id:
+                    await r.delete(key)
+    finally:
+        await r.aclose()
+
+
+async def get_editing_cells(room_key: str) -> Dict[str, dict]:
+    """获取房间内所有正在编辑的测试项锁（供初始同步与 HTTP 接口）。"""
+    r = await _redis()
+    try:
+        result: Dict[str, dict] = {}
+        prefix = f"bom:lock:{room_key}:"
+        async for key in r.scan_iter(prefix + "*"):
+            raw = await r.get(key)
+            if raw:
+                cell_key = key[len(prefix):]
+                result[cell_key] = json.loads(raw)
+        return result
+    finally:
+        await r.aclose()
+
+
+async def clear_user_editing(room_key: str, user_id: int):
+    """清理指定用户的编辑锁（供外部调用）。"""
+    await release_user_editing(room_key, user_id)
 
 
 @router.websocket("/bom/{bom_code}/{version}")
@@ -43,16 +106,35 @@ async def bom_websocket(
     websocket: WebSocket,
     bom_code: str,
     version: int,
-    user_id: int = Query(...),
-    user_name: str = Query(...),
+    user_id: Optional[int] = None,  # 兼容旧客户端参数；以 session 鉴权为准
+    user_name: Optional[str] = None,
 ):
     """
     BOM 协同编辑 WebSocket 连接
+    - Session 鉴权（cookie session_id），拒绝伪造身份
     - 维护在线用户列表
-    - 同步实时编辑状态（谁在改哪个参数）
+    - 同步实时编辑状态（测试项级锁，Redis 存储，跨实例共享）
     - 广播用户加入/离开
     - 心跳保活
     """
+    # ── 鉴权：以服务端 session 为准，忽略客户端自报身份 ──
+    session_id = websocket.cookies.get("session_id")
+    if not session_id:
+        await websocket.close(code=1008, reason="未登录")
+        return
+    r = await _redis()
+    try:
+        user = await AuthService.get_current_user(r, session_id)
+    except Exception:
+        user = None
+    finally:
+        await r.aclose()
+    if not user:
+        await websocket.close(code=1008, reason="会话无效")
+        return
+    user_id = user["id"]
+    user_name = user.get("display_name") or user.get("username") or ""
+
     room_key = f"{bom_code}:{version}"
 
     await websocket.accept()
@@ -66,13 +148,15 @@ async def bom_websocket(
     }
 
     # 发送当前编辑状态给新加入者
-    await websocket.send_text(json.dumps({
-        "type": "editing_sync",
-        "editing_cells": {
-            k: v for k, v in editing_cells.get(room_key, {}).items()
-        },
-        "timestamp": datetime.utcnow().isoformat(),
-    }))
+    try:
+        cells = await get_editing_cells(room_key)
+        await websocket.send_text(json.dumps({
+            "type": "editing_sync",
+            "editing_cells": cells,
+            "timestamp": datetime.utcnow().isoformat(),
+        }))
+    except Exception:
+        cells = {}
 
     # 广播用户加入
     await broadcast_online_users(room_key, f"用户 {user_name} 加入编辑")
@@ -91,7 +175,6 @@ async def bom_websocket(
                     }))
 
                 elif msg_type == "cursor":
-                    # 广播光标位置
                     await broadcast_to_room(room_key, {
                         "type": "cursor",
                         "user_id": user_id,
@@ -100,80 +183,62 @@ async def bom_websocket(
                     }, exclude=user_id)
 
                 elif msg_type == "start_editing":
-                    # 用户开始编辑某个参数
                     cell_info = msg.get("data")
                     if cell_info:
-                        cell_key = make_cell_key(
-                            cell_info["test_item_id"],
-                            cell_info["indicator_id"],
-                            cell_info["param_key"],
-                        )
-                        # 检查是否已被他人编辑
-                        existing = editing_cells[room_key].get(cell_key)
-                        if existing and existing["user_id"] != user_id:
-                            # 已被他人占用，拒绝并通知当前用户
+                        test_item_id = cell_info.get("test_item_id")
+                        if test_item_id is None:
+                            continue
+                        cell_key = make_cell_key(test_item_id)
+                        existing = await acquire_edit_lock(room_key, cell_key, user_id, user_name)
+                        if existing:
                             await websocket.send_text(json.dumps({
                                 "type": "editing_rejected",
                                 "cell_key": cell_key,
                                 "occupied_by": existing,
-                                "message": f"该参数正在被 {existing['user_name']} 编辑，请稍后再试",
+                                "message": f"该测试项正在被 {existing.get('user_name', '')} 编辑，请稍后再试",
                             }))
                         else:
-                            # 记录编辑状态并广播
-                            info = EditingInfo(
-                                user_id=user_id,
-                                user_name=user_name,
-                                test_item_id=cell_info["test_item_id"],
-                                indicator_id=cell_info["indicator_id"],
-                                param_key=cell_info["param_key"],
-                                started_at=datetime.utcnow().isoformat(),
-                            )
-                            editing_cells[room_key][cell_key] = info.to_dict()
                             await broadcast_to_room(room_key, {
                                 "type": "user_started_editing",
                                 "cell_key": cell_key,
-                                "user": info.to_dict(),
+                                "test_item_id": test_item_id,
+                                "user": {
+                                    "user_id": user_id,
+                                    "user_name": user_name,
+                                    "test_item_id": test_item_id,
+                                    "started_at": datetime.utcnow().isoformat(),
+                                },
                                 "timestamp": datetime.utcnow().isoformat(),
                             })
 
                 elif msg_type == "stop_editing":
-                    # 用户结束编辑
                     cell_info = msg.get("data")
                     if cell_info:
-                        cell_key = make_cell_key(
-                            cell_info["test_item_id"],
-                            cell_info["indicator_id"],
-                            cell_info["param_key"],
-                        )
-                        existing = editing_cells[room_key].get(cell_key)
-                        if existing and existing["user_id"] == user_id:
-                            del editing_cells[room_key][cell_key]
-                            await broadcast_to_room(room_key, {
-                                "type": "user_stopped_editing",
-                                "cell_key": cell_key,
-                                "user_id": user_id,
-                                "timestamp": datetime.utcnow().isoformat(),
-                            })
+                        test_item_id = cell_info.get("test_item_id")
+                        if test_item_id is None:
+                            continue
+                        cell_key = make_cell_key(test_item_id)
+                        await release_edit_lock(room_key, cell_key, user_id)
+                        await broadcast_to_room(room_key, {
+                            "type": "user_stopped_editing",
+                            "cell_key": cell_key,
+                            "test_item_id": test_item_id,
+                            "user_id": user_id,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        })
 
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
         pass
     finally:
-        # 清理该用户的编辑状态
-        if room_key in editing_cells:
-            keys_to_delete = [
-                k for k, v in editing_cells[room_key].items()
-                if v.get("user_id") == user_id
-            ]
-            for k in keys_to_delete:
-                del editing_cells[room_key][k]
-                await broadcast_to_room(room_key, {
-                    "type": "user_stopped_editing",
-                    "cell_key": k,
-                    "user_id": user_id,
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
+        # 清理该用户的编辑锁（Redis）
+        await release_user_editing(room_key, user_id)
+        await broadcast_to_room(room_key, {
+            "type": "user_stopped_editing_all",
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
 
         # 清理在线用户
         if user_id in online_users.get(room_key, {}):
@@ -207,33 +272,19 @@ async def broadcast_to_room(room_key: str, message: dict, exclude: int = None):
     """向房间内所有用户广播消息（可排除某用户）"""
     dead_connections = []
 
-    for user_id, conn_info in online_users.get(room_key, {}).items():
-        if exclude and user_id == exclude:
+    for uid, conn_info in online_users.get(room_key, {}).items():
+        if exclude and uid == exclude:
             continue
         ws = conn_info["websocket"]
         try:
             await ws.send_text(json.dumps(message))
         except Exception:
-            dead_connections.append(user_id)
+            dead_connections.append(uid)
 
-    # 清理断开的连接
     for uid in dead_connections:
         if uid in online_users.get(room_key, {}):
             del online_users[room_key][uid]
-            # 同时清理该用户的编辑状态
-            if room_key in editing_cells:
-                keys_to_delete = [
-                    k for k, v in editing_cells[room_key].items()
-                    if v.get("user_id") == uid
-                ]
-                for k in keys_to_delete:
-                    del editing_cells[room_key][k]
-                    await broadcast_to_room(room_key, {
-                        "type": "user_stopped_editing",
-                        "cell_key": k,
-                        "user_id": uid,
-                        "timestamp": datetime.utcnow().isoformat(),
-                    })
+            await release_user_editing(room_key, uid)
 
 
 def get_online_users(room_key: str) -> List[dict]:
@@ -246,19 +297,3 @@ def get_online_users(room_key: str) -> List[dict]:
         }
         for u in online_users.get(room_key, {}).values()
     ]
-
-
-def get_editing_cells(room_key: str) -> Dict[str, dict]:
-    """获取房间内正在编辑的单元格状态（供 HTTP 接口调用）"""
-    return editing_cells.get(room_key, {})
-
-
-def clear_user_editing(room_key: str, user_id: int):
-    """清理指定用户的编辑状态（供外部调用，如用户被踢出）"""
-    if room_key in editing_cells:
-        keys_to_delete = [
-            k for k, v in editing_cells[room_key].items()
-            if v.get("user_id") == user_id
-        ]
-        for k in keys_to_delete:
-            del editing_cells[room_key][k]
