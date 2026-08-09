@@ -485,7 +485,18 @@ class BomExportResp(BaseModel):
 # ── Review / Archive ──
 class ReviewReq(BaseModel):
     comment: str = ""
-    change_summary: str = Field(..., min_length=1, description="版本变更备注（必填）")
+    change_summary: str = Field("", description="版本变更备注（提交评审时必填）")
+    approver_id: Optional[int] = Field(None, description="指定审批人用户ID（提交评审时可设置）")
+
+class ReviewCommentItem(BaseModel):
+    comment: str
+    test_item_id: Optional[int] = None
+    test_item_name: Optional[str] = ""
+    indicator_id: Optional[int] = None
+    param_key: Optional[str] = None
+
+class ReviewCommentsReq(BaseModel):
+    comments: list[ReviewCommentItem] = []
 
 class ReviewActionResp(BaseModel):
     id: int
@@ -493,6 +504,8 @@ class ReviewActionResp(BaseModel):
     review_comment: Optional[str] = None
     review_operator: Optional[str] = None
     reviewed_at: Optional[str] = None
+    approver_id: Optional[int] = None
+    approver_name: Optional[str] = None
 
 
 # ── Collaborative Editing ──

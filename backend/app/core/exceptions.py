@@ -43,6 +43,14 @@ async def _business_exception_handler(request: Request, exc: BusinessException):
     )
 
 
+async def _value_error_handler(request: Request, exc: ValueError):
+    # 业务校验失败（评审状态、编辑权限、参数格式等）→ 400 友好提示，而非 500
+    return JSONResponse(
+        status_code=400,
+        content=ApiResponse(code=400, message=str(exc)).model_dump(),
+    )
+
+
 async def _generic_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
@@ -52,4 +60,5 @@ async def _generic_exception_handler(request: Request, exc: Exception):
 
 def register_exception_handlers(app: FastAPI):
     app.add_exception_handler(BusinessException, _business_exception_handler)
+    app.add_exception_handler(ValueError, _value_error_handler)
     app.add_exception_handler(Exception, _generic_exception_handler)

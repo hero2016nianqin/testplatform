@@ -12,7 +12,7 @@ from .log import TestLog
 from .metrics import (
     IndicatorDict, TestItemCollection, CollectionTestItem,
     BomConfig, BomIndicator, IndicatorVersionSnapshot,
-    TestItemIndicator, ScriptTemplate, BomDomainOwner, ParamChangeLog,
+    TestItemIndicator, ScriptTemplate, BomDomainOwner, ParamChangeLog, BomReviewEvent,
 )
 from .version import (
     TestVersion, SubScenario, ReleaseStep, VersionArchiveItem,
@@ -32,7 +32,7 @@ __all__ = [
     "TestLog",
     "IndicatorDict", "TestItemCollection", "CollectionTestItem",
     "BomConfig", "BomIndicator", "IndicatorVersionSnapshot",
-    "TestItemIndicator", "ScriptTemplate", "BomDomainOwner", "ParamChangeLog",
+    "TestItemIndicator", "ScriptTemplate", "BomDomainOwner", "ParamChangeLog", "BomReviewEvent",
     "TestVersion", "SubScenario", "ReleaseStep",
     "VersionArchiveItem", "VersionBinaryFile", "ReleaseDeployment",
 ]

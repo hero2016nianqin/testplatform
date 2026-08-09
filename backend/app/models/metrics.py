@@ -184,6 +184,10 @@ class BomConfig(Base):
     review_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     review_operator: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    change_summary: Mapped[str] = mapped_column(Text, default="")
+    # 指定审批人（为空则任意 developer+ 可审）
+    approver_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    approver_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     archived: Mapped[bool] = mapped_column(Integer, default=0)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     domain_owners: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -206,6 +210,9 @@ class BomConfig(Base):
             "review_comment": self.review_comment,
             "review_operator": self.review_operator,
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+            "change_summary": self.change_summary or "",
+            "approver_id": self.approver_id,
+            "approver_name": self.approver_name,
             "archived": bool(self.archived),
             "archived_at": self.archived_at.isoformat() if self.archived_at else None,
             "domain_owners": self.domain_owners or {},
@@ -310,6 +317,39 @@ class IndicatorVersionSnapshot(Base):
             "snapshot_data": self.snapshot_data,
             "change_summary": self.change_summary,
             "operator": self.operator,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class BomReviewEvent(Base):
+    """BOM 评审事件记录：每次提交/通过/驳回/撤回等动作形成时间线"""
+    __tablename__ = "bom_review_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bom_config_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    operator_name: Mapped[str] = mapped_column(String(100), default="")
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 意见可定位到具体测试项/指标/参数
+    test_item_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    test_item_name: Mapped[str] = mapped_column(String(200), default="")
+    indicator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    param_key: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "bom_config_id": self.bom_config_id,
+            "action": self.action,
+            "operator_id": self.operator_id,
+            "operator_name": self.operator_name,
+            "comment": self.comment,
+            "test_item_id": self.test_item_id,
+            "test_item_name": self.test_item_name,
+            "indicator_id": self.indicator_id,
+            "param_key": self.param_key,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
