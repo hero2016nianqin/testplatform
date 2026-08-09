@@ -31,7 +31,7 @@ from app.schemas.metrics import (
     ScriptTemplateCreateReq, ScriptTemplateUpdateReq, ScriptTemplateResp,
     ScriptExecuteReq, ScriptExecuteResp,
     BomExportReq,
-    ReviewReq, ReviewActionResp,
+    ReviewReq, ReviewActionResp, ReviewCommentsReq,
     BomIndicatorBatchSaveReq, BomIndicatorBatchSaveResp,
     ParamChangeLogResp,
     OnlineUserInfo,
@@ -672,6 +672,17 @@ async def switch_bom_collection_version(
     return success(data=BomConfigResp(**config.to_dict()), message=f"已切换至版本 v{snapshot.version}")
 
 
+@router.get("/bom-configs/{config_id}/preview-version-upgrade", dependencies=[Depends(require_process)])
+async def preview_version_upgrade(
+    config_id: int,
+    snapshot_id: int = Query(..., description="目标版本快照ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """升级集合版本前预览差异（新增/删除测试项），避免静默切换引用。"""
+    data = await bom_svc.preview_collection_upgrade(db, config_id, snapshot_id)
+    return success(data=data)
+
+
 @router.get("/bom-configs/check-version", dependencies=[Depends(require_process)])
 async def check_bom_version(
     bom_code: str = Query(..., description="BOM编码"),
@@ -697,7 +708,13 @@ async def submit_review(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    obj = await bom_svc.submit_review(db, config_id, operator=_get_operator(user), change_summary=req.change_summary)
+    obj = await bom_svc.submit_review(
+        db, config_id,
+        operator_id=user.get("id", 0),
+        operator_name=_get_operator(user),
+        change_summary=req.change_summary,
+        approver_id=req.approver_id,
+    )
     return success(data=ReviewActionResp(**obj.to_dict()), message="已提交评审")
 
 
@@ -707,7 +724,12 @@ async def approve_review(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    obj = await bom_svc.approve_review(db, config_id, comment=req.comment, operator=_get_operator(user))
+    obj = await bom_svc.approve_review(
+        db, config_id, comment=req.comment,
+        operator_id=user.get("id", 0),
+        operator_name=_get_operator(user),
+        role=user.get("role", ""),
+    )
     return success(data=ReviewActionResp(**obj.to_dict()), message="评审已通过")
 
 
@@ -717,7 +739,12 @@ async def reject_review(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    obj = await bom_svc.reject_review(db, config_id, comment=req.comment, operator=_get_operator(user))
+    obj = await bom_svc.reject_review(
+        db, config_id, comment=req.comment,
+        operator_id=user.get("id", 0),
+        operator_name=_get_operator(user),
+        role=user.get("role", ""),
+    )
     return success(data=ReviewActionResp(**obj.to_dict()), message="评审已驳回")
 
 
@@ -727,8 +754,35 @@ async def withdraw_review(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    obj = await bom_svc.withdraw_review(db, config_id, operator=_get_operator(user))
+    obj = await bom_svc.withdraw_review(
+        db, config_id,
+        operator_id=user.get("id", 0),
+        operator_name=_get_operator(user),
+    )
     return success(data=ReviewActionResp(**obj.to_dict()), message="评审已撤回")
+
+
+@router.post("/bom-configs/{config_id}/review-comments", dependencies=[Depends(require_developer)])
+async def add_review_comments(
+    config_id: int,
+    req: ReviewCommentsReq,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """记录逐条评审意见（驳回时可定位到具体测试项/指标/参数）。"""
+    events = await bom_svc.add_review_comments(
+        db, config_id,
+        [c.model_dump() for c in req.comments],
+        user.get("id", 0), _get_operator(user),
+    )
+    return success(data=events, message="评审意见已记录")
+
+
+@router.get("/bom-configs/{config_id}/review-events", dependencies=[Depends(require_process)])
+async def get_review_events(config_id: int, db: AsyncSession = Depends(get_db)):
+    """BOM 评审时间线（提交/通过/驳回/撤回/意见）。"""
+    events = await bom_svc.get_review_events(db, config_id)
+    return success(data=events)
 
 
 @router.post("/bom-configs/{config_id}/archive", dependencies=[Depends(require_developer)])
@@ -965,6 +1019,21 @@ async def batch_save_bom_indicator_params(
         operator_name=_get_operator(user),
         is_super_admin=user.get("role") == "super_admin",
     )
+    # 保存成功后广播 diff，房间内其他在线用户本地增量更新（避免冲突后全量 reload）
+    if result.get("success") and result.get("room_key"):
+        from app.routers.ws_router import broadcast_to_bom_room
+        from datetime import datetime
+        await broadcast_to_bom_room(
+            result["room_key"],
+            {
+                "type": "params_saved",
+                "operator_id": user.get("id", 0),
+                "operator_name": _get_operator(user),
+                "items": result.get("details", []),
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+            exclude=user.get("id", 0),
+        )
     return success(data=result, message="保存完成")
 
 

@@ -510,10 +510,6 @@ async def import_bom_config(db: AsyncSession, config_id: int, file_bytes: bytes,
             else:
                 empty_count += 1
 
-    # Snapshot after import
-    from app.services.version_snapshot_service import VersionSnapshotService
-    await VersionSnapshotService.snapshot_bom_config(db, config_id, operator, "Excel 导入更新参数")
-
     summary = {
         "total_rows": sum(1 for _ in wb.sheetnames if _ != "填写说明"),
         "updated_count": updated_count,
