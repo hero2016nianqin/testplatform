@@ -881,6 +881,19 @@ try {
   }
 }
 
+function disconnectBomWebSocket() {
+  if (bomWs) {
+    bomWs.close()
+    bomWs = null
+  }
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = null
+  }
+  onlineUsers.value = []
+  editingCells.value = {}
+}
+
 function sendStartEditing(ind: any, paramKey: string) {
   if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
   const item = ind._item
