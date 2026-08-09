@@ -314,8 +314,9 @@ async def export_current_config(db: AsyncSession, config_id: int) -> dict:
     }
 
 
-async def import_bom_config(db: AsyncSession, config_id: int, file_bytes: bytes, operator: str = "") -> dict:
-    """导入 BOM 配置 (Excel) — 仅更新数值/阈值/参数，自动匹配，返回可视化汇总"""
+async def import_bom_config(db: AsyncSession, config_id: int, file_bytes: bytes, operator: str = "", dry_run: bool = False) -> dict:
+    """导入 BOM 配置 (Excel) — 仅更新数值/阈值/参数，自动匹配，返回可视化汇总
+    dry_run=True 时仅解析与统计（预览将更新多少参数），不写库。"""
     config = await BomConfigService.get(db, config_id)
     indicators = await BomConfigService.list_indicators(db, config_id)
     bom_ind_map = {bi["indicator_id"]: bi for bi in indicators}
@@ -488,6 +489,10 @@ async def import_bom_config(db: AsyncSession, config_id: int, file_bytes: bytes,
                 has_changes = True
 
             if has_changes:
+                if dry_run:
+                    # 预览模式：只统计，不写库
+                    updated_count += 1
+                    continue
                 if bi and bi.get("id"):
                     await BomConfigService.update_indicator(db, bi["id"], {
                         "unit": unit_val or bi.get("unit", ""),
@@ -516,6 +521,7 @@ async def import_bom_config(db: AsyncSession, config_id: int, file_bytes: bytes,
         "skipped_count": skipped_count,
         "empty_count": empty_count,
         "errors": errors,
+        "dry_run": dry_run,
     }
 
     return {

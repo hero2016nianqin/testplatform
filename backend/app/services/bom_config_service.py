@@ -646,6 +646,9 @@ class BomConfigService:
                 "remark": p.get("remark") or "",
                 "unit": p.get("unit") or ind_data.get("unit") or "",
                 "default": p.get("default") or p.get("default_value") or "",
+                "options": p.get("options") or p.get("enum_options") or [],
+                "min": p.get("min") if p.get("min") is not None else (p.get("min_value") if p.get("min_value") is not None else ""),
+                "max": p.get("max") if p.get("max") is not None else (p.get("max_value") if p.get("max_value") is not None else ""),
                 "minWidth": 140,
             })
         return cols
@@ -805,7 +808,7 @@ class BomConfigService:
             acquired = await BomConfigService.check_item_revision_atomic(db, test_item_id, client_revision)
             if not acquired:
                 from app.core.exceptions import ConcurrencyError
-                raise ConcurrencyError("该指标已被他人更新，请刷新页面获取最新数据后重新编辑")
+                raise ConcurrencyError("该参数刚被其他人修改，已为你同步最新值，请确认后重新填写")
 
         try:
             nullable_fields = {"unit", "judgment_rule", "test_stage", "remark"}
@@ -1354,7 +1357,7 @@ class BomConfigService:
                         "indicator_id": item["indicator_id"],
                         "test_item_id": test_item_id,
                         "current_revision": cur_revision,
-                        "message": "该测试项已被他人更新，请刷新页面获取最新数据后重新编辑",
+                        "message": "该参数刚被其他人修改，已为你同步最新值，请确认后重新填写",
                     })
                 continue
             

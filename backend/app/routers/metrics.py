@@ -3,7 +3,7 @@
 """
 import os
 import io
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Body
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Body, Form
 from fastapi.responses import StreamingResponse
 from urllib.parse import quote
 from sqlalchemy import select, or_, func, case
@@ -865,6 +865,7 @@ async def export_bom_pdf(
 async def import_bom_config(
     config_id: int,
     file: UploadFile = File(...),
+    dry_run: bool = Form(False),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
@@ -872,7 +873,7 @@ async def import_bom_config(
         return error(code=400, message="仅支持 .xlsx / .xls 文件")
     content = await file.read()
     from app.services.export_service import import_bom_config as do_import
-    result = await do_import(db, config_id, content, operator=_get_operator(user))
+    result = await do_import(db, config_id, content, operator=_get_operator(user), dry_run=dry_run)
     return success(data=result, message="Excel 导入完成")
 
 
