@@ -1,0 +1,129 @@
+version: '3.8'
+
+x-logging: &default-logging
+  driver: 'json-file'
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./pg_init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_USER: testplatform
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-testplatform}
+      POSTGRES_DB: testplatform
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U testplatform']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-testplatform}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-testplatform123}
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://testplatform:${DB_PASSWORD:-testplatform}@postgres:5432/testplatform
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - backend_logs:/app/logs
+    logging: *default-logging
+
+  celery-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://testplatform:${DB_PASSWORD:-testplatform}@postgres:5432/testplatform
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    command: celery -A tasks.celery_app worker -l info -c 4
+    volumes:
+      - backend_logs:/app/logs
+    logging: *default-logging
+
+  celery-beat:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://testplatform:${DB_PASSWORD:-testplatform}@postgres:5432/testplatform
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    command: celery -A tasks.celery_app beat -l info
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  redisdata:
+  minio_data:
+  backend_logs:

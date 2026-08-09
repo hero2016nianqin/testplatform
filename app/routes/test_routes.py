@@ -9,7 +9,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 
-from app import db
+from app import db, cache
 from app.models import TestItem, TestResult, TestRun, TestStation
 from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
 from app.auth import login_required, developer_required
@@ -22,6 +22,7 @@ test_bp = Blueprint('tests', __name__)
 # ==================== 测试项管理 ====================
 
 @test_bp.route('/items', methods=['GET'])
+@cache.cached(timeout=30, query_string=True)
 def list_test_items():
     """
     获取测试项列表。
@@ -348,7 +349,6 @@ def get_test_records():
         r2_list = []
         for r in results:
             r2 = r.to_dict()
-            # R3: detailed indicator info merged into r2
             item = TestItem.query.get(r.test_item_id)
             r2['item_detail'] = item.to_dict() if item else None
             r2_list.append(r2)
@@ -361,6 +361,7 @@ def get_test_records():
 
 
 @test_bp.route('/categories', methods=['GET'])
+@cache.cached(timeout=60)
 def list_categories():
     """获取所有测试项分类（去重）"""
     categories = db.session.query(TestItem.category).distinct().all()
@@ -374,6 +375,7 @@ def list_categories():
 
 @test_bp.route('/templates', methods=['GET'])
 @login_required
+@cache.cached(timeout=30, query_string=True)
 def list_templates():
     category = request.args.get('category')
     active_only = request.args.get('active_only', 'true').lower() == 'true'

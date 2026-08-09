@@ -14,3 +14,9 @@ build/
 .DS_Store
 uploads/
 logs/
+node_modules/
+flask_session/
+backend/uploads/
+*.pyc
+.pytest_cache/
+__pycache__/

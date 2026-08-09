@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from sqlalchemy import or_
 
-from app import db
+from app import db, cache
 from app.models.station import (
     Factory, ProductionLine,
     TestStation, TestChassis, TestSlot, Cabinet,
@@ -22,6 +22,7 @@ from app.models import TestItem
 from app.models.test_sequence import TestItemTemplate, TestSequence, TestSequenceStep
 from app.auth import process_required, developer_required, login_required, get_current_user
 
+
 station_bp = Blueprint('stations', __name__)
 
 
@@ -29,6 +30,7 @@ station_bp = Blueprint('stations', __name__)
 
 @station_bp.route('/factories', methods=['GET'])
 @login_required
+@cache.cached(timeout=30, query_string=True)
 def list_factories():
     """获取所有厂区列表"""
     factories = Factory.query.order_by(Factory.sort_order).all()
@@ -142,7 +144,7 @@ def delete_line(line_id):
 @station_bp.route('/hierarchy', methods=['GET'])
 @login_required
 def get_hierarchy():
-    """获取完整层级：厂区→线体→装备"""
+    """获取完整层级：厂区→线体→装备（已缓存 30s，减少 DB 压力）"""
     factories = Factory.query.order_by(Factory.sort_order).all()
     result = []
     for f in factories:
@@ -164,6 +166,7 @@ def get_hierarchy():
 
 @station_bp.route('/definitions', methods=['GET'])
 @login_required
+@cache.cached(timeout=60, query_string=True)
 def list_definitions():
     """获取所有装备定义"""
     defs = EquipmentDefinition.query.order_by(
@@ -247,7 +250,7 @@ def delete_definition(def_id):
 @station_bp.route('/<int:station_id>/version-check', methods=['GET'])
 @login_required
 def check_station_version(station_id):
-    """检查装备版本：对比已部署版本与定义的最新版本"""
+    """检查装备版本：对比已发行版本与定义的最新版本"""
     station = TestStation.query.get_or_404(station_id)
     needs_update = station.deployed_version != station.latest_version
     return jsonify({

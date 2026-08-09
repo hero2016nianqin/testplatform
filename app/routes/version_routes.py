@@ -3,7 +3,7 @@ import json
 import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session, current_app
-from app import db
+from app import db, cache
 from app.models.version import TestVersion, ReleaseStep, VersionArchiveItem, ReleaseDeployment, VersionBinaryFile, SubScenario
 from app.models import TestItem, User
 from app.models.station import TestStation, ProductionLine, SoftwareConfig, EquipmentMetrics, EquipmentPropertyPage
@@ -1165,6 +1165,7 @@ def get_inherit_data(version_id):
 
 @version_bp.route('/all-users', methods=['GET'])
 @login_required
+@cache.cached(timeout=60)
 def list_all_users():
     users = User.query.filter_by(is_active=True).all()
     return jsonify({'code': 0, 'data': [u.to_dict() for u in users]})
@@ -1172,6 +1173,7 @@ def list_all_users():
 
 @version_bp.route('/archive-configs', methods=['GET'])
 @login_required
+@cache.cached(timeout=60)
 def get_archive_configs():
     items = TestItem.query.filter_by(is_active=True).order_by(TestItem.sort_order).all()
     return jsonify({
