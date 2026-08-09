@@ -9,11 +9,11 @@
 :root {
   /* 主色 & 衍生色阶 */
   --el-color-primary: #165DFF;
-  --el-color-primary-light-3: #B9CEFF;
-  --el-color-primary-light-5: #8BAEFF;
-  --el-color-primary-light-7: #5C8EFF;
-  --el-color-primary-light-8: #457DFF;
-  --el-color-primary-light-9: #2D6DFF;
+  --el-color-primary-light-3: #4A7DFF;
+  --el-color-primary-light-5: #7BA0FF;
+  --el-color-primary-light-7: #A9C3FF;
+  --el-color-primary-light-8: #D0DEFF;
+  --el-color-primary-light-9: #EAF1FF;
   --el-color-primary-dark-2: #124ACC;
 
   /* 次要色 */

@@ -27,6 +27,7 @@ from app.schemas.metrics import (
     IndicatorParamAddReq, IndicatorParamUpdateReq,
     BomIndicatorParamAddReq, BomIndicatorParamUpdateReq,
     TestItemIndicatorCreateReq, TestItemIndicatorBatchCreateReq, TestItemIndicatorResp,
+    IndicatorQueryResp,
     ScriptTemplateCreateReq, ScriptTemplateUpdateReq, ScriptTemplateResp,
     ScriptExecuteReq, ScriptExecuteResp,
     BomExportReq,
@@ -44,7 +45,7 @@ from app.services.version_snapshot_service import VersionSnapshotService
 from app.services.script_template_service import ScriptTemplateService
 from app.models.metrics import (
     BomConfig, BomIndicator, IndicatorDict,
-    TestItemCollection, CollectionTestItem, IndicatorVersionSnapshot, ScriptTemplate,
+    TestItemCollection, CollectionTestItem, IndicatorVersionSnapshot, ScriptTemplate, TestItemIndicator,
 )
 from app.utils.export import export_xlsx
 

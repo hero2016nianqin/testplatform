@@ -136,6 +136,7 @@ import { reactive, ref, onMounted, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { WarningFilled } from '@element-plus/icons-vue'
 import { metricsApi } from '@/api/metrics'
+import FormDialog from '@/components/FormDialog.vue'
 
 // CodeMirror
 import { Codemirror } from 'vue-codemirror'
