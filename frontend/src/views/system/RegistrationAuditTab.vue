@@ -108,6 +108,7 @@ const roleLabels: Record<string, string> = {
   equipment_manager: '装备经理',
   equipment_test_manager: '装备测试经理',
   equipment_developer: '装备开发人员',
+  developer: '装备开发人员',
   process: '生产工艺人员',
   operator: '生产操作人员',
   fd_developer: '功放开发',
@@ -142,7 +143,7 @@ const statusTag: Record<string, string> = {
   rejected: 'danger',
 }
 
-const noDomainRoles = ['super_admin', 'equipment_manager', 'equipment_test_manager', 'process', 'operator']
+const noDomainRoles: string[] = [] // 领域始终可选（可选非必选）
 
 const approveDialog = reactive({
   visible: false,

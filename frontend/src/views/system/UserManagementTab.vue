@@ -81,19 +81,20 @@
           </el-select>
         </el-form-item>
         <el-form-item label="绑定领域">
-          <el-checkbox-group v-model="userDialog.form.domains" :disabled="!domainEditable">
+          <el-checkbox-group v-model="userDialog.form.domains">
             <el-checkbox
               v-for="domain in domainOptions"
               :key="domain.value"
               :label="domain.value"
               >{{ domain.label }}</el-checkbox>
           </el-checkbox-group>
+          <div class="text-xs text-gray-400 w-full">可选。仅需按领域分工时勾选（如功放/双解码/TRX/算法/电源/单板软件/ICT）；不勾选则无领域限制。</div>
         </el-form-item>
         <el-form-item label="部门">
-          <el-input v-model="userDialog.form.department" />
+          <el-input v-model="userDialog.form.department" placeholder="选填，如：生产部 / 测试部" />
         </el-form-item>
         <el-form-item label="初始密码" v-if="!userDialog.form.id">
-          <el-input v-model="userDialog.form.password" type="password" />
+          <el-input v-model="userDialog.form.password" type="password" placeholder="至少6位，建议字母+数字" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -136,7 +137,8 @@ import { formatTime } from '@/utils'
 const loading = ref(false)
 const users = ref([])
 
-const roleOptions = [
+// 角色列表：优先从后端接口获取（单一事实源），失败时回退本地常量
+const roleOptions = ref<{ label: string; value: string }[]>([
   { label: '超级管理员', value: 'super_admin' },
   { label: '装备经理', value: 'equipment_manager' },
   { label: '装备测试经理', value: 'equipment_test_manager' },
@@ -151,7 +153,15 @@ const roleOptions = [
   { label: '单板软件开发', value: 'board_software_developer' },
   { label: 'ICT开发', value: 'ict_developer' },
   { label: '产品SE', value: 'product_se' },
-]
+])
+
+async function loadRoles() {
+  try {
+    const res = await authApi.listRoles()
+    const list = res.data || []
+    if (Array.isArray(list) && list.length) roleOptions.value = list
+  } catch { /* 保留本地兜底 */ }
+}
 
 const domainOptions = [
   { label: '功放', value: '功放' },
@@ -163,9 +173,7 @@ const domainOptions = [
   { label: 'ICT', value: 'ICT' },
 ]
 
-const noDomainRoles = ['super_admin', 'equipment_manager', 'equipment_test_manager', 'process', 'operator']
-
-const roleLabels: Record<string, string> = Object.fromEntries(roleOptions.map(r => [r.value, r.label]))
+const roleLabels: Record<string, string> = Object.fromEntries(roleOptions.value.map(r => [r.value, r.label]))
 
 const statusTag: Record<string, string> = {
   active: 'success',
@@ -188,10 +196,6 @@ const userDialog = reactive({
   title: '',
   submitting: false,
   form: {} as any,
-})
-
-const domainEditable = computed(() => {
-  return !noDomainRoles.includes(userDialog.form.role)
 })
 
 const resetPwdDialog = reactive({
@@ -225,22 +229,37 @@ function editUser(row: any) {
 }
 
 async function saveUser() {
+  const form = userDialog.form
+  // 新增校验：用户名、真实姓名必填；初始密码必填
+  if (!form.id && !String(form.username || '').trim()) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (!String(form.display_name || '').trim()) {
+    ElMessage.warning('请输入真实姓名')
+    return
+  }
+  if (!form.id && !String(form.password || '')) {
+    ElMessage.warning('请输入初始密码（至少6位）')
+    return
+  }
   userDialog.submitting = true
   try {
-    if (userDialog.form.id) {
-      await authApi.updateUser(userDialog.form.id, {
-        display_name: userDialog.form.display_name,
-        role: userDialog.form.role,
-        domains: userDialog.form.domains,
-        department: userDialog.form.department,
+    if (form.id) {
+      await authApi.updateUser(form.id, {
+        display_name: form.display_name,
+        role: form.role,
+        domains: form.domains,
+        department: form.department,
       })
     } else {
       await authApi.createUser({
-        username: userDialog.form.username,
-        display_name: userDialog.form.display_name,
-        password: userDialog.form.password || '123456',
-        role: userDialog.form.role,
-        domains: userDialog.form.domains,
+        username: form.username.trim(),
+        display_name: form.display_name.trim(),
+        password: form.password,
+        role: form.role,
+        domains: form.domains || [],
+        department: form.department || '',
       })
     }
     ElMessage.success('保存成功')
@@ -313,6 +332,7 @@ async function fetchUsers() {
 }
 
 fetchUsers()
+loadRoles()
 </script>
 
 <style scoped>

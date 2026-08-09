@@ -10,6 +10,9 @@ export const authApi = {
   getCurrentUser() {
     return api.get('/auth/me')
   },
+  listRoles() {
+    return api.get('/auth/roles')
+  },
   listUsers(page = 1, pageSize = 20, role?: string, status?: string) {
     const params: Record<string, any> = { page, page_size: pageSize }
     if (role) params.role = role

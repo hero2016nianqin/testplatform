@@ -3,22 +3,23 @@ import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import router from '@/router'
 
+// 与后端 app/config/constants.py ROLE_HIERARCHY 保持一致（权限等级，>= 比较）
 const ROLE_HIERARCHY: Record<string, number> = {
   operator: 0,
   process: 1,
-  equipment_manager: 2,
-  equipment_test_manager: 3,
-  equipment_developer: 4,
-  product_se: 5,
-  fd_developer: 6,
-  duxingqi_developer: 7,
-  trx_developer: 8,
-  algorithm_developer: 9,
-  power_developer: 10,
-  board_software_developer: 11,
-  ict_developer: 12,
   developer: 2,
-  super_admin: 14,
+  equipment_developer: 2,
+  fd_developer: 2,
+  duxingqi_developer: 2,
+  trx_developer: 2,
+  algorithm_developer: 2,
+  power_developer: 2,
+  board_software_developer: 2,
+  ict_developer: 2,
+  product_se: 2,
+  equipment_manager: 3,
+  equipment_test_manager: 3,
+  super_admin: 4,
 }
 
 export const useAuthStore = defineStore('auth', () => {

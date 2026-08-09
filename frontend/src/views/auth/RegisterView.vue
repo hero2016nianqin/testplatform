@@ -102,7 +102,7 @@ const router = useRouter()
 const formRef = ref()
 const submitting = ref(false)
 
-const roleOptions = [
+const roleOptions = ref([
   { label: '装备开发人员', value: 'equipment_developer' },
   { label: '功放开发', value: 'fd_developer' },
   { label: '双解码开发', value: 'duxingqi_developer' },
@@ -116,7 +116,16 @@ const roleOptions = [
   { label: '生产操作人员', value: 'operator' },
   { label: '装备经理', value: 'equipment_manager' },
   { label: '装备测试经理', value: 'equipment_test_manager' },
-]
+])
+
+async function loadRoles() {
+  try {
+    const res = await authApi.listRoles()
+    const list = res.data || []
+    if (Array.isArray(list) && list.length) roleOptions.value = list
+  } catch { /* 保留本地兜底 */ }
+}
+loadRoles()
 
 const domainOptions = [
   { label: '功放', value: '功放' },
@@ -128,13 +137,7 @@ const domainOptions = [
   { label: 'ICT', value: 'ICT' },
 ]
 
-const noDomainRoles = [
-  'super_admin',
-  'equipment_manager',
-  'equipment_test_manager',
-  'process',
-  'operator',
-]
+const noDomainRoles: string[] = [] // 领域始终可选（可选非必选）
 
 const form = reactive({
   username: '',
