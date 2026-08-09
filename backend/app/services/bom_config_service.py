@@ -485,7 +485,7 @@ class BomConfigService:
 
         item_ids = [it.id for it in items]
 
-        # 2) 一次性获取这些测试项关联的所有指标（字典层参数）
+        # 2) 一次性获取这些测试项关联的所有指标（字典层参数 + 指标领域）
         ti_indicators_stmt = (
             select(
                 TestItemIndicator.test_item_id,
@@ -495,7 +495,8 @@ class BomConfigService:
                 IndicatorDict.code.label("indicator_code"),
                 IndicatorDict.name.label("indicator_name"),
                 IndicatorDict.category.label("category"),
-                IndicatorDict.params.label("dict_params"),
+                IndicatorDict.domain.label("indicator_domain"),
+                IndicatorDict.test_params.label("dict_params"),
             )
             .join(IndicatorDict, TestItemIndicator.indicator_id == IndicatorDict.id)
             .where(TestItemIndicator.test_item_id.in_(item_ids))
@@ -506,16 +507,27 @@ class BomConfigService:
         bom_indicators = await BomConfigService.list_indicators(db, config_id)
         bom_map = {bi["indicator_id"]: bi for bi in bom_indicators}
 
-        # 4) 组装：按 test_item_id 分组
-        item_map = {it.id: it for it in items}
+        # 4) 组装：按 test_item_id 分组，字段名保持与前端模板一致
         grouped: dict[int, dict] = {}
         for it in items:
             grouped[it.id] = {
-                "test_item_id": it.id,
-                "test_item_name": it.name,
+                "id": it.id,
+                "name": it.name,
                 "process_name": it.process_name or "",
                 "station_name": it.station or "",
+                "station": it.station or "",
+                "test_type": it.test_type or "",
                 "sort_order": it.sort_order,
+                "block_type": it.block_type or "normal",
+                "service_address": it.service_address or "",
+                "timeout_seconds": it.timeout_seconds,
+                "parallel_enabled": bool(it.parallel_enabled),
+                "status": it.status,
+                "item_revision": it.item_revision,
+                "owner_id": it.owner_id,
+                "owner_name": it.owner_name,
+                "owner_manual": bool(it.owner_manual),
+                "domain": "",
                 "indicators": [],
             }
 
@@ -556,6 +568,13 @@ class BomConfigService:
                     "has_override": True,
                 })
             grouped[test_item_id]["indicators"].append(ind_data)
+            # 聚合指标领域作为测试项 domain
+            if row.indicator_domain:
+                domains = grouped[test_item_id]["domain"]
+                parts = domains.split("、") if domains else []
+                if row.indicator_domain not in parts:
+                    parts.append(row.indicator_domain)
+                    grouped[test_item_id]["domain"] = "、".join(parts)
 
         # 5) 处理 BOM 独有的指标（不在集合中的）
         ti_indicator_ids = {row.indicator_id for row in ti_rows}

@@ -2105,44 +2105,58 @@ async function loadAll() {
 
      if (bom.collection_id) {
        // 使用新的批量接口一次性获取完整指标树，消除 N+1
-       const fullRes = await metricsApi.getFullIndicatorsByConfig(configId.value)
-       const fullItems = fullRes?.data || []
-       
-       testItems.value = fullItems.map((item: any) => {
-         // 为每个指标构建 _param_map 供表格单元格编辑使用
-const indicatorList = item.indicators.map((ind: any) => {
-            // 兼容：has_override 可能为 undefined；params/dict_params 可能缺失
-            const hasOverride = Boolean(ind.has_override)
-            const sourceParams = hasOverride ? (ind.params ?? []) : (ind.dict_params ?? [])
+        const fullRes = await metricsApi.getFullIndicatorsByConfig(configId.value)
+        const fullItems = fullRes?.data || []
+        
+         testItems.value = fullItems.map((item: any) => {
+          // 为每个指标构建 _param_map 供表格单元格编辑使用
+          const indicators = Array.isArray(item?.indicators) ? item.indicators : []
+          const indicatorList = indicators.map((ind: any) => {
+            // 兼容：has_override 可能为 undefined；params/dict_params 可能缺失或不是数组
+            const hasOverride = Boolean(ind?.has_override)
+            const rawParams = hasOverride ? ind?.params : ind?.dict_params
+            const sourceParams = Array.isArray(rawParams) ? rawParams : []
             const paramMap: Record<string, any> = {}
-           for (const p of sourceParams) {
-             const key = p.param_key || p.key
-             if (!key) continue
-             paramMap[key] = {
-               value: p.param_value ?? p.value ?? '',
-               remark: p.remark ?? '',
-               format: p.format ?? p.type ?? 'string',
-               name: p.param_name || p.name || key,
-               required: p.required ?? false,
-             }
-           }
-           return {
-             ...ind,
-             _bom_indicator_id: ind._bom_indicator_id || 0,
-             indicator_code: ind.indicator_code || '',
-             indicator_name: ind.indicator_name || '',
-             category: ind.category || '',
-             unit: ind.unit || '',
-             _param_map: paramMap,
-             _item: { id: item.test_item_id, name: item.test_item_name }
-           }
-         })
-         return {
-           ...item,
-           indicatorList,
-           _param_cols: indicatorList.length ? Object.keys(indicatorList[0]._param_map || {}) : [],
-         }
-       })
+            for (const p of sourceParams) {
+              if (!p) continue
+              const key = p.param_key || p.key
+              if (!key) continue
+              paramMap[key] = {
+                value: p.param_value ?? p.value ?? '',
+                remark: p.remark ?? '',
+                format: p.format ?? p.type ?? 'string',
+                name: p.param_name || p.name || key,
+                required: p.required ?? false,
+              }
+            }
+            return {
+              ...ind,
+              _bom_indicator_id: ind?._bom_indicator_id || 0,
+              indicator_code: ind?.indicator_code || '',
+              indicator_name: ind?.indicator_name || '',
+              category: ind?.category || '',
+              unit: ind?.unit || '',
+              _param_map: paramMap,
+              _item: { id: item?.id, name: item?.name }
+            }
+          })
+          const firstInd = indicatorList[0]
+          const paramCols = firstInd
+            ? Object.entries(firstInd._param_map || {}).map(([key, p]: [string, any]) => ({
+                key,
+                label: p.name || key,
+                format: p.format || 'string',
+                required: p.required ?? false,
+                remark: p.remark || '',
+                minWidth: 140,
+              }))
+            : []
+          return {
+            ...item,
+            indicatorList,
+            _param_cols: paramCols,
+          }
+        })
        
        domainOptions.value = ['全部领域', ...extractDomains(testItems.value)]
        if (domainFilter.value !== '全部领域' && !domainOptions.value.includes(domainFilter.value)) {
