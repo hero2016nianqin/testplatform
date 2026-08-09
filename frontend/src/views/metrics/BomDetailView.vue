@@ -80,6 +80,26 @@
             <el-icon><Check /></el-icon>参数校验
           </el-button>
 
+          <!-- Unified Save Mode Controls -->
+          <div class="flex items-center gap-2 ml-2" v-if="!bom.archived && bom.review_status !== 'pending'">
+            <el-tooltip content="统一模式：改动暂存本地，按 Ctrl+S 或点击保存全部一次性提交；兼容模式：每次改动即时保存" placement="top">
+              <el-radio-group v-model="saveMode" size="small">
+                <el-radio-button label="unified">统一保存</el-radio-button>
+                <el-radio-button label="legacy">兼容模式</el-radio-button>
+              </el-radio-group>
+            </el-tooltip>
+            <el-button
+              size="small"
+              type="primary"
+              class="font-bold"
+              :loading="isSaving"
+              :disabled="pendingChanges.size === 0 || isSaving"
+              @click="flushPendingChanges"
+            >
+              <el-icon><Download /></el-icon>保存全部 ({{ pendingChanges.size }})
+            </el-button>
+          </div>
+
           <!-- Review / Archive Buttons -->
           <el-button size="small" class="font-bold" v-if="bom.review_status === 'none' && !bom.archived" type="warning" @click="handleSubmitReview">
             提交评审
@@ -774,6 +794,22 @@ function itemBgClass(item: any): string {
 // ── WebSocket 协同编辑在线用户 & 编辑状态同步 ──
 const onlineUsers = ref<any[]>([])
 const editingCells = ref<Record<string, any>>({})  // cell_key -> {user_id, user_name, test_item_id, indicator_id, param_key, started_at}
+
+// ── 统一草稿保存模式：pending 缓冲 + 统一 batch-save ──
+const pendingChanges = new Map<string, {
+  indicator_id: number
+  param_key: string
+  param_value: string
+  test_item_id: number
+  item_revision: number
+  test_item_name: string
+}>()
+const isSaving = ref(false)
+const saveMode = ref<'unified' | 'legacy'>('unified') // 'unified'=统一批量保存, 'legacy'=单格即时保存
+
+function makePendingKey(test_item_id: number, indicator_id: number, param_key: string): string {
+  return `${test_item_id}:${indicator_id}:${param_key}`
+}
 let bomWs: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -2175,6 +2211,53 @@ async function saveThreshold(ind: any) {
   editRowId.value = 0
   editField.value = ''
   const item = ind._item
+
+  // 统一模式：累积阈值/单位/备注等字段变更
+  if (saveMode.value === 'unified') {
+    // 阈值字段作为特殊 param_key 处理（如 upper_limit, lower_limit, unit, judgment_rule, remark）
+    const paramKey = field // 'upper_limit' | 'lower_limit' | 'unit' | 'judgment_rule' | 'remark' | 'test_stage'
+    const newValue = ind[field]
+    const testItemId = item?.id ?? ind._item?.id
+    const itemRevision = item?.item_revision ?? ind._item?.item_revision ?? 0
+    const testItemName = item?.name || ''
+
+    const key = makePendingKey(testItemId, ind.indicator_id, paramKey)
+    pendingChanges.set(key, {
+      indicator_id: ind._bom_indicator_id || 0,
+      param_key: paramKey,
+      param_value: String(newValue),
+      test_item_id: testItemId,
+      item_revision: itemRevision,
+      test_item_name: testItemName,
+    })
+    bumpLocalRevision(ind)
+    saveDraft()
+    ElMessage.success('已暂存，按 Ctrl+S 统一保存')
+    return
+  }
+
+  // 兼容模式
+    try {
+      let bomIndicatorId = ind._bom_indicator_id
+      if (!bomIndicatorId) {
+        const createRes = await metricsApi.addBomIndicator(configId.value, {
+          indicator_id: ind.indicator_id,
+          unit: ind.unit || '',
+          judgment_rule: '合格',
+          test_stage: '',
+          remark: '',
+        })
+        ind._bom_indicator_id = createRes.data?.id
+        ind._bom_override = true
+        await loadAll()
+      } else {
+        await metricsApi.updateBomIndicator(bomIndicatorId, {
+          [field]: ind[field],
+          test_item_id: item?.id ?? ind._item?.id,
+          item_revision: item?.item_revision ?? ind._item?.item_revision ?? null,
+        })
+        bumpLocalRevision(ind)
+      // 兼容模式
   const doSave = async () => {
     try {
       let bomIndicatorId = ind._bom_indicator_id
@@ -2216,6 +2299,30 @@ async function saveParamValue(ind: any, paramKey: string) {
   const info = ind._param_map?.[paramKey]
   const newValue = info?.value ?? info ?? ''
   const item = ind._item
+  const testItemId = item?.id ?? ind._item?.id
+  const itemRevision = item?.item_revision ?? ind._item?.item_revision ?? 0
+  const testItemName = item?.name || ''
+
+  // 统一模式：累积到 pendingChanges，不直接发请求
+  if (saveMode.value === 'unified') {
+    const key = makePendingKey(testItemId, ind.indicator_id, paramKey)
+    pendingChanges.set(key, {
+      indicator_id: ind._bom_indicator_id || 0,
+      param_key: paramKey,
+      param_value: String(newValue),
+      test_item_id: testItemId,
+      item_revision: itemRevision,
+      test_item_name: testItemName,
+    })
+    // 立即更新本地显示值
+    if (info) info.value = newValue
+    bumpLocalRevision(ind)
+    saveDraft()
+    ElMessage.success('已暂存，按 Ctrl+S 统一保存')
+    return
+  }
+
+  // 兼容模式：直接发请求（原逻辑）
   const doSave = async () => {
     try {
       let bomIndicatorId = ind._bom_indicator_id
@@ -2439,7 +2546,78 @@ async function loadArchivedDiff() {
             oldValue: pm.before,
             newValue: pm.after,
             diffLabel: pm.fieldLabel || '',
-          })
+})
+
+// ── 统一保存：flushPendingChanges ──
+async function flushPendingChanges(): Promise<boolean> {
+  if (pendingChanges.size === 0) {
+    ElMessage.info('无待保存变更')
+    return true
+  }
+  if (isSaving.value) return false
+  isSaving.value = true
+
+  try {
+    const payload: Array<{indicator_id: number; param_key: string; param_value: string; item_revision: number; test_item_id: number; test_item_name: string}> = Array.from(pendingChanges.values()).map(v => ({
+      indicator_id: v.indicator_id,
+      param_key: v.param_key,
+      param_value: v.param_value,
+      item_revision: v.item_revision,
+      test_item_id: v.test_item_id,
+      test_item_name: v.test_item_name,
+    })
+
+    const res = await metricsApi.batchSaveIndicatorParams(configId.value, { indicators: payload })
+    const conflicts = res.data?.conflicts || []
+    if (conflicts.length) {
+      showSaveConflicts(conflicts)
+      await loadAll()
+      return false
+    }
+    // 成功：清空 pending
+    pendingChanges.clear()
+    ElMessage.success(`已保存 ${payload.length} 处变更`)
+    return true
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '批量保存失败')
+    await loadAll()
+    return false
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Ctrl+S 全局保存快捷键
+function setupGlobalSaveShortcut() {
+  const handler = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      if (pendingChanges.size > 0) {
+        flushPendingChanges()
+      }
+    }
+  }
+  window.addEventListener('keydown', handler)
+  onUnmounted(() => window.removeEventListener('keydown', handler))
+}
+
+// 页面离开前提示未保存变更
+function setupBeforeUnloadGuard() {
+  const handler = (e: BeforeUnloadEvent) => {
+    if (pendingChanges.size > 0) {
+      e.preventDefault()
+      e.returnValue = '有未保存的变更，确定要离开吗？'
+    }
+  }
+  window.addEventListener('beforeunload', handler)
+  onUnmounted(() => window.removeEventListener('beforeunload', handler))
+}
+
+// 在组件挂载时注册快捷键和离开守卫
+onMounted(() => {
+  setupGlobalSaveShortcut()
+  setupBeforeUnloadGuard()
+})
         }
       }
     }
