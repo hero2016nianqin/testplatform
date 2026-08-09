@@ -22,7 +22,6 @@ ROLE_HIERARCHY: Dict[str, int] = {
     "ict_developer": 2,       # ICT 开发
     "product_se": 2,          # 产品 SE
     "equipment_developer": 2,  # 装备开发人员 (新增专属权限)
-    "equipment_test_leader": 3,  # 装备测试经理
     "super_admin": 4,
 }
 
@@ -41,7 +40,6 @@ ROLE_LABELS: Dict[str, str] = {
     "ict_developer": "ICT 开发",
     "product_se": "产品 SE",
     "equipment_developer": "装备开发人员",
-    "equipment_test_leader": "装备测试经理",
     "super_admin": "超级管理员",
 }
 

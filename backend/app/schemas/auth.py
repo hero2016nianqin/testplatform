@@ -49,6 +49,7 @@ class UserCreateReq(BaseModel):
     password: str = Field(..., min_length=6)
     role: str = Field(default="operator")
     domains: List[str] = Field(default=[])
+    department: str = Field(default="")
 
 
 class UserUpdateReq(BaseModel):
@@ -57,6 +58,7 @@ class UserUpdateReq(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     domains: Optional[List[str]] = None
+    department: Optional[str] = None
 
 
 class ResetPasswordReq(BaseModel):
@@ -75,6 +77,7 @@ class UserResp(BaseModel):
     created_by: Optional[str] = None
     registration_status: Optional[str] = None
     domains: List[str] = []
+    department: Optional[str] = None
 
 
 class AuditLogResp(BaseModel):

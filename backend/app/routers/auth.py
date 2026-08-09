@@ -20,6 +20,13 @@ from app.services.auth_service import AuthService
 router = APIRouter(tags=["认证"])
 
 
+@router.get("/roles")
+async def list_roles():
+    """角色列表（注册页/用户管理共用，单一事实源）"""
+    from app.config import ROLE_LABELS
+    return success(data=[{"value": k, "label": v} for k, v in ROLE_LABELS.items()])
+
+
 @router.post("/login")
 async def login(
     req: LoginReq,
@@ -178,7 +185,7 @@ async def create_user(
     """创建用户 (developer+)"""
     u = await AuthService.create_user(
         db, req.username, req.display_name, req.password, req.role, req.domains,
-        created_by=user.get("username", ""), is_active=True,
+        created_by=user.get("username", ""), is_active=True, department=req.department,
     )
     await AuthService.log_audit(
         db, user.get("id", 0), user.get("username", ""), "create_user",

@@ -139,7 +139,8 @@ class AuthService:
     @staticmethod
     async def create_user(db: AsyncSession, username: str, display_name: str, password: str,
                           role: str = "operator", domains: List[str] = None,
-                          created_by: str = None, is_active: bool = True) -> User:
+                          created_by: str = None, is_active: bool = True,
+                          department: str = "") -> User:
         existing = await db.execute(select(User).where(User.username == username))
         if existing.scalar_one_or_none():
             raise ConflictError("用户名已存在")
@@ -150,6 +151,7 @@ class AuthService:
             role=role,
             is_active=is_active,
             domains=domains or [],
+            department=department,
             created_by=created_by,
             registration_status="active",
         )
@@ -173,6 +175,8 @@ class AuthService:
             user.is_active = data["is_active"]
         if "domains" in data:
             user.domains = data["domains"]
+        if "department" in data:
+            user.department = data.get("department") or ""
         await db.flush()
         return user
 

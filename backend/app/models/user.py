@@ -21,6 +21,7 @@ class User(Base):
     created_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     registration_status: Mapped[str] = mapped_column(String(20), default="active")
     domains: Mapped[list] = mapped_column(JSON, default=list)
+    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default="")
 
     def to_dict(self):
         return {
@@ -35,4 +36,5 @@ class User(Base):
             "created_by": self.created_by,
             "registration_status": self.registration_status,
             "domains": self.domains or [],
+            "department": self.department or "",
         }
