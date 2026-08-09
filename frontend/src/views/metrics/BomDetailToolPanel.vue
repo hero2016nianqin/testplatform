@@ -96,6 +96,31 @@
               </div>
               <el-divider />
               <div class="section">
+                <label class="section-label">维度统计</label>
+                <el-radio-group v-model="dimensionKey" size="small" class="w-full mb-1">
+                  <el-radio-button label="byProcess">工序</el-radio-button>
+                  <el-radio-button label="byStation">工位</el-radio-button>
+                  <el-radio-button label="byOwner">负责人</el-radio-button>
+                </el-radio-group>
+                <el-table :data="dimensionRows" size="small" max-height="220" style="width:100%">
+                  <el-table-column label="维度" min-width="90" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.name }}</template>
+                  </el-table-column>
+                  <el-table-column label="总参" width="56" align="center">
+                    <template #default="{ row }">{{ row.total }}</template>
+                  </el-table-column>
+                  <el-table-column label="未填" width="56" align="center">
+                    <template #default="{ row }"><span :class="row.empty ? 'text-danger font-medium' : ''">{{ row.empty }}</span></template>
+                  </el-table-column>
+                  <el-table-column label="完成率" min-width="80">
+                    <template #default="{ row }">
+                      <el-progress :percentage="row.percent" :stroke-width="8" :status="row.percent === 100 ? 'success' : undefined" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <el-divider />
+              <div class="section">
                 <label class="section-label">维度导出</label>
                 <el-radio-group v-model="exportDimension" size="small" class="w-full">
                   <el-radio label="bom">全 BOM</el-radio>
@@ -154,6 +179,11 @@ const props = defineProps<{
   fillPercent: number
   bomStats?: { totalItems: number; totalParams: number; filledCount: number; emptyCount: number }
   expanded?: boolean
+  dimensionStats?: {
+    byProcess: { name: string; total: number; empty: number; filled: number; percent: number }[]
+    byStation: { name: string; total: number; empty: number; filled: number; percent: number }[]
+    byOwner: { name: string; total: number; empty: number; filled: number; percent: number }[]
+  }
 }>()
 
 const emit = defineEmits<{
@@ -185,6 +215,13 @@ function expandTo(tab: string) {
 const batchFill = ref({ upper: '', lower: '' })
 const exportDimension = ref('bom')
 const changeNote = ref('')
+const dimensionKey = ref<'byProcess' | 'byStation' | 'byOwner'>('byProcess')
+
+const dimensionRows = computed(() => {
+  const ds = props.dimensionStats
+  if (!ds) return []
+  return ds[dimensionKey.value] || []
+})
 
 const stats = computed(() => {
   if (props.bomStats) return props.bomStats

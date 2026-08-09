@@ -24,6 +24,9 @@
         <el-button type="primary" :disabled="!canNewIteration" @click="handleNewIteration">
           <el-icon class="mr-1"><DocumentAdd /></el-icon>新建版本
         </el-button>
+        <el-button @click="openTimeline">
+          <el-icon class="mr-1"><Clock /></el-icon>版本时间线
+        </el-button>
       </div>
     </div>
 
@@ -38,14 +41,43 @@
         <router-view v-if="activeTab === 'stats'" />
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 版本时间线对话框 -->
+    <el-dialog v-model="timelineDialog.visible" title="版本时间线" width="600px" top="10vh" :close-on-click-modal="false">
+      <div v-loading="timelineDialog.loading" style="min-height:120px">
+        <el-empty v-if="!timelineDialog.loading && !timelineVersions.length" description="暂无版本记录" />
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="v in timelineVersions"
+            :key="v.id"
+            :type="versionTagType(v)"
+            :timestamp="(v.created_at || '').replace('T', ' ').slice(0, 19)"
+          >
+            <div class="flex items-center justify-between gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5" @click="jumpToVersion(v)">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-bold whitespace-nowrap">v{{ v.version }}</span>
+                <el-tag size="small" :type="versionTagType(v)" class="whitespace-nowrap">{{ versionTagText(v) }}</el-tag>
+                <span v-if="v.review_operator" class="text-xs text-gray-400 whitespace-nowrap">审批：{{ v.review_operator }}</span>
+              </div>
+              <el-link type="primary" :underline="false" size="small" class="flex-shrink-0">查看</el-link>
+            </div>
+            <div v-if="v.change_summary" class="text-xs text-gray-600 mt-0.5 whitespace-pre-wrap">{{ v.change_summary }}</div>
+            <div v-if="v.review_comment" class="text-xs text-amber-600 mt-0.5">审批意见：{{ v.review_comment }}</div>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+      <template #footer>
+        <el-button @click="timelineDialog.visible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Odometer, DocumentAdd } from '@element-plus/icons-vue'
+import { ArrowLeft, Odometer, DocumentAdd, Clock } from '@element-plus/icons-vue'
 import { metricsApi } from '@/api/metrics'
 
 const route = useRoute()
@@ -58,6 +90,24 @@ const selectedVersionLabel = computed(() => {
   return v ? `v${v.version}-${versionTagText(v)}` : ''
 })
 const versions = ref<any[]>([])
+
+// ── 版本时间线 ──
+const timelineDialog = reactive({ visible: false, loading: false })
+const timelineVersions = computed(() => {
+  return [...versions.value].sort((a, b) => (b.version || 0) - (a.version || 0))
+})
+
+function openTimeline() {
+  timelineDialog.visible = true
+  timelineDialog.loading = true
+  loadVersions().finally(() => { timelineDialog.loading = false })
+}
+
+function jumpToVersion(v: any) {
+  timelineDialog.visible = false
+  if (v.id === currentConfigId.value) return
+  router.replace({ name: 'BomCodeEdit', params: { bomCode: bomCode.value, id: v.id } })
+}
 
 const activeTab = computed(() => {
   if (route.name === 'BomCodeDomain') return 'domain'

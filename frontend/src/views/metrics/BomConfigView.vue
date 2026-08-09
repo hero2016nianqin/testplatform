@@ -252,7 +252,7 @@ async function submitBind() {
   }
 }
 
-// ── Upgrade to Latest Collection Version ──
+// ── Upgrade to Latest Collection Version (with diff preview) ──
 async function upgradeToLatest(row: any) {
   try {
     const res = await metricsApi.listVersions({
@@ -269,10 +269,28 @@ async function upgradeToLatest(row: any) {
       ElMessage.info('已是最新版本')
       return
     }
-    await ElMessageBox.confirm(
-      `确定将 BOM 引用版本升级至最新版 v${latest.version} ？`,
-      '确认升级',
-    )
+    // 升级前预览差异：新增/删除的测试项
+    const previewRes = await metricsApi.previewVersionUpgrade(row.id, latest.id)
+    const preview = previewRes.data || {}
+    const added = preview.added || []
+    const removed = preview.removed || []
+    let msg = `确定将 BOM 引用版本从 v${preview.current_version} 升级至最新版 v${preview.target_version} ？\n`
+    msg += `（目标版本共 ${preview.target_items} 个测试项）\n`
+    if (removed.length) {
+      msg += `\n【将移除】${removed.length} 个测试项：\n${removed.slice(0, 10).map((it: any) => `· ${it.process_name || ''}/${it.station || it.station_name || ''} ${it.name}`).join('\n')}${removed.length > 10 ? `\n...等 ${removed.length} 项` : ''}\n`
+    }
+    if (added.length) {
+      msg += `\n【将新增】${added.length} 个测试项：\n${added.slice(0, 10).map((it: any) => `· ${it.process_name || ''}/${it.station || it.station_name || ''} ${it.name}`).join('\n')}${added.length > 10 ? `\n...等 ${added.length} 项` : ''}\n`
+    }
+    if (!removed.length && !added.length) {
+      msg += `\n（测试项结构无变化）`
+    }
+    await ElMessageBox.confirm(msg, '确认升级', {
+      type: 'warning',
+      confirmButtonText: '确认升级',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--primary',
+    })
     await metricsApi.switchBomVersion(row.id, latest.id)
     ElMessage.success('已升级至最新版本')
     await load()

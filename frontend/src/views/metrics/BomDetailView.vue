@@ -50,6 +50,7 @@
           <template v-else-if="bom.review_status === 'rejected'">
             <el-tag type="danger">已驳回</el-tag>
           </template>
+          <el-tag v-if="bom.approver_name" size="small" type="warning" effect="plain">审批人：{{ bom.approver_name }}</el-tag>
           <template v-if="bom.archived">
             <el-tag type="info">已归档</el-tag>
           </template>
@@ -67,6 +68,9 @@
 
           <el-button size="small" class="font-bold" @click="openVersionDiff">
             <el-icon><DataAnalysis /></el-icon>版本对比
+          </el-button>
+          <el-button size="small" class="font-bold" :badge="liveDiffRows.length || undefined" @click="openLiveDiff">
+            <el-icon><Tickets /></el-icon>草稿对比
           </el-button>
           <el-tooltip content="高危操作：将所有参数值恢复为归档基准原值，覆盖当前编辑中的值。" placement="top" :show-after="300">
             <el-button size="small" class="font-bold" :disabled="bom.archived || bom.review_status === 'pending'" @click="handleResetDraft">
@@ -101,8 +105,11 @@
           </div>
 
           <!-- Review / Archive Buttons -->
-          <el-button size="small" class="font-bold" v-if="bom.review_status === 'none' && !bom.archived" type="warning" @click="handleSubmitReview">
-            提交评审
+          <el-button size="small" class="font-bold" v-if="(bom.review_status === 'none' || bom.review_status === 'rejected') && !bom.archived" type="warning" @click="handleSubmitReview">
+            <el-icon v-if="bom.review_status === 'rejected'" class="mr-1"><Refresh /></el-icon>{{ bom.review_status === 'rejected' ? '驳回后重新提交' : '提交评审' }}
+          </el-button>
+          <el-button size="small" class="font-bold" v-if="bom.review_status === 'none' || bom.review_status === 'rejected' || bom.review_status === 'approved' || bom.archived" @click="openReviewHistory">
+            <el-icon class="mr-1"><Clock /></el-icon>评审历史
           </el-button>
 
           <!-- Export Dropdown -->
@@ -122,12 +129,15 @@
           <el-button size="small" class="font-bold" v-if="bom.review_status === 'pending'" type="info" @click="handleWithdrawReview">
             撤回评审
           </el-button>
-          <el-button size="small" class="font-bold" v-if="bom.review_status === 'pending'" type="success" @click="handleApproveReview">
+          <el-button size="small" class="font-bold" v-if="bom.review_status === 'pending' && canReview()" type="success" @click="handleApproveReview">
             评审通过
           </el-button>
-          <el-button size="small" class="font-bold" v-if="bom.review_status === 'pending'" type="danger" @click="handleRejectReview">
+          <el-button size="small" class="font-bold" v-if="bom.review_status === 'pending' && canReview()" type="danger" @click="handleRejectReview">
             驳回
           </el-button>
+          <el-tooltip v-if="bom.review_status === 'pending' && !canReview()" content="仅指定审批人可执行通过/驳回" placement="top">
+            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded cursor-not-allowed">仅审批人可操作</span>
+          </el-tooltip>
           <el-button size="small" class="font-bold" v-if="bom.review_status === 'approved' && !bom.archived" type="primary" @click="handleArchive">
             归档
           </el-button>
@@ -182,7 +192,7 @@
                         </div>
                       </div>
                       <!-- Station items (folding) -->
-                      <div v-show="isNavStationExpanded(proc.name, sta.name)" class="space-y-0.5 mt-0.5">
+                      <div v-if="isNavStationExpanded(proc.name, sta.name)" class="space-y-0.5 mt-0.5">
                         <button v-for="itemInTree in sta.items" :key="itemInTree.id"
                           :data-nav-item="itemInTree.id"
                           class="w-full text-left text-xs px-2 py-1 rounded transition-colors flex items-center gap-1.5"
@@ -222,6 +232,9 @@
                  <el-option v-for="d in domainOptions" :key="d" :label="d" :value="d" />
                </el-select>
                <el-tag v-if="domainFilter !== '全部领域'" size="small" type="warning" class="ml-1">已筛选</el-tag>
+               <el-divider direction="vertical" />
+               <el-switch v-model="mineOnly" size="small" />
+               <span class="text-xs text-gray-600 cursor-pointer select-none" @click="mineOnly = !mineOnly">仅我负责</span>
               <span class="text-xs text-gray-400 ml-auto">Ctrl+S 保存全部 · ↑/↓ 切换测试项 · 编辑中 Tab 切换参数</span>
             </div>
 
@@ -244,7 +257,7 @@
               </div>
 
               <!-- Station Cards (show when process expanded) -->
-              <div v-show="isProcessExpanded(proc.name)">
+              <div v-if="isProcessExpanded(proc.name)">
                 <div v-for="sta in proc.stations" :key="sta.name" :data-station="sta.name" class="border-t">
                   <!-- Station Header -->
                   <div class="px-4 py-1.5 flex items-center justify-between bg-white" style="cursor:pointer" @click="toggleStationExpand(proc.name, sta.name)">
@@ -266,7 +279,7 @@
                   </div>
 
                   <!-- Station Content: per-item tables -->
-                  <div v-show="isStationExpanded(proc.name, sta.name)" class="px-4 py-2 space-y-2 bg-gray-50">
+                  <div v-if="isStationExpanded(proc.name, sta.name)" class="px-4 py-2 space-y-2 bg-gray-50">
                     <div v-for="item in sta.items" :key="item.id" :id="`item-${item.id}`" class="border rounded cursor-pointer transition-shadow" :class="[itemHasParams(item) ? 'p-2' : 'p-0.5', itemBgClass(item), { 'border-red-200': hasEmptyParams(item), 'border-blue-400 ring-2 ring-blue-200': isSelectedItem(item) || navItemId === item.id }]" @click.stop="selectItem(item, proc.name, sta.name)">
                       <div class="flex items-center justify-between" :class="itemHasParams(item) ? 'mb-1.5' : 'mb-0'">
                         <div class="flex items-center gap-2 min-w-0">
@@ -300,7 +313,7 @@
                           </el-table-column>
                           <el-table-column label="参数值" min-width="160">
                             <template #default="{ row }">
-                              <div :class="['param-cell', { 'param-dirty': isParamDirty(row.indicator_id, row.param_key), 'param-empty': isParamEmpty(row._ind, row.param_key) }]">
+                              <div :class="['param-cell', { 'param-dirty': isParamDirty(row.indicator_id, row.param_key), 'param-empty': isParamEmpty(row._ind, row.param_key) }]" @contextmenu.prevent="openCellContextMenu($event, row, item)">
                                 <!-- 他人正在编辑指示器 -->
                                 <div v-if="isCellBeingEditedByOther(row._ind, row.param_key)" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200" style="z-index: 10;">
                                   <el-icon><User /></el-icon>
@@ -311,21 +324,27 @@
                                     <el-option label="true" value="true" />
                                     <el-option label="false" value="false" />
                                   </el-select>
-                                  <el-input v-else-if="['number', 'range', 'percent'].includes(row.format)" v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)" />
-                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)" />
+                                  <el-input v-else-if="['number', 'range', 'percent'].includes(row.format)" v-model="row._ind._param_map[row.param_key].value" size="small" style="width:120px" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft()" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
+                                    <template v-if="row.unit" #suffix><span class="text-xs text-gray-400 pr-0.5">{{ row.unit }}</span></template>
+                                  </el-input>
+                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:120px" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft()" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
+                                    <template v-if="row.unit" #suffix><span class="text-xs text-gray-400 pr-0.5">{{ row.unit }}</span></template>
+                                  </el-input>
                                 </div>
-                                <div v-else-if="isListFormat(row.format)" class="flex items-center gap-1 cursor-pointer" style="min-height:24px" :class="{ 'cursor-not-allowed opacity-60': !canEditItem(item) }" @click.stop="canEditItem(item) && openListEditor(row)" :title="listDisplay(row)">
+                                <div v-else-if="isListFormat(row.format)" class="flex items-center gap-1 cursor-pointer" style="min-height:24px" :class="{ 'cursor-not-allowed opacity-60': !canEditItem(item) }" @click.stop="canEditItem(item) && openListEditor(row)" :title="(row.default !== '' && row.default !== undefined ? '默认: ' + row.default + '；' : '') + listDisplay(row)">
                                   <span class="text-xs truncate max-w-[180px]" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key) }">{{ listDisplay(row) }}</span>
                                   <el-tag size="small" type="info" class="flex-shrink-0">列表</el-tag>
                                 </div>
                                 <el-tooltip v-if="!canEditItem(item) && !isListFormat(row.format)" :content="itemReadonlyReason(item) || '该测试项无编辑权限'" placement="top" :show-after="200">
                                   <span class="text-xs" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key), 'cursor-not-allowed opacity-60': !canEditItem(item) }" style="cursor:pointer" @click="canEditItem(item) && startInlineEdit(row)">
-                                    {{ row._ind._param_map?.[row.param_key]?.value || '-' }}
+                                    {{ row._ind._param_map?.[row.param_key]?.value || '-' }}<span v-if="row.unit && !isParamEmpty(row._ind, row.param_key)" class="text-gray-400 ml-0.5">{{ row.unit }}</span>
                                   </span>
                                 </el-tooltip>
-                                <span v-else-if="!isListFormat(row.format)" class="text-xs" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key), 'cursor-not-allowed opacity-60': !canEditItem(item) }" style="cursor:pointer" @click="canEditItem(item) && startInlineEdit(row)">
-                                  {{ row._ind._param_map?.[row.param_key]?.value || '-' }}
-                                </span>
+                                <el-tooltip v-else-if="!isListFormat(row.format)" :content="(row.default !== '' && row.default !== undefined ? '默认值: ' + row.default : '点击编辑')" placement="top" :show-after="300">
+                                  <span class="text-xs" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key), 'cursor-not-allowed opacity-60': !canEditItem(item) }" style="cursor:pointer" @click="canEditItem(item) && startInlineEdit(row)">
+                                    {{ row._ind._param_map?.[row.param_key]?.value || '-' }}<span v-if="row.unit && !isParamEmpty(row._ind, row.param_key)" class="text-gray-400 ml-0.5">{{ row.unit }}</span>
+                                  </span>
+                                </el-tooltip>
                               </div>
                             </template>
                           </el-table-column>
@@ -380,6 +399,7 @@
           :expanded="uiMode === 'edit'"
           :fill-percent="fillProgress().percent"
           :bom-stats="bomStats"
+          :dimension-stats="dimensionStats"
           @batch-fill="(u, l) => { rightToolbar.batchFillThreshold.upper = u || ''; rightToolbar.batchFillThreshold.lower = l || ''; batchFillThreshold() }"
           @copy-selected="copySelectedItems"
           @paste-to-selected="pasteToSelected"
@@ -590,9 +610,65 @@
       </template>
     </el-dialog>
 
+    <!-- 草稿 vs 基线实时对比 -->
+    <el-dialog v-model="liveDiffDialog.visible" title="草稿 vs 基线实时对比" width="900px" top="8vh" :close-on-click-modal="false">
+      <div class="mb-3">
+        <el-alert
+          :type="liveDiffRows.length ? 'warning' : 'success'"
+          :closable="false"
+          show-icon
+          :title="liveDiffRows.length ? `当前草稿相对基线存在 ${liveDiffRows.length} 处差异` : '当前草稿与基线一致'"
+        />
+      </div>
+      <el-table v-if="liveDiffRows.length" :data="liveDiffRows" stripe size="small" style="width:100%" max-height="460">
+        <el-table-column label="工序" width="100">
+          <template #default="{ row }">{{ row.process || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="工位" width="100">
+          <template #default="{ row }">{{ row.station || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="测试项" min-width="140">
+          <template #default="{ row }">{{ row.itemName }}</template>
+        </el-table-column>
+        <el-table-column label="指标" min-width="120">
+          <template #default="{ row }">{{ row.indicatorName || row.indicatorCode }}</template>
+        </el-table-column>
+        <el-table-column label="参数" min-width="100">
+          <template #default="{ row }">{{ row.paramName || row.paramKey }}</template>
+        </el-table-column>
+        <el-table-column label="基线值" min-width="110">
+          <template #default="{ row }"><span class="text-gray-500">{{ row.baseline ?? '-' }}</span></template>
+        </el-table-column>
+        <el-table-column label="当前值" min-width="110">
+          <template #default="{ row }"><span class="font-medium text-danger">{{ row.current ?? '-' }}</span></template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="liveDiffDialog.visible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 单元格右键快捷菜单 -->
+    <div
+      v-if="cellMenu.visible"
+      class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 text-sm min-w-[180px]"
+      :style="{ left: cellMenu.x + 'px', top: cellMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="px-3 py-1.5 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5" @click="cellMenuApply('copy')">
+        <el-icon><CopyDocument /></el-icon><span>复制该值</span>
+      </div>
+      <div class="px-3 py-1.5 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5" @click="cellMenuApply('selected')">
+        <el-icon><Select /></el-icon><span>应用到选中项</span>
+      </div>
+      <div class="px-3 py-1.5 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5" @click="cellMenuApply('process')">
+        <el-icon><OfficeBuilding /></el-icon><span>应用到同工序</span>
+      </div>
+    </div>
+
     <!-- 协同编辑冲突提示 -->
     <el-dialog v-model="conflictDialog.visible" title="保存冲突提示" width="600px" top="15vh" :close-on-click-modal="false">
-      <el-alert title="部分参数保存失败" type="warning" :description="`以下 ${conflictDialog.conflicts.length} 项因版本冲突或权限不足未能保存，页面已刷新为最新数据，请重新编辑。`" show-icon class="mb-4" />
+      <el-alert title="部分参数保存失败" type="warning" :description="`以下 ${conflictDialog.conflicts.length} 项因版本冲突或权限不足未能保存。冲突项已从待保存中移除并同步为最新版本，其余未冲突变更仍保留，可再次保存。`" show-icon class="mb-4" />
       <el-table :data="conflictDialog.conflicts" stripe size="small" style="width:100%" max-height="320">
         <el-table-column label="指标" min-width="90">
           <template #default="{ row }">#{{ row.indicator_id }}</template>
@@ -607,28 +683,84 @@
       </template>
     </el-dialog>
 
+    <!-- 提交评审对话框（变更备注 + 指定审批人） -->
+    <el-dialog v-model="reviewDialog.visible" title="提交评审" width="520px" top="15vh" :close-on-click-modal="false">
+      <el-form label-width="90px">
+        <el-form-item label="变更备注" required>
+          <el-input v-model="reviewDialog.changeSummary" type="textarea" :rows="4" placeholder="请填写本次版本变更说明（必填，将记入版本快照）" />
+        </el-form-item>
+        <el-form-item label="指定审批人">
+          <el-select v-model="reviewDialog.approverId" clearable filterable placeholder="留空则任意 developer 及以上可审批" style="width:100%">
+            <el-option v-for="u in userOptions" :key="u.id" :label="`${u.display_name || u.username}${u.username && u.username !== u.display_name ? '（' + u.username + '）' : ''}`" :value="u.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reviewDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="reviewDialog.submitting" @click="doSubmitReview">确认提交</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 评审历史时间线 -->
+    <el-dialog v-model="reviewEventsDialog.visible" title="评审历史" width="640px" top="10vh" :close-on-click-modal="false">
+      <div v-loading="reviewEventsDialog.loading" style="min-height:120px">
+        <el-empty v-if="!reviewEventsDialog.loading && !reviewEventsDialog.events.length" description="暂无评审记录" />
+        <el-timeline v-else>
+          <el-timeline-item
+            v-for="ev in reviewEventsDialog.events"
+            :key="ev.id"
+            :timestamp="(ev.created_at || '').replace('T', ' ').slice(0, 19)"
+            :type="actionTagType(ev.action)"
+          >
+            <div class="flex items-center gap-2">
+              <el-tag size="small" :type="actionTagType(ev.action)" effect="plain">{{ actionLabel(ev.action) }}</el-tag>
+              <span class="text-sm font-medium">{{ ev.operator_name || '系统' }}</span>
+            </div>
+            <div v-if="ev.comment" class="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{{ ev.comment }}</div>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
+      <template #footer>
+        <el-button @click="reviewEventsDialog.visible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 参数变更记录 -->
     <el-dialog v-model="changeLogDialog.visible" :title="`变更记录${changeLogDialog.itemName ? '：' + changeLogDialog.itemName : ''}`" width="760px" top="10vh" :close-on-click-modal="false">
       <div v-loading="changeLogDialog.loading" style="min-height:120px">
         <el-empty v-if="!changeLogDialog.loading && !changeLogDialog.logs.length" description="暂无变更记录" />
-        <el-table v-else :data="changeLogDialog.logs" stripe size="small" style="width:100%" max-height="420">
-          <el-table-column label="时间" width="150">
-            <template #default="{ row }">{{ row.created_at?.replace('T', ' ').slice(0, 19) || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="indicator_name" label="指标" min-width="140">
-            <template #default="{ row }">{{ row.indicator_name || row.indicator_code || `#${row.indicator_id}` }}</template>
-          </el-table-column>
-          <el-table-column prop="param_name" label="参数" width="110">
-            <template #default="{ row }">{{ row.param_name || row.param_key || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="原值" min-width="110">
-            <template #default="{ row }"><span class="text-gray-500">{{ row.old_value ?? '-' }}</span></template>
-          </el-table-column>
-          <el-table-column label="新值" min-width="110">
-            <template #default="{ row }"><span class="font-medium" :class="{ 'text-danger': row.old_value !== row.new_value }">{{ row.new_value ?? '-' }}</span></template>
-          </el-table-column>
-          <el-table-column prop="operator_name" label="操作人" width="100" />
-        </el-table>
+        <template v-else>
+          <el-alert type="info" :closable="false" show-icon class="mb-3"
+            :title="`共 ${changeLogDialog.logs.length} 条变更，按操作批次分组展示`" />
+          <el-collapse v-if="groupedChangeLogs.length">
+            <el-collapse-item v-for="(group, i) in groupedChangeLogs" :key="i" :name="i">
+              <template #title>
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="text-xs font-medium text-gray-600 whitespace-nowrap">{{ group.startTime }}</span>
+                  <el-tag size="small" type="primary" effect="plain" class="whitespace-nowrap">{{ group.operator_name || '系统' }}</el-tag>
+                  <span class="text-xs text-gray-500 whitespace-nowrap">{{ group.count }} 处变更</span>
+                </div>
+              </template>
+              <el-table :data="group.items" stripe size="small" style="width:100%">
+                <el-table-column label="时间" width="140">
+                  <template #default="{ row }">{{ row.created_at?.replace('T', ' ').slice(0, 19) || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="indicator_name" label="指标" min-width="130">
+                  <template #default="{ row }">{{ row.indicator_name || row.indicator_code || `#${row.indicator_id}` }}</template>
+                </el-table-column>
+                <el-table-column prop="param_name" label="参数" width="100">
+                  <template #default="{ row }">{{ row.param_name || row.param_key || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="原值" min-width="100">
+                  <template #default="{ row }"><span class="text-gray-500">{{ row.old_value ?? '-' }}</span></template>
+                </el-table-column>
+                <el-table-column label="新值" min-width="100">
+                  <template #default="{ row }"><span class="font-medium" :class="{ 'text-danger': row.old_value !== row.new_value }">{{ row.new_value ?? '-' }}</span></template>
+                </el-table-column>
+              </el-table>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
       </div>
       <template #footer>
         <el-button @click="changeLogDialog.visible = false">关闭</el-button>
@@ -705,6 +837,7 @@ const viewMode = ref<'all' | 'empty' | 'filled' | 'diff'>('all')
 const processSearch = ref('')
 const stationFilter = ref('')
 const domainFilter = ref('全部领域')
+const mineOnly = ref(false)
 const domainOptions = ref<string[]>(['全部领域'])
 const expandedProcesses = ref<string[]>([])
 
@@ -858,9 +991,22 @@ try {
           // 他人结束编辑
           const { [msg.cell_key]: _, ...rest } = editingCells.value
           editingCells.value = rest
+        } else if (msg.type === 'user_stopped_editing_all') {
+          // 他人断开连接，释放其持有的所有测试项锁
+          const uid = msg.user_id
+          if (uid) {
+            const next: Record<string, any> = {}
+            for (const [k, v] of Object.entries(editingCells.value)) {
+              if (v.user_id !== uid) next[k] = v
+            }
+            editingCells.value = next
+          }
         } else if (msg.type === 'editing_rejected') {
           // 编辑被拒绝（已被他人占用）
           ElMessage.warning(msg.message || '该参数正在被他人编辑')
+        } else if (msg.type === 'params_saved') {
+          // 他人保存成功 → 本地增量同步（跳过本地有 pending 的单元格）
+          applyRemoteSave(msg)
         }
       } catch (e) {
         console.warn('[BOM WS] Parse error', e)
@@ -894,6 +1040,32 @@ function disconnectBomWebSocket() {
   editingCells.value = {}
 }
 
+// 他人保存成功后的本地增量同步：更新对应单元格值并同步 item_revision。
+// 若本地对该单元格有 pending 变更（正在编辑未保存），跳过以保留本地编辑，
+// 稍后统一保存时由乐观锁识别冲突。
+function applyRemoteSave(msg: any) {
+  const items = msg.items || []
+  if (!items.length) return
+  let updated = 0
+  for (const it of items) {
+    const item = testItems.value.find((t: any) => t.id === it.test_item_id)
+    if (!item) continue
+    const ind = (item.indicatorList || []).find(
+      (i: any) => i._bom_indicator_id === it.indicator_id || i.indicator_id === it.indicator_id,
+    )
+    if (!ind) continue
+    const pm = ind._param_map?.[it.param_key]
+    if (!pm) continue
+    if (pendingChanges.has(makePendingKey(it.test_item_id, ind.indicator_id, it.param_key))) continue
+    pm.value = it.param_value
+    if (it.item_revision != null) item.item_revision = it.item_revision
+    updated++
+  }
+  if (updated) {
+    ElMessage.info(`${msg.operator_name || '他人'} 更新了 ${updated} 处参数，已同步`)
+  }
+}
+
 function sendStartEditing(ind: any, paramKey: string) {
   if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
   const item = ind._item
@@ -922,11 +1094,11 @@ function sendStopEditing(ind: any, paramKey: string) {
   }))
 }
 
-// 检查某参数是否被他人正在编辑
-function isCellBeingEditedByOther(ind: any, paramKey: string): any | null {
+// 检查某测试项是否被他人正在编辑（锁粒度 = 测试项，与后端乐观锁一致）
+function isCellBeingEditedByOther(ind: any, _paramKey: string): any | null {
   const item = ind._item
   if (!item) return null
-  const cellKey = `${item.id}:${ind.indicator_id}:${paramKey}`
+  const cellKey = `item:${item.id}`
   const info = editingCells.value[cellKey]
   if (info && info.user_id !== getCurrentUserId()) {
     return info
@@ -935,6 +1107,7 @@ function isCellBeingEditedByOther(ind: any, paramKey: string): any | null {
 }
 
 const emptyDescription = computed(() => {
+  if (mineOnly.value) return '当前筛选下暂无你负责的测试项'
   if (viewMode.value === 'empty') return '暂无未填写测试项'
   if (viewMode.value === 'filled') return '暂无已填写测试项'
   if (viewMode.value === 'diff') return '暂无与基准有差异的测试项'
@@ -962,6 +1135,37 @@ function fillProgress(): { filled: number; total: number; percent: number } {
   }
   return { filled, total, percent: total ? Math.round(filled / total * 100) : 0 }
 }
+
+// ── 填充率按工序 / 工位 / 负责人维度下钻 ──
+const dimensionStats = computed(() => {
+  const byProcess: Record<string, { total: number; empty: number }> = {}
+  const byStation: Record<string, { total: number; empty: number }> = {}
+  const byOwner: Record<string, { total: number; empty: number }> = {}
+  const add = (bucket: Record<string, { total: number; empty: number }>, key: string, total: number, empty: number) => {
+    if (!bucket[key]) bucket[key] = { total: 0, empty: 0 }
+    bucket[key].total += total
+    bucket[key].empty += empty
+  }
+  for (const item of testItems.value) {
+    const proc = item.process_name || '未分类工序'
+    const sta = (item.process_name || '') + '::' + (item.station_name || item.station || '通用工位')
+    const owner = item.owner_name || item.owner || '未分配'
+    for (const ind of item.indicatorList || []) {
+      const params = ind._param_map || {}
+      const total = Object.keys(params).length
+      if (!total) continue
+      const empty = Object.values(params).filter((p: any) => p.value === '' || p.value === null || p.value === undefined).length
+      add(byProcess, proc, total, empty)
+      add(byStation, sta, total, empty)
+      add(byOwner, owner, total, empty)
+    }
+  }
+  const fmt = (bucket: Record<string, { total: number; empty: number }>) =>
+    Object.entries(bucket)
+      .map(([name, v]) => ({ name, total: v.total, empty: v.empty, filled: v.total - v.empty, percent: v.total ? Math.round((v.total - v.empty) / v.total * 100) : 0 }))
+      .sort((a, b) => b.empty - a.empty || b.total - a.total)
+  return { byProcess: fmt(byProcess), byStation: fmt(byStation), byOwner: fmt(byOwner) }
+})
 
 const bomStats = computed(() => {
   let totalItems = 0, totalParams = 0, filledCount = 0, emptyCount = 0
@@ -1044,9 +1248,15 @@ const filteredProcessStationGroups = computed(() => {
    const filtered = Object.entries(filteredProcessStationGroups.value).map(([procName, staMap]) => {
      const stations = Object.entries(staMap)
        .sort(([a], [b]) => naturalCompare(a, b))
-       .map(([staName, items]) => {
-         const filteredItems = domainFilter.value === '全部领域' ? items : items.filter((item: any) => item.domain === domainFilter.value)
-         const staTotal = filteredItems.reduce((s: number, item: any) => s + (item.indicatorList || []).reduce((s2: number, ind: any) => s2 + Object.keys(ind._param_map || {}).length, 0), 0)
+        .map(([staName, items]) => {
+          // 领域筛选 + "我负责的"筛选
+          let filteredItems = domainFilter.value === '全部领域' ? items : items.filter((item: any) => item.domain === domainFilter.value)
+          if (mineOnly.value) {
+            const uid = String(getCurrentUserId())
+            const uname = getCurrentUserName()
+            filteredItems = filteredItems.filter((item: any) => String(item.owner_id) === uid || String(item.owner_name || '') === uname)
+          }
+          const staTotal = filteredItems.reduce((s: number, item: any) => s + (item.indicatorList || []).reduce((s2: number, ind: any) => s2 + Object.keys(ind._param_map || {}).length, 0), 0)
          const staEmpty = filteredItems.reduce((s: number, item: any) => s + (item.indicatorList || []).reduce((s2: number, ind: any) => {
            const params = ind._param_map || {}
            return s2 + Object.values(params).filter((p: any) => p.value === '' || p.value === null || p.value === undefined).length
@@ -1202,8 +1412,8 @@ function expandOnlyDiff() {
 }
 
 function getItemParamPreview(item: any): string {
-  const cols = item._param_cols || item.indicatorList?.[0]?._param_cols || []
   const ind = item.indicatorList?.[0]
+  const cols = ind?._param_cols || item._param_cols || []
   if (!ind || !cols.length) return '暂无参数'
   return cols.map((pc: any) => `${pc.label}: ${ind._param_map?.[pc.key]?.value ?? '-'}`).join(' | ')
 }
@@ -1248,10 +1458,12 @@ function itemHasParams(item: any): boolean {
 }
 
 function getItemParamRows(item: any): any[] {
-  const cols = item._param_cols || item.indicatorList?.[0]?._param_cols || []
-  const seen = new Set<string>()
   const rows: any[] = []
+  const seen = new Set<string>()
   for (const ind of item.indicatorList || []) {
+    // 行级渲染以每个指标自己的参数列为准（BOM override 优先的权威 schema），
+    // 避免"仅取第一个指标列"导致其它指标列缺失。
+    const cols = ind._param_cols || item._param_cols || []
     for (const pc of cols) {
       const key = ind.indicator_id + '#' + pc.key
       if (seen.has(key)) continue
@@ -1266,6 +1478,8 @@ function getItemParamRows(item: any): any[] {
         format: pc.format,
         required: pc.required,
         remark: pc.remark,
+        unit: pc.unit || '',
+        default: pc.default ?? '',
         min_width: pc.minWidth,
       })
     }
@@ -1292,6 +1506,81 @@ function paramFormatLabel(format: string): string {
     expr: '表达式',
   }
   return map[format] || format || '未知'
+}
+
+// ── 单元格右键快捷菜单 ──
+const cellMenu = reactive({ visible: false, x: 0, y: 0, row: null as any, item: null as any })
+let _cellMenuDocHandler: ((e: MouseEvent) => void) | null = null
+
+function openCellContextMenu(e: MouseEvent, row: any, item: any) {
+  if (bom.archived || bom.review_status === 'pending') return
+  if (item && !canEditItem(item)) return
+  cellMenu.x = Math.min(e.clientX, window.innerWidth - 200)
+  cellMenu.y = Math.min(e.clientY, window.innerHeight - 160)
+  cellMenu.row = row
+  cellMenu.item = item
+  cellMenu.visible = true
+  // 打开时临时监听 document click 用于关闭（点击菜单项不冒泡触发）
+  if (!_cellMenuDocHandler) {
+    _cellMenuDocHandler = () => closeCellMenu()
+    setTimeout(() => document.addEventListener('click', _cellMenuDocHandler as any), 0)
+  }
+}
+
+function closeCellMenu() {
+  cellMenu.visible = false
+  cellMenu.row = null
+  cellMenu.item = null
+  if (_cellMenuDocHandler) {
+    document.removeEventListener('click', _cellMenuDocHandler as any)
+    _cellMenuDocHandler = null
+  }
+}
+
+async function cellMenuApply(action: 'copy' | 'selected' | 'process') {
+  const row = cellMenu.row
+  const item = cellMenu.item
+  closeCellMenu()
+  if (!row || !item) return
+  const val = String(row._ind._param_map?.[row.param_key]?.value ?? '')
+  if (action === 'copy') {
+    try {
+      await navigator.clipboard.writeText(val || '')
+      ElMessage.success('已复制参数值')
+    } catch {
+      ElMessage.warning('复制失败，请手动复制')
+    }
+    return
+  }
+  if (action === 'selected') {
+    if (!rightToolbar.selectedItems.length) {
+      ElMessage.warning('请先在左侧选中测试项')
+      return
+    }
+    let count = 0
+    for (const t of rightToolbar.selectedItems) {
+      if (t._param_map?.[row.param_key]) {
+        t._param_map[row.param_key].value = val
+        count++
+      }
+    }
+    const ok = await saveAllPendingParams()
+    if (ok) ElMessage.success(`已应用到 ${count} 个选中测试项`)
+    return
+  }
+  // action === 'process'：应用到同工序所有测试项的对应指标同参数
+  let count = 0
+  for (const it of testItems.value) {
+    if (it.process_name !== item.process_name) continue
+    for (const ind of it.indicatorList || []) {
+      if (ind.indicator_id === row.indicator_id && ind._param_map?.[row.param_key]) {
+        ind._param_map[row.param_key].value = val
+        count++
+      }
+    }
+  }
+  const ok = await saveAllPendingParams()
+  if (ok) ElMessage.success(`已应用到同工序 ${count} 处`)
 }
 
 function startInlineEdit(row: any) {
@@ -1432,6 +1721,13 @@ function autoExpandFirstEmptyStation() {
   // If all filled, expand first station
   if (!keys.length && val[0]?.stations.length) {
     keys.push(val[0].name + '::' + val[0].stations[0].name)
+  }
+  // 同步展开所属工序，确保 v-if 渲染下首屏有内容
+  if (keys.length) {
+    const procName = keys[0].split('::')[0]
+    if (!expandedProcesses.value.includes(procName)) {
+      expandedProcesses.value.push(procName)
+    }
   }
   expandedStations.value = keys
 }
@@ -1729,7 +2025,7 @@ function applyItemFocus(item: any, procName: string, staName: string, toggle: bo
         _item_name: item.name,
         _process_name: procName,
         _station_name: staName,
-        _param_cols: item._param_cols || ind._param_cols || [],
+        _param_cols: ind._param_cols || item._param_cols || [],
       }))
     }
   }
@@ -1771,12 +2067,32 @@ function focusItemByOffset(offset: 1 | -1) {
 }
 
 function handleNavKeydown(e: KeyboardEvent) {
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
   const target = e.target as HTMLElement
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
   if (e.altKey || e.ctrlKey || e.metaKey) return
-  e.preventDefault()
-  focusItemByOffset(e.key === 'ArrowDown' ? 1 : -1)
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    focusItemByOffset(e.key === 'ArrowDown' ? 1 : -1)
+    return
+  }
+  // 左右方向键：展开 / 收起当前测试项所在工位与工序
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault()
+    const entries = getAllNavEntries()
+    const entry = entries.find(en => en.item.id === navItemId.value)
+    if (!entry) return
+    if (e.key === 'ArrowRight') {
+      if (!expandedProcesses.value.includes(entry.process)) expandedProcesses.value.push(entry.process)
+      if (!isStationExpanded(entry.process, entry.station)) toggleStationExpand(entry.process, entry.station)
+    } else {
+      if (isStationExpanded(entry.process, entry.station)) {
+        toggleStationExpand(entry.process, entry.station)
+      } else {
+        const idx = expandedProcesses.value.indexOf(entry.process)
+        if (idx >= 0) expandedProcesses.value.splice(idx, 1)
+      }
+    }
+  }
 }
 
 function keepNavItemVisible(itemId: number) {
@@ -2072,7 +2388,6 @@ function isParamDirty(indicatorId: number, paramKey: string): boolean {
   if (!Object.keys(baselineParams.value).length) return false
   const bv = baselineParams.value[indicatorId + '#' + paramKey]
   if (bv === undefined) return false
-  // find current value
   for (const item of testItems.value) {
     for (const ind of item.indicatorList || []) {
       if (ind.indicator_id === indicatorId) {
@@ -2081,6 +2396,41 @@ function isParamDirty(indicatorId: number, paramKey: string): boolean {
     }
   }
   return false
+}
+
+// ── 草稿 vs 基线实时 diff ──
+const liveDiffDialog = reactive({ visible: false })
+const liveDiffRows = computed(() => {
+  const rows: any[] = []
+  if (!Object.keys(baselineParams.value).length) return rows
+  for (const item of testItems.value) {
+    for (const ind of item.indicatorList || []) {
+      const map = ind._param_map || {}
+      for (const key of Object.keys(map)) {
+        const bv = baselineParams.value[ind.indicator_id + '#' + key]
+        if (bv === undefined) continue
+        const cur = String(map[key]?.value ?? '')
+        if (cur !== bv) {
+          rows.push({
+            process: item.process_name || '',
+            station: item.station_name || item.station || '',
+            itemName: item.name || '',
+            indicatorName: ind.indicator_name || '',
+            indicatorCode: ind.indicator_code || '',
+            paramName: map[key]?.name || key,
+            paramKey: key,
+            baseline: bv,
+            current: cur,
+          })
+        }
+      }
+    }
+  }
+  return rows
+})
+
+function openLiveDiff() {
+  liveDiffDialog.visible = true
 }
 
 // ── Load Data ──
@@ -2111,6 +2461,7 @@ async function loadAll() {
          testItems.value = fullItems.map((item: any) => {
           // 为每个指标构建 _param_map 供表格单元格编辑使用
           const indicators = Array.isArray(item?.indicators) ? item.indicators : []
+          const itemParamCols: any[] = Array.isArray(item?.param_cols) ? item.param_cols : []
           const indicatorList = indicators.map((ind: any) => {
             // 兼容：has_override 可能为 undefined；params/dict_params 可能缺失或不是数组
             const hasOverride = Boolean(ind?.has_override)
@@ -2129,6 +2480,17 @@ async function loadAll() {
                 required: p.required ?? false,
               }
             }
+            // 优先使用后端生成的统一参数列 schema；缺失时从本地 paramMap 兜底推断
+            const perIndCols = Array.isArray(ind?.param_cols) && ind.param_cols.length
+              ? ind.param_cols
+              : Object.entries(paramMap).map(([key, p]: [string, any]) => ({
+                  key,
+                  label: p.name || key,
+                  format: p.format || 'string',
+                  required: p.required ?? false,
+                  remark: p.remark || '',
+                  minWidth: 140,
+                }))
             return {
               ...ind,
               _bom_indicator_id: ind?._bom_indicator_id || 0,
@@ -2137,24 +2499,14 @@ async function loadAll() {
               category: ind?.category || '',
               unit: ind?.unit || '',
               _param_map: paramMap,
+              _param_cols: perIndCols,
               _item: { id: item?.id, name: item?.name }
             }
           })
-          const firstInd = indicatorList[0]
-          const paramCols = firstInd
-            ? Object.entries(firstInd._param_map || {}).map(([key, p]: [string, any]) => ({
-                key,
-                label: p.name || key,
-                format: p.format || 'string',
-                required: p.required ?? false,
-                remark: p.remark || '',
-                minWidth: 140,
-              }))
-            : []
           return {
             ...item,
             indicatorList,
-            _param_cols: paramCols,
+            _param_cols: itemParamCols.length ? itemParamCols : (indicatorList[0]?._param_cols || []),
           }
         })
        
@@ -2558,7 +2910,20 @@ async function loadArchivedDiff() {
             oldValue: pm.before,
             newValue: pm.after,
             diffLabel: pm.fieldLabel || '',
-})
+          })
+        }
+      }
+    }
+
+    diffDialog.added = added
+    diffDialog.removed = removed
+    diffDialog.modified = modified
+  } catch {
+    ElMessage.error('获取版本对比失败')
+  } finally {
+    diffDialog.loading = false
+  }
+}
 
 // ── 统一保存：flushPendingChanges ──
 async function flushPendingChanges(): Promise<boolean> {
@@ -2582,8 +2947,10 @@ async function flushPendingChanges(): Promise<boolean> {
     const res = await metricsApi.batchSaveIndicatorParams(configId.value, { indicators: payload })
     const conflicts = res.data?.conflicts || []
     if (conflicts.length) {
+      // 冲突按测试项粒度：仅移除冲突项对应的 pending，保留其余未冲突变更，
+      // 并同步本地 item_revision，避免无谓的全量 reload。
+      resolveSaveConflicts(conflicts)
       showSaveConflicts(conflicts)
-      await loadAll()
       return false
     }
     // 成功：清空 pending
@@ -2596,6 +2963,28 @@ async function flushPendingChanges(): Promise<boolean> {
     return false
   } finally {
     isSaving.value = false
+  }
+}
+
+// 冲突处理：从 pendingChanges 中移除冲突测试项的所有待保存变更，并刷新本地 item_revision。
+function resolveSaveConflicts(conflicts: any[]) {
+  const conflictItemIds = new Set<number>()
+  for (const c of conflicts) {
+    if (c.test_item_id) conflictItemIds.add(c.test_item_id)
+  }
+  if (conflictItemIds.size === 0) return
+  // 移除冲突测试项相关 pending
+  for (const [key, v] of Array.from(pendingChanges.entries())) {
+    if (conflictItemIds.has(v.test_item_id)) {
+      pendingChanges.delete(key)
+    }
+  }
+  // 刷新冲突测试项的本地版本号（含该测试项所有指标）
+  for (const c of conflicts) {
+    if (c.test_item_id && c.current_revision != null) {
+      const item = testItems.value.find((t: any) => t.id === c.test_item_id)
+      if (item) item.item_revision = c.current_revision
+    }
   }
 }
 
@@ -2630,19 +3019,6 @@ onMounted(() => {
   setupGlobalSaveShortcut()
   setupBeforeUnloadGuard()
 })
-        }
-      }
-    }
-
-    diffDialog.added = added
-    diffDialog.removed = removed
-    diffDialog.modified = modified
-  } catch {
-    ElMessage.error('获取版本对比失败')
-  } finally {
-    diffDialog.loading = false
-  }
-}
 
 function diffSpanMethodHelper(rows: any[], { row, _column, rowIndex, columnIndex }: any): any {
   if (columnIndex !== 0) return
@@ -3053,6 +3429,10 @@ async function saveAllPendingParams() {
 
 const conflictDialog = reactive({ visible: false, conflicts: [] as any[] })
 
+// ── 评审：提交对话框 + 评审历史时间线 ──
+const reviewDialog = reactive({ visible: false, submitting: false, changeSummary: '', approverId: null as number | null })
+const reviewEventsDialog = reactive({ visible: false, loading: false, events: [] as any[] })
+
 function showSaveConflicts(conflicts: any[]) {
   conflictDialog.conflicts = conflicts
   conflictDialog.visible = true
@@ -3060,6 +3440,31 @@ function showSaveConflicts(conflicts: any[]) {
 
 // ── 参数变更记录对话框 ──
 const changeLogDialog = reactive({ visible: false, loading: false, itemName: '', logs: [] as any[] })
+
+// 变更日志按「操作人 + 5 分钟时间窗」聚合为批次，便于按一次保存/一轮修改追溯
+const groupedChangeLogs = computed(() => {
+  const logs = [...changeLogDialog.logs].reverse()
+  const groups: any[] = []
+  let cur: any = null
+  for (const log of logs) {
+    const t = log.created_at ? new Date(log.created_at.replace('T', ' ')).getTime() : 0
+    if (cur && cur.operator_name === log.operator_name && cur.lastTs && (t - cur.lastTs) < 5 * 60 * 1000) {
+      cur.items.push(log)
+      cur.lastTs = t
+      cur.count++
+    } else {
+      cur = {
+        operator_name: log.operator_name,
+        startTime: log.created_at?.replace('T', ' ').slice(0, 19) || '',
+        items: [log],
+        lastTs: t,
+        count: 1,
+      }
+      groups.push(cur)
+    }
+  }
+  return groups.reverse()
+})
 
 async function openChangeLogDialog(item: any) {
   changeLogDialog.itemName = item.name || ''
@@ -3076,22 +3481,53 @@ async function openChangeLogDialog(item: any) {
   }
 }
 
+// 审批权限：super_admin 或指定审批人；未指定审批人时任意 developer+ 可审
+function canReview(): boolean {
+  if (currentUser.value?.role === 'super_admin') return true
+  if (bom.approver_id == null) return true
+  return String(bom.approver_id) === String(getCurrentUserId())
+}
+
 async function handleSubmitReview() {
   try {
-    await ElMessageBox.confirm('确认提交评审？提交前将进行必填参数校验。', '提交评审')
-    await validateAndSave()
+    await ElMessageBox.confirm('确认提交评审？提交前将强制校验必填参数。', '提交评审')
+    // ① 先保存所有待保存变更（统一模式），确保校验基于最新数据
     const ok = await saveAllPendingParams()
     if (!ok) return
-    const { value } = await ElMessageBox.prompt('版本变更备注（必填，将记入版本快照）', '提交评审', {
-      inputType: 'textarea',
-      inputValidator: (v: string) => !!v?.trim() || '请填写版本变更备注',
+    // ② 强制校验闸口：存在必填未填写时禁止提交
+    await validateAndSave()
+    if (validationErrors.value.length > 0) {
+      ElMessage.error(`存在 ${validationErrors.value.length} 个必填参数未填写，请完善后再提交评审`)
+      return
+    }
+    // ③ 打开提交评审对话框（变更备注 + 审批人）
+    if (!userOptions.value.length) await loadUserOptions()
+    reviewDialog.changeSummary = ''
+    reviewDialog.approverId = null
+    reviewDialog.visible = true
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e?.response?.data?.message || e?.message || '提交评审失败')
+  }
+}
+
+async function doSubmitReview() {
+  const summary = (reviewDialog.changeSummary || '').trim()
+  if (!summary) { ElMessage.warning('请填写版本变更备注'); return }
+  reviewDialog.submitting = true
+  try {
+    await metricsApi.submitReview(configId.value, {
+      comment: '',
+      change_summary: summary,
+      approver_id: reviewDialog.approverId || null,
     })
-    await metricsApi.submitReview(configId.value, { comment: '', change_summary: value.trim() })
+    reviewDialog.visible = false
     clearDraft()
     ElMessage.success('已提交评审')
     await loadAll()
   } catch (e: any) {
-    if (e !== 'cancel') ElMessage.error(e?.response?.data?.message || e?.message || '提交评审失败')
+    ElMessage.error(e?.response?.data?.message || e?.message || '提交评审失败')
+  } finally {
+    reviewDialog.submitting = false
   }
 }
 
@@ -3121,15 +3557,42 @@ async function handleApproveReview() {
 
 async function handleRejectReview() {
   try {
-    const { value } = await ElMessageBox.prompt('驳回原因（必填）', '驳回', {
-      inputType: 'textarea', inputValidator: (v: string) => !!v || '请填写驳回原因',
+    const { value } = await ElMessageBox.prompt('驳回意见（每行一条，逐条记录形成评审闭环）', '驳回', {
+      inputType: 'textarea', inputValidator: (v: string) => !!v || '请填写驳回意见',
     })
-    await metricsApi.rejectReview(configId.value, { comment: value || '' })
+    const lines = String(value || '').split('\n').map((s: string) => s.trim()).filter(Boolean)
+    // 逐条评审意见
+    if (lines.length) {
+      await metricsApi.addReviewComments(configId.value, { comments: lines.map((c) => ({ comment: c })) })
+    }
+    await metricsApi.rejectReview(configId.value, { comment: lines.join('；') || '' })
     ElMessage.success('评审已驳回')
     await loadAll()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error(e?.response?.data?.message || e?.message || '驳回失败')
   }
+}
+
+async function openReviewHistory() {
+  reviewEventsDialog.visible = true
+  reviewEventsDialog.loading = true
+  reviewEventsDialog.events = []
+  try {
+    const res = await metricsApi.getReviewEvents(configId.value)
+    reviewEventsDialog.events = res.data || []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '加载评审历史失败')
+  } finally {
+    reviewEventsDialog.loading = false
+  }
+}
+
+function actionLabel(a: string): string {
+  return ({ submit: '提交评审', approve: '评审通过', reject: '驳回', withdraw: '撤回', comment: '评审意见' } as Record<string, string>)[a] || a
+}
+
+function actionTagType(a: string): string {
+  return ({ submit: 'primary', approve: 'success', reject: 'danger', withdraw: 'info', comment: 'warning' } as Record<string, string>)[a] || 'info'
 }
 
 async function handleArchive() {

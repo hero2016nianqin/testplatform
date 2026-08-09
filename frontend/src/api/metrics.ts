@@ -41,6 +41,7 @@ export const metricsApi = {
   deleteBomConfig(id: number) { return api.delete(`/metrics/bom-configs/${id}`) },
   copyBomConfig(id: number, data: any) { return api.post(`/metrics/bom-configs/${id}/copy`, data) },
   switchBomVersion(configId: number, snapshotId: number) { return api.put(`/metrics/bom-configs/${configId}/switch-version`, null, { params: { snapshot_id: snapshotId } }) },
+  previewVersionUpgrade(configId: number, snapshotId: number) { return api.get(`/metrics/bom-configs/${configId}/preview-version-upgrade`, { params: { snapshot_id: snapshotId } }) },
 
   getBomDomainOwners(configId: number) { return api.get(`/metrics/bom-configs/${configId}/domain-owners`) },
   updateBomDomainOwners(configId: number, data: any) { return api.put(`/metrics/bom-configs/${configId}/domain-owners`, data) },
@@ -122,6 +123,8 @@ export const metricsApi = {
   approveReview(configId: number, data: any) { return api.post(`/metrics/bom-configs/${configId}/approve-review`, data) },
   rejectReview(configId: number, data: any) { return api.post(`/metrics/bom-configs/${configId}/reject-review`, data) },
   withdrawReview(configId: number) { return api.post(`/metrics/bom-configs/${configId}/withdraw-review`, {}) },
+  addReviewComments(configId: number, data: any) { return api.post(`/metrics/bom-configs/${configId}/review-comments`, data) },
+  getReviewEvents(configId: number) { return api.get(`/metrics/bom-configs/${configId}/review-events`) },
   archiveBom(configId: number) { return api.post(`/metrics/bom-configs/${configId}/archive`, {}) },
   createNewIteration(configId: number) { return api.post(`/metrics/bom-configs/${configId}/new-iteration`, {}) },
   exportBomExcel(configId: number) { return api.post(`/metrics/bom-configs/${configId}/export-excel`, {}) },
