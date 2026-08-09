@@ -485,6 +485,7 @@ class BomExportResp(BaseModel):
 # ── Review / Archive ──
 class ReviewReq(BaseModel):
     comment: str = ""
+    change_summary: str = Field(..., min_length=1, description="版本变更备注（必填）")
 
 class ReviewActionResp(BaseModel):
     id: int

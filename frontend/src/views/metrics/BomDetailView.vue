@@ -2892,7 +2892,11 @@ async function handleSubmitReview() {
     await validateAndSave()
     const ok = await saveAllPendingParams()
     if (!ok) return
-    await metricsApi.submitReview(configId.value, { comment: '' })
+    const { value } = await ElMessageBox.prompt('版本变更备注（必填，将记入版本快照）', '提交评审', {
+      inputType: 'textarea',
+      inputValidator: (v: string) => !!v?.trim() || '请填写版本变更备注',
+    })
+    await metricsApi.submitReview(configId.value, { comment: '', change_summary: value.trim() })
     clearDraft()
     ElMessage.success('已提交评审')
     await loadAll()

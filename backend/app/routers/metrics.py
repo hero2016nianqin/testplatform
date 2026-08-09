@@ -697,7 +697,7 @@ async def submit_review(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    obj = await bom_svc.submit_review(db, config_id, operator=_get_operator(user))
+    obj = await bom_svc.submit_review(db, config_id, operator=_get_operator(user), change_summary=req.change_summary)
     return success(data=ReviewActionResp(**obj.to_dict()), message="已提交评审")
 
 

@@ -741,7 +741,7 @@ class BomConfigService:
             )
 
     @staticmethod
-    async def submit_review(db: AsyncSession, config_id: int, operator: str = "") -> BomConfig:
+    async def submit_review(db: AsyncSession, config_id: int, operator: str = "", change_summary: str = "") -> BomConfig:
         obj = await BomConfigService.get(db, config_id)
         if obj.review_status == "pending":
             raise ValueError("该 BOM 已提交评审，请勿重复提交")
@@ -750,6 +750,7 @@ class BomConfigService:
         obj.review_status = "pending"
         obj.review_operator = operator
         obj.reviewed_at = datetime.utcnow()
+        obj.change_summary = change_summary
         await db.flush()
         await db.refresh(obj)
         return obj
@@ -766,7 +767,7 @@ class BomConfigService:
         await db.flush()
         await db.refresh(obj)
         from app.services.version_snapshot_service import VersionSnapshotService
-        await VersionSnapshotService.snapshot_bom_config(db, config_id, operator, "评审通过，版本发布")
+        await VersionSnapshotService.snapshot_bom_config(db, config_id, operator, obj.change_summary or "评审通过，版本发布")
         return obj
 
     @staticmethod
