@@ -771,8 +771,9 @@ function itemBgClass(item: any): string {
   return isOtherOwned(item) ? 'bg-gray-100' : 'bg-white'
 }
 
-// ── WebSocket 协同编辑在线用户 ──
+// ── WebSocket 协同编辑在线用户 & 编辑状态同步 ──
 const onlineUsers = ref<any[]>([])
+const editingCells = ref<Record<string, any>>({})  // cell_key -> {user_id, user_name, test_item_id, indicator_id, param_key, started_at}
 let bomWs: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -792,13 +793,13 @@ function connectBomWebSocket() {
   if (!bom.bom_code || !bom.version) return
   const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000'}/ws/bom/${bom.bom_code}/${bom.version}?user_id=${getCurrentUserId()}&user_name=${encodeURIComponent(getCurrentUserName())}`
   
-  try {
+try {
     bomWs = new WebSocket(wsUrl)
-    
+
     bomWs.onopen = () => {
       console.log('[BOM WS] Connected')
     }
-    
+
     bomWs.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
@@ -806,6 +807,19 @@ function connectBomWebSocket() {
           onlineUsers.value = msg.users || []
         } else if (msg.type === 'cursor') {
           // 可选：处理光标位置同步
+        } else if (msg.type === 'editing_sync') {
+          // 初始同步编辑状态
+          editingCells.value = msg.editing_cells || {}
+        } else if (msg.type === 'user_started_editing') {
+          // 他人开始编辑
+          editingCells.value = { ...editingCells.value, [msg.cell_key]: msg.user }
+        } else if (msg.type === 'user_stopped_editing') {
+          // 他人结束编辑
+          const { [msg.cell_key]: _, ...rest } = editingCells.value
+          editingCells.value = rest
+        } else if (msg.type === 'editing_rejected') {
+          // 编辑被拒绝（已被他人占用）
+          ElMessage.warning(msg.message || '该参数正在被他人编辑')
         }
       } catch (e) {
         console.warn('[BOM WS] Parse error', e)
@@ -826,16 +840,45 @@ function connectBomWebSocket() {
   }
 }
 
-function disconnectBomWebSocket() {
-  if (bomWs) {
-    bomWs.close()
-    bomWs = null
+function getAvatarUrl(name: string): string {
+function sendStartEditing(ind: any, paramKey: string) {
+  if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
+  const item = ind._item
+  if (!item) return
+  bomWs.send(JSON.stringify({
+    type: 'start_editing',
+    data: {
+      test_item_id: item.id,
+      indicator_id: ind.indicator_id,
+      param_key: paramKey,
+    },
+  }))
+}
+
+function sendStopEditing(ind: any, paramKey: string) {
+  if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
+  const item = ind._item
+  if (!item) return
+  bomWs.send(JSON.stringify({
+    type: 'stop_editing',
+    data: {
+      test_item_id: item.id,
+      indicator_id: ind.indicator_id,
+      param_key: paramKey,
+    },
+  }))
+}
+
+// 检查某参数是否被他人正在编辑
+function isCellBeingEditedByOther(ind: any, paramKey: string): any | null {
+  const item = ind._item
+  if (!item) return null
+  const cellKey = `${item.id}:${ind.indicator_id}:${paramKey}`
+  const info = editingCells.value[cellKey]
+  if (info && info.user_id !== getCurrentUserId()) {
+    return info
   }
-  if (wsReconnectTimer) {
-    clearTimeout(wsReconnectTimer)
-    wsReconnectTimer = null
-  }
-  onlineUsers.value = []
+  return null
 }
 
 const emptyDescription = computed(() => {
@@ -1206,6 +1249,13 @@ function startInlineEdit(row: any) {
     openListEditor(row)
     return
   }
+  // 检查是否被他人正在编辑
+  const occupied = isCellBeingEditedByOther(row._ind, row.param_key)
+  if (occupied) {
+    ElMessage.warning(`该参数正在被 ${occupied.user_name} 编辑，请稍后再试`)
+    return
+  }
+  sendStartEditing(row._ind, row.param_key)
   editParamKey.value = row._bom_indicator_id + '#val#' + row.param_key
 }
 
@@ -2162,6 +2212,7 @@ async function saveParamValue(ind: any, paramKey: string) {
     return
   }
   editParamKey.value = ''
+  sendStopEditing(ind, paramKey)
   const info = ind._param_map?.[paramKey]
   const newValue = info?.value ?? info ?? ''
   const item = ind._item
