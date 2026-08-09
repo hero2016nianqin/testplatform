@@ -301,13 +301,18 @@
                           <el-table-column label="参数值" min-width="160">
                             <template #default="{ row }">
                               <div :class="['param-cell', { 'param-dirty': isParamDirty(row.indicator_id, row.param_key), 'param-empty': isParamEmpty(row._ind, row.param_key) }]">
+                                <!-- 他人正在编辑指示器 -->
+                                <div v-if="isCellBeingEditedByOther(row._ind, row.param_key)" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200" style="z-index: 10;">
+                                  <el-icon><User /></el-icon>
+                                  <span>{{ isCellBeingEditedByOther(row._ind, row.param_key).user_name }} 正在编辑</span>
+                                </div>
                                 <div v-if="!bom.archived && bom.review_status !== 'pending' && canEditItem(item) && editParamKey === row._bom_indicator_id + '#val#' + row.param_key && !isListFormat(row.format)" class="flex items-center gap-1" @click.stop>
                                   <el-select v-if="row.format === 'boolean'" v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @change="saveDraft(); saveParamValue(row._ind, row.param_key)">
                                     <el-option label="true" value="true" />
                                     <el-option label="false" value="false" />
                                   </el-select>
-                                  <el-input v-else-if="['number', 'range', 'percent'].includes(row.format)" v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" />
-                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" />
+                                  <el-input v-else-if="['number', 'range', 'percent'].includes(row.format)" v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)" />
+                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:110px" @update:model-value="saveDraft()" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)" />
                                 </div>
                                 <div v-else-if="isListFormat(row.format)" class="flex items-center gap-1 cursor-pointer" style="min-height:24px" :class="{ 'cursor-not-allowed opacity-60': !canEditItem(item) }" @click.stop="canEditItem(item) && openListEditor(row)" :title="listDisplay(row)">
                                   <span class="text-xs truncate max-w-[180px]" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key) }">{{ listDisplay(row) }}</span>
