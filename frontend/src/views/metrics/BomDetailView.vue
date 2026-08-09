@@ -660,7 +660,7 @@
 
 <script setup lang="ts">
 import { Plus, Refresh, InfoFilled, DataAnalysis, ArrowRight, ArrowDown, CopyDocument, DocumentAdd, Delete, Search, Check, ArrowUp, Download, Upload, Filter, Edit, OfficeBuilding, Lock, Clock } from '@element-plus/icons-vue'
-import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { metricsApi } from '@/api/metrics'
@@ -881,7 +881,6 @@ try {
   }
 }
 
-function getAvatarUrl(name: string): string {
 function sendStartEditing(ind: any, paramKey: string) {
   if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
   const item = ind._item
@@ -2241,28 +2240,7 @@ async function saveThreshold(ind: any) {
     return
   }
 
-  // 兼容模式
-    try {
-      let bomIndicatorId = ind._bom_indicator_id
-      if (!bomIndicatorId) {
-        const createRes = await metricsApi.addBomIndicator(configId.value, {
-          indicator_id: ind.indicator_id,
-          unit: ind.unit || '',
-          judgment_rule: '合格',
-          test_stage: '',
-          remark: '',
-        })
-        ind._bom_indicator_id = createRes.data?.id
-        ind._bom_override = true
-        await loadAll()
-      } else {
-        await metricsApi.updateBomIndicator(bomIndicatorId, {
-          [field]: ind[field],
-          test_item_id: item?.id ?? ind._item?.id,
-          item_revision: item?.item_revision ?? ind._item?.item_revision ?? null,
-        })
-        bumpLocalRevision(ind)
-      // 兼容模式
+  // 兼容模式：直接保存阈值/单位等字段
   const doSave = async () => {
     try {
       let bomIndicatorId = ind._bom_indicator_id
@@ -2563,14 +2541,14 @@ async function flushPendingChanges(): Promise<boolean> {
   isSaving.value = true
 
   try {
-    const payload: Array<{indicator_id: number; param_key: string; param_value: string; item_revision: number; test_item_id: number; test_item_name: string}> = Array.from(pendingChanges.values()).map(v => ({
+    const payload = Array.from(pendingChanges.values()).map(v => ({
       indicator_id: v.indicator_id,
       param_key: v.param_key,
       param_value: v.param_value,
       item_revision: v.item_revision,
       test_item_id: v.test_item_id,
       test_item_name: v.test_item_name,
-    })
+    }))
 
     const res = await metricsApi.batchSaveIndicatorParams(configId.value, { indicators: payload })
     const conflicts = res.data?.conflicts || []
@@ -3273,6 +3251,10 @@ async function onGlobalKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown)
+  loadAll()
+  loadBaselineParams()
+  loadUserOptions()
+  restoreDomainFilter()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onPageBeforeUnload)
@@ -3317,12 +3299,6 @@ async function handleNewIteration() {
 }
 
 // Auto-expand first station with empty params when data loads
-onMounted(() => {
-  loadAll()
-  loadBaselineParams()
-  loadUserOptions()
-  restoreDomainFilter()
-})
 
 onBeforeRouteUpdate((to) => {
   disconnectBomWebSocket()
