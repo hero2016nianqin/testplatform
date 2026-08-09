@@ -153,7 +153,8 @@ export const metricsApi = {
   exportCurrentConfig(configId: number, params?: { process_name?: string; station_name?: string }) {
     return api.post(`/metrics/bom-configs/${configId}/export-current`, params || {})
   },
-  importBomConfig(configId: number, formData: FormData) {
+  importBomConfig(configId: number, formData: FormData, dryRun: boolean = false) {
+    if (dryRun) formData.append('dry_run', 'true')
     return api.post(`/metrics/bom-configs/${configId}/import`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 30000,
