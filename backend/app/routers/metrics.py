@@ -836,6 +836,16 @@ async def list_bom_indicators(config_id: int, db: AsyncSession = Depends(get_db)
     return success(data=[BomIndicatorResp(**i) for i in items])
 
 
+@router.get("/bom-configs/{config_id}/indicators/full", dependencies=[Depends(require_process)])
+async def get_full_indicators_by_config(config_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    一次性获取某 BOM 配置下所有测试项的完整指标数据（字典参数 + BOM overrides 合并）。
+    返回按测试项分组的结构化数据，消除前端 N+1 请求。
+    """
+    items = await bom_svc.get_full_indicators_by_config(db, config_id)
+    return success(data=items)
+
+
 @router.post("/bom-configs/{config_id}/indicators", dependencies=[Depends(require_developer)])
 async def add_bom_indicator(
     config_id: int, req: BomIndicatorCreateReq,
@@ -926,7 +936,7 @@ async def update_bom_indicator_param(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    params = await bom_svc.update_param(db, bom_indicator_id, param_key, req.model_dump(exclude_unset=True), operator=_get_operator(user))
+    params = await bom_svc.update_param(db, bom_indicator_id, param_key, req.model_dump(exclude_unset=True), operator=_get_operator(user), operator_id=user.get("id", 0))
     return success(data=params, message="参数更新成功")
 
 

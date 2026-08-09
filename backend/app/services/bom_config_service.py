@@ -451,6 +451,144 @@ class BomConfigService:
         return result
 
     @staticmethod
+    async def get_full_indicators_by_config(
+        db: AsyncSession, config_id: int
+    ) -> List[dict]:
+        """
+        一次性获取某 BOM 配置下所有测试项的完整指标数据（字典参数 + BOM overrides 合并）。
+        返回结构：[{test_item_id, test_item_name, process_name, station_name, sort_order,
+                   indicators: [{indicator_id, indicator_code, indicator_name, category,
+                                unit, judgment_rule, test_stage, remark, status,
+                                process_name, station_name, params, _bom_indicator_id,
+                                dict_params, has_override}]}]
+        消除前端 N+1 请求。
+        """
+        from app.models.metrics import CollectionTestItem, TestItemIndicator, IndicatorDict, BomIndicator
+
+        config = await BomConfigService.get(db, config_id)
+        if not config.collection_id:
+            return []
+
+        # 1) 获取该集合版本下所有测试项
+        items_stmt = (
+            select(CollectionTestItem)
+            .where(
+                CollectionTestItem.collection_id == config.collection_id,
+                CollectionTestItem.status == 1,
+            )
+            .order_by(CollectionTestItem.sort_order, CollectionTestItem.id)
+        )
+        items = (await db.execute(items_stmt)).scalars().all()
+
+        if not items:
+            return []
+
+        item_ids = [it.id for it in items]
+
+        # 2) 一次性获取这些测试项关联的所有指标（字典层参数）
+        ti_indicators_stmt = (
+            select(
+                TestItemIndicator.test_item_id,
+                TestItemIndicator.indicator_id,
+                TestItemIndicator.unit,
+                TestItemIndicator.judgment_rule,
+                IndicatorDict.code.label("indicator_code"),
+                IndicatorDict.name.label("indicator_name"),
+                IndicatorDict.category.label("category"),
+                IndicatorDict.params.label("dict_params"),
+            )
+            .join(IndicatorDict, TestItemIndicator.indicator_id == IndicatorDict.id)
+            .where(TestItemIndicator.test_item_id.in_(item_ids))
+        )
+        ti_rows = (await db.execute(ti_indicators_stmt)).all()
+
+        # 3) 获取该 BOM 的所有 overrides
+        bom_indicators = await BomConfigService.list_indicators(db, config_id)
+        bom_map = {bi["indicator_id"]: bi for bi in bom_indicators}
+
+        # 4) 组装：按 test_item_id 分组
+        item_map = {it.id: it for it in items}
+        grouped: dict[int, dict] = {}
+        for it in items:
+            grouped[it.id] = {
+                "test_item_id": it.id,
+                "test_item_name": it.name,
+                "process_name": it.process_name or "",
+                "station_name": it.station or "",
+                "sort_order": it.sort_order,
+                "indicators": [],
+            }
+
+        for row in ti_rows:
+            test_item_id = row.test_item_id
+            if test_item_id not in grouped:
+                continue
+            ind_data = {
+                "indicator_id": row.indicator_id,
+                "indicator_code": row.indicator_code,
+                "indicator_name": row.indicator_name,
+                "category": row.category,
+                "unit": row.unit,
+                "judgment_rule": row.judgment_rule,
+                "test_stage": "",
+                "remark": "",
+                "status": 1,
+                "process_name": "",
+                "station_name": "",
+                "params": [],
+                "_bom_indicator_id": 0,
+                "dict_params": row.dict_params or [],
+                "has_override": False,
+            }
+            # 检查是否有 BOM override
+            bom_override = bom_map.get(row.indicator_id)
+            if bom_override:
+                ind_data.update({
+                    "_bom_indicator_id": bom_override["id"],
+                    "params": bom_override["params"] or [],
+                    "unit": bom_override["unit"] or ind_data["unit"],
+                    "judgment_rule": bom_override["judgment_rule"] or ind_data["judgment_rule"],
+                    "test_stage": bom_override["test_stage"] or "",
+                    "remark": bom_override["remark"] or "",
+                    "status": bom_override["status"],
+                    "process_name": bom_override["process_name"] or "",
+                    "station_name": bom_override["station_name"] or "",
+                    "has_override": True,
+                })
+            grouped[test_item_id]["indicators"].append(ind_data)
+
+        # 5) 处理 BOM 独有的指标（不在集合中的）
+        ti_indicator_ids = {row.indicator_id for row in ti_rows}
+        for bi in bom_indicators:
+            if bi["indicator_id"] not in ti_indicator_ids:
+                # 找到该指标关联的任意测试项（或创建虚拟分组）
+                # 简单起见：放到第一个测试项或创建"其它"分组
+                target_item_id = item_ids[0] if item_ids else 0
+                if target_item_id and target_item_id in grouped:
+                    grouped[target_item_id]["indicators"].append({
+                        "indicator_id": bi["indicator_id"],
+                        "indicator_code": bi["indicator_code"],
+                        "indicator_name": bi["indicator_name"],
+                        "category": bi["category"],
+                        "unit": bi["unit"],
+                        "judgment_rule": bi["judgment_rule"],
+                        "test_stage": bi["test_stage"] or "",
+                        "remark": bi["remark"] or "",
+                        "status": bi["status"],
+                        "process_name": bi["process_name"] or "",
+                        "station_name": bi["station_name"] or "",
+                        "params": bi["params"] or [],
+                        "_bom_indicator_id": bi["id"],
+                        "dict_params": [],
+                        "has_override": True,
+                    })
+
+        # 转为列表，按 sort_order 排序
+        result = list(grouped.values())
+        result.sort(key=lambda x: x["sort_order"] or 0)
+        return result
+
+    @staticmethod
     async def add_indicator(db: AsyncSession, config_id: int, data: dict, operator: str = "") -> BomIndicator:
         config = await BomConfigService.get(db, config_id)
         indicator_id = data.get("indicator_id")
@@ -532,17 +670,34 @@ class BomConfigService:
         obj = r.scalar_one_or_none()
         if not obj:
             raise NotFoundError("指标记录不存在")
-        nullable_fields = {"unit", "judgment_rule", "test_stage", "remark"}
-        for k, v in data.items():
-            if k in nullable_fields:
-                setattr(obj, k, v)
-            elif v is not None:
-                setattr(obj, k, v)
-        await db.flush()
-        from app.services.version_snapshot_service import VersionSnapshotService
-        await VersionSnapshotService.snapshot_bom_config(
-            db, obj.bom_config_id, operator, f"更新指标 {indicator_id}"
-        )
+
+        # 乐观锁：客户端携带了所属测试项 id + revision 则原子校验
+        test_item_id = data.pop("test_item_id", None)
+        client_revision = data.pop("item_revision", None)
+        locked = test_item_id is not None and client_revision is not None
+        if locked:
+            acquired = await BomConfigService.check_item_revision_atomic(db, test_item_id, client_revision)
+            if not acquired:
+                from app.core.exceptions import ConcurrencyError
+                raise ConcurrencyError("该指标已被他人更新，请刷新页面获取最新数据后重新编辑")
+
+        try:
+            nullable_fields = {"unit", "judgment_rule", "test_stage", "remark"}
+            for k, v in data.items():
+                if k in nullable_fields:
+                    setattr(obj, k, v)
+                elif v is not None:
+                    setattr(obj, k, v)
+            await db.flush()
+            from app.services.version_snapshot_service import VersionSnapshotService
+            await VersionSnapshotService.snapshot_bom_config(
+                db, obj.bom_config_id, operator, f"更新指标 {indicator_id}"
+            )
+        except BaseException:
+            # 操作失败时补偿释放乐观锁版本
+            if locked:
+                await BomConfigService.rollback_item_revision(db, test_item_id)
+            raise
         return obj
 
     @staticmethod
@@ -729,6 +884,46 @@ class BomConfigService:
             db, config_id, operator, f"删除指标 {indicator_id}"
         )
 
+    # ── Collaborative Editing: Optimistic Locking (atomic CAS) ──
+    @staticmethod
+    async def check_item_revision_atomic(
+        db: AsyncSession,
+        test_item_id: Optional[int],
+        client_revision: Optional[int],
+    ) -> bool:
+        """
+        测试项乐观锁：原子条件递增（CAS）。
+        仅当 collection_test_item 当前 item_revision == client_revision 时递增并返回 True，
+        否则返回 False（表示已被他人修改）。返回 True 代表本次已成功"占有"该行的写锁。
+        若调用方未提供 revision（旧调用方/首次创建），跳过校验返回 True。
+        """
+        if not test_item_id or client_revision is None:
+            return True
+
+        result = await db.execute(
+            sa_update(CollectionTestItem)
+            .where(
+                CollectionTestItem.id == test_item_id,
+                CollectionTestItem.item_revision == client_revision,
+            )
+            .values(item_revision=CollectionTestItem.item_revision + 1)
+        )
+        return (result.rowcount or 0) > 0
+
+    @staticmethod
+    async def rollback_item_revision(
+        db: AsyncSession,
+        test_item_id: Optional[int],
+    ):
+        """回滚被 check_item_revision_atomic 递增的版本号（用于后续操作失败时补偿）"""
+        if not test_item_id:
+            return
+        await db.execute(
+            sa_update(CollectionTestItem)
+            .where(CollectionTestItem.id == test_item_id)
+            .values(item_revision=CollectionTestItem.item_revision - 1)
+        )
+
     # ── Per-param CRUD within a BOM indicator ──
     @staticmethod
     async def add_param(db: AsyncSession, bom_indicator_id: int, param: dict, operator: str = "") -> list:
@@ -751,27 +946,84 @@ class BomConfigService:
         return params
 
     @staticmethod
-    async def update_param(db: AsyncSession, bom_indicator_id: int, param_key: str, updates: dict, operator: str = "") -> list:
+    async def update_param(db: AsyncSession, bom_indicator_id: int, param_key: str, updates: dict, operator: str = "", operator_id: int = 0) -> list:
         r = await db.execute(select(BomIndicator).where(BomIndicator.id == bom_indicator_id))
         obj = r.scalar_one_or_none()
         if not obj:
             raise NotFoundError("BOM 指标记录不存在")
-        params = obj.params or []
-        found = False
-        for p in params:
-            if p.get("param_key") == param_key or p.get("key") == param_key:
-                p.update({k: v for k, v in updates.items() if v is not None})
-                BomConfigService._validate_param_format(p, params)
-                found = True
-                break
-        if not found:
-            raise NotFoundError(f"参数 Key '{param_key}' 不存在")
-        await db.execute(sa_update(BomIndicator).where(BomIndicator.id == bom_indicator_id).values(params=params))
-        await db.flush()
-        from app.services.version_snapshot_service import VersionSnapshotService
-        await VersionSnapshotService.snapshot_bom_config(
-            db, obj.bom_config_id, operator, f"更新参数 {param_key}"
-        )
+
+        # 乐观锁：客户端携带了所属测试项 id + revision 则原子校验
+        test_item_id = updates.pop("test_item_id", None)
+        client_revision = updates.pop("item_revision", None)
+        locked = test_item_id is not None and client_revision is not None
+        if locked:
+            acquired = await BomConfigService.check_item_revision_atomic(db, test_item_id, client_revision)
+            if not acquired:
+                from app.core.exceptions import ConcurrencyError
+                raise ConcurrencyError("该参数已被他人更新，请刷新页面获取最新数据后重新编辑")
+
+        try:
+            params = obj.params or []
+            found = False
+            old_value = ""
+            for p in params:
+                if p.get("param_key") == param_key or p.get("key") == param_key:
+                    old_value = str(p.get("param_value") or p.get("value") or "")
+                    p.update({k: v for k, v in updates.items() if v is not None})
+                    BomConfigService._validate_param_format(p, params)
+                    found = True
+                    break
+            if not found:
+                raise NotFoundError(f"参数 Key '{param_key}' 不存在")
+            await db.execute(sa_update(BomIndicator).where(BomIndicator.id == bom_indicator_id).values(params=params))
+            await db.flush()
+
+            # 记录参数变更日志（补全审计覆盖，此前仅 batch-save 路径写入）
+            from app.models.metrics import ParamChangeLog
+            new_value = ""
+            for p in params:
+                if p.get("param_key") == param_key or p.get("key") == param_key:
+                    new_value = str(p.get("param_value") or p.get("value") or "")
+                    break
+            change_log = ParamChangeLog(
+                bom_code=obj.bom_code if hasattr(obj, "bom_code") else "",
+                bom_config_id=obj.bom_config_id,
+                bom_version=0,
+                test_item_id=test_item_id or 0,
+                test_item_name="",
+                indicator_id=obj.indicator_id,
+                indicator_code="",
+                indicator_name="",
+                param_key=param_key,
+                param_name=param_key,
+                old_value=old_value,
+                new_value=new_value,
+                operator_id=operator_id,
+                operator_name=operator,
+            )
+            # 补充 BOM 版本与测试项名
+            cfg = None
+            if test_item_id:
+                tr = await db.execute(select(CollectionTestItem).where(CollectionTestItem.id == test_item_id))
+                ti = tr.scalar_one_or_none()
+                if ti:
+                    change_log.test_item_name = ti.name or ""
+            from app.models.metrics import BomConfig as _BC
+            cr = await db.execute(select(_BC).where(_BC.id == obj.bom_config_id))
+            cfg = cr.scalar_one_or_none()
+            if cfg:
+                change_log.bom_code = cfg.bom_code or ""
+                change_log.bom_version = cfg.version or 0
+            db.add(change_log)
+
+            from app.services.version_snapshot_service import VersionSnapshotService
+            await VersionSnapshotService.snapshot_bom_config(
+                db, obj.bom_config_id, operator, f"更新参数 {param_key}"
+            )
+        except BaseException:
+            if locked:
+                await BomConfigService.rollback_item_revision(db, test_item_id)
+            raise
         return params
 
     @staticmethod
@@ -895,13 +1147,19 @@ class BomConfigService:
                     })
                 continue
             
-            # 乐观锁检查（测试项粒度）
+            # 乐观锁：原子条件递增（CAS），消除 check-then-act 竞态窗口。
+            # 仅当当前 item_revision == 客户端持有版本时递增成功并"占有"写锁，
+            # 并发请求中只有一个能通过，其余会真正拿到空结果触发冲突。
             client_revision = group_items[0].get("item_revision", 0)
-            if ti.item_revision != client_revision:
+            revision_acquired = await BomConfigService.check_item_revision_atomic(db, test_item_id, client_revision)
+            if not revision_acquired:
+                # 刷新读取当前版本用于提示
+                r_cur = await db.execute(select(CollectionTestItem.item_revision).where(CollectionTestItem.id == test_item_id))
+                cur_revision = r_cur.scalar_one_or_none() or 0
                 for item in group_items:
                     conflicts.append({
                         "indicator_id": item["indicator_id"],
-                        "current_revision": ti.item_revision,
+                        "current_revision": cur_revision,
                         "message": "该测试项已被他人更新，请刷新页面获取最新数据后重新编辑",
                     })
                 continue
@@ -969,14 +1227,11 @@ class BomConfigService:
                     operator_name=operator_name,
                 ))
                 success_ids.append(indicator_id)
-            
-            if group_success:
-                # 测试项版本号递增
-                await db.execute(
-                    sa_update(CollectionTestItem)
-                    .where(CollectionTestItem.id == test_item_id)
-                    .values(item_revision=CollectionTestItem.item_revision + 1)
-                )
+
+            # 组内任一条失败则回滚本次占有的测试项版本号（乐观锁补偿），
+            # 否则版本号已在 check_item_revision_atomic 递增，无需重复递增。
+            if not group_success:
+                await BomConfigService.rollback_item_revision(db, test_item_id)
         
         if change_logs:
             # 补充指标名称信息（从指标字典查询）

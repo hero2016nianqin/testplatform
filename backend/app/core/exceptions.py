@@ -30,6 +30,12 @@ class ConflictError(BusinessException):
         super().__init__(code=409, message=message, status_code=409)
 
 
+class ConcurrencyError(BusinessException):
+    """乐观锁冲突（数据已被他人修改）"""
+    def __init__(self, message: str = "数据已被他人更新，请刷新后重试"):
+        super().__init__(code=409, message=message, status_code=409)
+
+
 async def _business_exception_handler(request: Request, exc: BusinessException):
     return JSONResponse(
         status_code=exc.status_code,

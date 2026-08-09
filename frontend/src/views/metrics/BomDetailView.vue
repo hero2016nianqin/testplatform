@@ -661,6 +661,16 @@ const loading = ref(true)
 const bom = reactive<any>({ bom_code: '', bom_name: '', status: 1, version: 1, collection_id: 0 })
 const collectionName = ref('')
 const testItems = ref<any[]>([])
+// 测试项级保存串行队列：同一测试项的多次内联保存按序执行，
+// 保证 item_revision 每次保存后都同步，避免快速连续编辑触发误报冲突。
+const itemSaveQueues: Record<number, Promise<any>> = {}
+
+function enqueueItemSave(itemId: number, task: () => Promise<any>): Promise<any> {
+  const prev = itemSaveQueues[itemId] || Promise.resolve()
+  const next = prev.then(task, task)
+  itemSaveQueues[itemId] = next
+  return next
+}
 const bomIndicators = ref<any[]>([])
 const navCardRef = ref<any>(null)
 const navItemId = ref<number | null>(null)
@@ -1669,8 +1679,8 @@ function handleNavKeydown(e: KeyboardEvent) {
 function keepNavItemVisible(itemId: number) {
   nextTick(() => {
     const navBtn = document.querySelector(`[data-nav-item="${itemId}"]`) as HTMLElement | null
-    const card = navCardRef.value as HTMLElement | null
-    if (!navBtn || !card) return
+    const card = (navCardRef.value?.$el ?? navCardRef.value) as HTMLElement | null
+    if (!navBtn || !card || typeof card.getBoundingClientRect !== 'function') return
     const cRect = card.getBoundingClientRect()
     const bRect = navBtn.getBoundingClientRect()
     if (bRect.top < cRect.top || bRect.bottom > cRect.bottom) {
@@ -1991,35 +2001,60 @@ async function loadAll() {
     collectionName.value = collMap[bom.collection_id] || ''
 
      if (bom.collection_id) {
-       const itemsRes = await metricsApi.listCollectionItems(bom.collection_id, bom.collection_version)
-       const items = itemsRes.data || []
-        const itemPromises = items.map(async (item: any) => {
-          const indRes = await metricsApi.listItemIndicators(item.id)
-          const { indicatorList, paramCols } = mergeOverrides(indRes.data || [], indicatorsRes.data || [])
-          for (const ind of indicatorList) ind._item = item
-          // Derive process/station from the first indicator's BOM data
-          const firstInd = indicatorList[0]
-          const pn = firstInd?.process_name || item.process_name || item.station || ''
-          const sn = firstInd?.station_name || item.station || ''
-          return { ...item, indicatorList, _param_cols: paramCols, process_name: pn, station_name: sn }
-        })
-       testItems.value = await Promise.all(itemPromises)
+       // 使用新的批量接口一次性获取完整指标树，消除 N+1
+       const fullRes = await metricsApi.getFullIndicatorsByConfig(configId.value)
+       const fullItems = fullRes?.data || []
+       
+       testItems.value = fullItems.map((item: any) => {
+         // 为每个指标构建 _param_map 供表格单元格编辑使用
+         const indicatorList = item.indicators.map((ind: any) => {
+           const sourceParams = ind.has_override ? (ind.params || []) : (ind.dict_params || [])
+           const paramMap: Record<string, any> = {}
+           for (const p of sourceParams) {
+             const key = p.param_key || p.key
+             if (!key) continue
+             paramMap[key] = {
+               value: p.param_value ?? p.value ?? '',
+               remark: p.remark ?? '',
+               format: p.format ?? p.type ?? 'string',
+               name: p.param_name || p.name || key,
+               required: p.required ?? false,
+             }
+           }
+           return {
+             ...ind,
+             _bom_indicator_id: ind._bom_indicator_id || 0,
+             indicator_code: ind.indicator_code || '',
+             indicator_name: ind.indicator_name || '',
+             category: ind.category || '',
+             unit: ind.unit || '',
+             _param_map: paramMap,
+             _item: { id: item.test_item_id, name: item.test_item_name }
+           }
+         })
+         return {
+           ...item,
+           indicatorList,
+           _param_cols: indicatorList.length ? Object.keys(indicatorList[0]._param_map || {}) : [],
+         }
+       })
+       
        domainOptions.value = ['全部领域', ...extractDomains(testItems.value)]
        if (domainFilter.value !== '全部领域' && !domainOptions.value.includes(domainFilter.value)) {
          domainFilter.value = '全部领域'
        }
        restoreDraft()
-      if (!hasAutoExpanded.value) {
-        autoExpandFirstEmptyStation()
-        hasAutoExpanded.value = true
-      }
-    }
-  } catch (e: any) {
-    ElMessage.error('加载数据失败: ' + (e?.response?.data?.message || e.message || ''))
-  } finally {
-    loading.value = false
-  }
-}
+       if (!hasAutoExpanded.value) {
+         autoExpandFirstEmptyStation()
+         hasAutoExpanded.value = true
+       }
+     }
+   } catch (e: any) {
+     ElMessage.error('加载数据失败: ' + (e?.response?.data?.message || e.message || ''))
+   } finally {
+     loading.value = false
+   }
+ }
 
 function mergeOverrides(itemIndicators: any[], bomIndicators: any[]): { indicatorList: any[], paramCols: { key: string, label: string, remark: string, format: string, required: boolean, minWidth?: number }[] } {
   const bomMap: Record<number, any> = {}
@@ -2067,6 +2102,14 @@ function mergeOverrides(itemIndicators: any[], bomIndicators: any[]): { indicato
   return { indicatorList, paramCols }
 }
 
+// 保存成功后同步本地的 item_revision（后端每次原子递增 +1），
+// 避免同一测试项连续编辑多处时因本地版本过期触发误报冲突。
+function bumpLocalRevision(ind: any) {
+  if (ind?._item?.item_revision != null) {
+    ind._item.item_revision = Number(ind._item.item_revision) + 1
+  }
+}
+
 // ── Inline Threshold Editing ──
 function startEdit(row: any, field: string) {
   editRowId.value = row._bom_indicator_id || 0
@@ -2081,26 +2124,35 @@ async function saveThreshold(ind: any) {
   const field = editField.value
   editRowId.value = 0
   editField.value = ''
-  try {
-    let bomIndicatorId = ind._bom_indicator_id
-    if (!bomIndicatorId) {
-      const createRes = await metricsApi.addBomIndicator(configId.value, {
-        indicator_id: ind.indicator_id,
-        unit: ind.unit || '',
-        judgment_rule: '合格',
-        test_stage: '',
-        remark: '',
-      })
-      ind._bom_indicator_id = createRes.data?.id
-      ind._bom_override = true
+  const item = ind._item
+  const doSave = async () => {
+    try {
+      let bomIndicatorId = ind._bom_indicator_id
+      if (!bomIndicatorId) {
+        const createRes = await metricsApi.addBomIndicator(configId.value, {
+          indicator_id: ind.indicator_id,
+          unit: ind.unit || '',
+          judgment_rule: '合格',
+          test_stage: '',
+          remark: '',
+        })
+        ind._bom_indicator_id = createRes.data?.id
+        ind._bom_override = true
+        await loadAll()
+      } else {
+        await metricsApi.updateBomIndicator(bomIndicatorId, {
+          [field]: ind[field],
+          test_item_id: item?.id ?? ind._item?.id,
+          item_revision: item?.item_revision ?? ind._item?.item_revision ?? null,
+        })
+        bumpLocalRevision(ind)
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.response?.data?.message || '保存失败')
       await loadAll()
-    } else {
-      await metricsApi.updateBomIndicator(bomIndicatorId, { [field]: ind[field] })
     }
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
-    await loadAll()
   }
+  return enqueueItemSave(item?.id ?? ind._item?.id ?? 0, doSave)
 }
 
 // ── Inline param editing (flat columns) ──
@@ -2112,27 +2164,36 @@ async function saveParamValue(ind: any, paramKey: string) {
   editParamKey.value = ''
   const info = ind._param_map?.[paramKey]
   const newValue = info?.value ?? info ?? ''
-  try {
-    let bomIndicatorId = ind._bom_indicator_id
-    if (!bomIndicatorId) {
-      const pmap: Record<string, any> = ind._param_map || {}
-      const params = Object.entries(pmap).map(([k, v]) => ({
-        param_key: k, param_name: v.name ?? k, param_value: v.value ?? v, format: v.format ?? 'string', remark: v.remark ?? '',
-      }))
-      const createRes = await metricsApi.addBomIndicator(configId.value, {
-        indicator_id: ind.indicator_id,
-        unit: ind.unit || '',
-        params,
+  const item = ind._item
+  const doSave = async () => {
+    try {
+      let bomIndicatorId = ind._bom_indicator_id
+      if (!bomIndicatorId) {
+        const pmap: Record<string, any> = ind._param_map || {}
+        const params = Object.entries(pmap).map(([k, v]) => ({
+          param_key: k, param_name: v.name ?? k, param_value: v.value ?? v, format: v.format ?? 'string', remark: v.remark ?? '',
+        }))
+        const createRes = await metricsApi.addBomIndicator(configId.value, {
+          indicator_id: ind.indicator_id,
+          unit: ind.unit || '',
+          params,
+        })
+        bomIndicatorId = createRes.data?.id
+        ind._bom_indicator_id = bomIndicatorId
+      }
+      await metricsApi.updateBomIndicatorParam(bomIndicatorId, paramKey, {
+        param_value: newValue,
+        test_item_id: item?.id ?? ind._item?.id,
+        item_revision: item?.item_revision ?? ind._item?.item_revision ?? null,
       })
-      bomIndicatorId = createRes.data?.id
-      ind._bom_indicator_id = bomIndicatorId
+      bumpLocalRevision(ind)
+      saveDraft()
+    } catch (e: any) {
+      ElMessage.error(e?.response?.data?.message || '保存失败')
+      await loadAll()
     }
-    await metricsApi.updateBomIndicatorParam(bomIndicatorId, paramKey, { param_value: newValue })
-    saveDraft()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
-    await loadAll()
   }
+  return enqueueItemSave(item?.id ?? ind._item?.id ?? 0, doSave)
 }
 
 function validateParamValue(paramKey: string, value: string, format: string): { valid: boolean; message: string } {
@@ -2730,6 +2791,16 @@ async function saveAllPendingParams() {
       showSaveConflicts(conflicts)
       await loadAll()
       return false
+    }
+    // 保存成功：同步本地各测试项版本号（每个成功组 +1），后续再次保存不会误报冲突
+    const savedItemIds = new Set<number>()
+    for (const p of payload) {
+      if (p.test_item_id) savedItemIds.add(Number(p.test_item_id))
+    }
+    for (const item of testItems.value) {
+      if (savedItemIds.has(Number(item.id))) {
+        item.item_revision = (Number(item.item_revision ?? 0) || 0) + 1
+      }
     }
     return true
   } catch (e: any) {

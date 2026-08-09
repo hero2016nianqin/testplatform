@@ -175,6 +175,11 @@ export const metricsApi = {
     return api.put(`/metrics/bom-configs/${configId}/indicators/batch-save`, data)
   },
 
+  // ── 批量查询：一次性获取 BOM 完整指标树（消除 N+1） ──
+  getFullIndicatorsByConfig(configId: number) {
+    return api.get(`/metrics/bom-configs/${configId}/indicators/full`)
+  },
+
   // ── 协同编辑：参数变更记录 ──
   getChangeLogs(configId: number, params?: any) {
     return api.get(`/metrics/bom-configs/${configId}/change-logs`, { params })

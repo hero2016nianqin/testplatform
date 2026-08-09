@@ -239,6 +239,9 @@ class BomIndicatorUpdateReq(BaseModel):
     remark: Optional[str] = None
     status: Optional[int] = None
     params: Optional[list] = None
+    # 乐观锁：所属测试项 id 与客户端持有的版本号（可选，缺省则跳过并发校验）
+    test_item_id: Optional[int] = None
+    item_revision: Optional[int] = None
 
 
 class BomIndicatorBatchUpdateReq(BaseModel):
@@ -267,6 +270,9 @@ class BomIndicatorParamUpdateReq(BaseModel):
     param_value: Optional[Any] = None
     param_type: Optional[str] = None
     remark: Optional[str] = None
+    # 乐观锁：所属测试项 id 与客户端持有的版本号（可选，缺省则跳过并发校验）
+    test_item_id: Optional[int] = None
+    item_revision: Optional[int] = None
 
 
 class IndicatorParamAddReq(BaseModel):
