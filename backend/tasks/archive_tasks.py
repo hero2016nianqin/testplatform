@@ -33,7 +33,7 @@ def compress_old_logs(self, days: int = 30):
     """
     async def _compress():
         settings = get_settings()
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = datetime.utcnow() - timedelta(days=days)  # datetime 对象，PG timestamp 需要
 
         async with AsyncSessionLocal() as db:
             stmt = text("""

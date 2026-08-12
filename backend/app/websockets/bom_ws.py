@@ -16,7 +16,7 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 online_users: Dict[str, Dict[int, dict]] = defaultdict(dict)
 
 HEARTBEAT_INTERVAL = 30
-EDIT_LOCK_TTL = 300  # 秒，超时自动释放（断线/崩溃不残留）
+EDIT_LOCK_TTL = 120  # 秒，编辑锁有效期（2 分钟，输入时自动续期）
 
 # 锁粒度：与后端乐观锁（测试项级 CAS）保持一致，避免"单元格可编辑、保存却冲突"的错位。
 def make_cell_key(test_item_id: int) -> str:
@@ -32,7 +32,9 @@ async def _redis() -> Redis:
 
 
 async def acquire_edit_lock(room_key: str, cell_key: str, user_id: int, user_name: str) -> Optional[dict]:
-    """原子获取测试项级编辑锁（SET NX EX）。返回 None 表示成功；否则返回占用者信息。"""
+    """原子获取测试项级编辑锁（SET NX EX）。
+    返回 None 表示成功；返回他人占用者信息表示失败。
+    若锁属于当前用户自己（同一用户重复点击/切换参数），视为成功并刷新 TTL，避免自身误拒绝。"""
     r = await _redis()
     try:
         key = _lock_key(room_key, cell_key)
@@ -45,8 +47,15 @@ async def acquire_edit_lock(room_key: str, cell_key: str, user_id: int, user_nam
         ok = await r.set(key, payload, nx=True, ex=EDIT_LOCK_TTL)
         if ok:
             return None
+        # 已存在：若属于自己则刷新 TTL 并视为成功
         raw = await r.get(key)
-        return json.loads(raw) if raw else None
+        if raw:
+            data = json.loads(raw)
+            if data.get("user_id") == user_id:
+                await r.expire(key, EDIT_LOCK_TTL)
+                return None
+            return data
+        return None
     finally:
         await r.aclose()
 
@@ -61,6 +70,22 @@ async def release_edit_lock(room_key: str, cell_key: str, user_id: int):
             data = json.loads(raw)
             if data.get("user_id") == user_id:
                 await r.delete(key)
+    finally:
+        await r.aclose()
+
+
+async def refresh_edit_lock(room_key: str, cell_key: str, user_id: int) -> bool:
+    """输入自动续期：若锁属于当前用户则刷新 TTL（2 分钟滑动窗口），返回是否成功。"""
+    r = await _redis()
+    try:
+        key = _lock_key(room_key, cell_key)
+        raw = await r.get(key)
+        if raw:
+            data = json.loads(raw)
+            if data.get("user_id") == user_id:
+                await r.expire(key, EDIT_LOCK_TTL)
+                return True
+        return False
     finally:
         await r.aclose()
 
@@ -147,9 +172,10 @@ async def bom_websocket(
         "websocket": websocket,
     }
 
-    # 发送当前编辑状态给新加入者
+    # 发送当前编辑状态给新加入者（过滤掉自己持有的锁，避免本人界面误提醒）
     try:
         cells = await get_editing_cells(room_key)
+        cells = {k: v for k, v in cells.items() if v.get("user_id") != user_id}
         await websocket.send_text(json.dumps({
             "type": "editing_sync",
             "editing_cells": cells,
@@ -198,6 +224,7 @@ async def bom_websocket(
                                 "message": f"该测试项正在被 {existing.get('user_name', '')} 编辑，请稍后再试",
                             }))
                         else:
+                            # 仅广播给房间内其他用户（exclude 发起者），避免编辑者自己界面误显示"X 正在编辑"
                             await broadcast_to_room(room_key, {
                                 "type": "user_started_editing",
                                 "cell_key": cell_key,
@@ -209,7 +236,14 @@ async def bom_websocket(
                                     "started_at": datetime.utcnow().isoformat(),
                                 },
                                 "timestamp": datetime.utcnow().isoformat(),
-                            })
+                            }, exclude=user_id)
+
+                elif msg_type == "refresh_editing":
+                    # 输入自动续期：仅当锁属于自己时刷新 TTL（他人/无锁则忽略）
+                    cell_info = msg.get("data")
+                    if cell_info and cell_info.get("test_item_id") is not None:
+                        cell_key = make_cell_key(cell_info["test_item_id"])
+                        await refresh_edit_lock(room_key, cell_key, user_id)
 
                 elif msg_type == "stop_editing":
                     cell_info = msg.get("data")

@@ -12,6 +12,7 @@ from app.models.test_result import TestResult
 from app.models.station import TestStation, TestSlot
 from app.core.exceptions import NotFoundError, BusinessException
 from app.utils.batch_id import generate_batch_id
+from app.utils.dates import parse_datetime
 from app.config import (
     SLOT_STATUS_TESTING, SLOT_STATUS_PASS, SLOT_STATUS_FAIL, SLOT_STATUS_IDLE,
     RUN_STATUS_RUNNING, RUN_STATUS_COMPLETED, RUN_STATUS_FAILED,
@@ -281,9 +282,9 @@ class TestService:
         if station_id:
             stmt = stmt.where(TestRun.station_id == station_id)
         if start_date:
-            stmt = stmt.where(TestRun.created_at >= start_date)
+            stmt = stmt.where(TestRun.created_at >= parse_datetime(start_date))
         if end_date:
-            stmt = stmt.where(TestRun.created_at <= end_date)
+            stmt = stmt.where(TestRun.created_at <= parse_datetime(end_date, end_of_day=True))
         stmt = stmt.order_by(TestRun.created_at.desc())
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -321,9 +322,9 @@ class TestService:
         if station_id:
             stmt = stmt.where(TestRun.station_id == station_id)
         if start_date:
-            stmt = stmt.where(TestRun.created_at >= start_date)
+            stmt = stmt.where(TestRun.created_at >= parse_datetime(start_date))
         if end_date:
-            stmt = stmt.where(TestRun.created_at <= end_date)
+            stmt = stmt.where(TestRun.created_at <= parse_datetime(end_date, end_of_day=True))
         stmt = stmt.order_by(TestRun.created_at.desc())
 
         count_stmt = select(func.count()).select_from(stmt.subquery())

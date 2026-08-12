@@ -7,9 +7,9 @@ from app.core.database import Base
 
 
 class TestResult(Base):
-    """测试结果（按月分区表）"""
+    """测试结果"""
     __tablename__ = "test_results"
-    __table_args__ = {"postgresql_partition_by": "RANGE (tested_at)"}
+    __table_args__ = {}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     test_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("test_items.id"), nullable=False, index=True)

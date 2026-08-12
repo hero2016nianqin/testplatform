@@ -5,6 +5,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.utils.dates import parse_datetime
 
 
 class LogService:
@@ -45,10 +46,10 @@ class LogService:
             params["slot_id"] = slot_id
         if start_date:
             filters += " AND created_at >= :start_date"
-            params["start_date"] = start_date
+            params["start_date"] = parse_datetime(start_date)
         if end_date:
             filters += " AND created_at <= :end_date"
-            params["end_date"] = end_date
+            params["end_date"] = parse_datetime(end_date, end_of_day=True)
 
         count_sql = text(str(count_stmt).format(filters=filters))
         r = await db.execute(count_sql, params)
@@ -72,7 +73,7 @@ class LogService:
 
     @staticmethod
     async def get_stats(db: AsyncSession, days: int = 30) -> dict:
-        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        since = datetime.utcnow() - timedelta(days=days)  # datetime 对象，PG timestamp 需要
         total_stmt = text("SELECT COUNT(*) FROM test_logs WHERE created_at >= :since")
         info_stmt = text("SELECT COUNT(*) FROM test_logs WHERE created_at >= :since AND level = 'INFO'")
         warn_stmt = text("SELECT COUNT(*) FROM test_logs WHERE created_at >= :since AND level = 'WARN'")

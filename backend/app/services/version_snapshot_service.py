@@ -9,6 +9,7 @@ from app.models.metrics import (
 )
 from app.core.exceptions import NotFoundError
 from app.utils.pagination import paginate
+from app.utils.dates import parse_datetime
 
 
 class VersionSnapshotService:
@@ -42,9 +43,9 @@ class VersionSnapshotService:
         if operator:
             stmt = stmt.where(IndicatorVersionSnapshot.operator.ilike(f"%{operator}%"))
         if date_from:
-            stmt = stmt.where(IndicatorVersionSnapshot.created_at >= date_from)
+            stmt = stmt.where(IndicatorVersionSnapshot.created_at >= parse_datetime(date_from))
         if date_to:
-            stmt = stmt.where(IndicatorVersionSnapshot.created_at <= date_to + " 23:59:59")
+            stmt = stmt.where(IndicatorVersionSnapshot.created_at <= parse_datetime(date_to, end_of_day=True))
         stmt = stmt.order_by(IndicatorVersionSnapshot.id.desc())
         return await paginate(db, stmt, page, page_size)
 

@@ -125,6 +125,7 @@ export const metricsApi = {
   withdrawReview(configId: number) { return api.post(`/metrics/bom-configs/${configId}/withdraw-review`, {}) },
   addReviewComments(configId: number, data: any) { return api.post(`/metrics/bom-configs/${configId}/review-comments`, data) },
   getReviewEvents(configId: number) { return api.get(`/metrics/bom-configs/${configId}/review-events`) },
+  getEditingLocks(configId: number) { return api.get(`/metrics/bom-configs/${configId}/editing-locks`) },
   archiveBom(configId: number) { return api.post(`/metrics/bom-configs/${configId}/archive`, {}) },
   createNewIteration(configId: number) { return api.post(`/metrics/bom-configs/${configId}/new-iteration`, {}) },
   exportBomExcel(configId: number) { return api.post(`/metrics/bom-configs/${configId}/export-excel`, {}) },

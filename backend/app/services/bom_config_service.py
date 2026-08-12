@@ -1323,6 +1323,8 @@ class BomConfigService:
                         "indicator_id": item["indicator_id"],
                         "test_item_id": test_item_id,
                         "current_revision": item.get("item_revision", 0),
+                        "param_key": item.get("param_key", ""),
+                        "test_item_name": item.get("test_item_name", ""),
                         "message": "测试项不存在",
                     })
                 continue
@@ -1339,7 +1341,10 @@ class BomConfigService:
                         "indicator_id": item["indicator_id"],
                         "test_item_id": test_item_id,
                         "current_revision": item.get("item_revision", 0),
-                        "message": f"该测试项由他人负责，无编辑权限",
+                        "param_key": item.get("param_key", ""),
+                        "test_item_name": item.get("test_item_name", ""),
+                        "you_value": item.get("param_value", ""),
+                        "message": "该测试项由他人负责，无编辑权限",
                     })
                 continue
             
@@ -1357,7 +1362,10 @@ class BomConfigService:
                         "indicator_id": item["indicator_id"],
                         "test_item_id": test_item_id,
                         "current_revision": cur_revision,
-                        "message": "该参数刚被其他人修改，已为你同步最新值，请确认后重新填写",
+                        "param_key": item.get("param_key", ""),
+                        "test_item_name": item.get("test_item_name", ""),
+                        "you_value": item.get("param_value", ""),
+                        "message": "参数已被他人修改并保存，你的修改未保存成功",
                     })
                 continue
             
@@ -1375,6 +1383,9 @@ class BomConfigService:
                         "indicator_id": indicator_id,
                         "test_item_id": test_item_id,
                         "current_revision": ti.item_revision,
+                        "param_key": param_key,
+                        "test_item_name": item.get("test_item_name", ""),
+                        "you_value": item.get("param_value", ""),
                         "message": "指标记录不存在",
                     })
                     group_success = False
@@ -1396,7 +1407,10 @@ class BomConfigService:
                         "indicator_id": indicator_id,
                         "test_item_id": test_item_id,
                         "current_revision": ti.item_revision,
-                        "message": f"参数 Key '{param_key}' 不存在",
+                        "param_key": param_key,
+                        "test_item_name": item.get("test_item_name", ""),
+                        "you_value": item.get("param_value", ""),
+                        "message": f"参数 '{param_key}' 不存在",
                     })
                     group_success = False
                     continue
@@ -1455,6 +1469,50 @@ class BomConfigService:
                     log.indicator_name = info.name or ""
 
             db.add_all(change_logs)
+
+        # ── 冲突信息补充：指标名/参数名、最新值、最近修改人 ──
+        if conflicts:
+            bom_ind_ids = [c["indicator_id"] for c in conflicts if c.get("indicator_id")]
+            ind_map = {}
+            if bom_ind_ids:
+                r = await db.execute(
+                    select(
+                        BomIndicator.id, BomIndicator.indicator_id, BomIndicator.params,
+                        IndicatorDict.code, IndicatorDict.name,
+                    )
+                    .join(IndicatorDict, BomIndicator.indicator_id == IndicatorDict.id, isouter=True)
+                    .where(BomIndicator.id.in_(bom_ind_ids))
+                )
+                ind_map = {row.id: row for row in r.all()}
+            for c in conflicts:
+                row = ind_map.get(c.get("indicator_id"))
+                if row:
+                    c["indicator_code"] = row.code or ""
+                    c["indicator_name"] = row.name or ""
+                    pk = c.get("param_key")
+                    latest = ""
+                    for p in (row.params or []):
+                        if p.get("param_key") == pk or p.get("key") == pk:
+                            latest = str(p.get("param_value") or p.get("value") or "")
+                            break
+                    c["latest_value"] = latest
+                    # 最近修改人（从变更日志取最近一条）
+                    if row.indicator_id and pk:
+                        lr = await db.execute(
+                            select(ParamChangeLog.operator_name, ParamChangeLog.new_value)
+                            .where(
+                                ParamChangeLog.indicator_id == row.indicator_id,
+                                ParamChangeLog.param_key == pk,
+                                ParamChangeLog.bom_config_id == config_id,
+                            )
+                            .order_by(ParamChangeLog.created_at.desc())
+                            .limit(1)
+                        )
+                        log_row = lr.one_or_none()
+                        if log_row:
+                            c["last_operator"] = log_row.operator_name or ""
+                            if c.get("latest_value") in (None, ""):
+                                c["latest_value"] = log_row.new_value or ""
 
         return {
             "success": success_ids,

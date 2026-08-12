@@ -7,9 +7,9 @@ from app.core.database import Base
 
 
 class TestRun(Base):
-    """测试批次（按月分区表）"""
+    """测试批次"""
     __tablename__ = "test_runs"
-    __table_args__ = {"postgresql_partition_by": "RANGE (created_at)"}
+    __table_args__ = {}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)

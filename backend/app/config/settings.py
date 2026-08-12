@@ -1,6 +1,8 @@
+import os
 from functools import lru_cache
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import dotenv_values
 
 
 class Settings(BaseSettings):
@@ -49,9 +51,31 @@ class Settings(BaseSettings):
     # Session
     SESSION_TTL_SECONDS: int = 86400  # 24h
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore")
+
+
+def _resolve_env_file(app_env: str):  # -> Optional[str]
+    """按环境解析配置文件：
+    - 优先使用 .env.{APP_ENV}（如 .env.prod / .env.dev）
+    - prod 环境且无 .env.prod 时，兼容回退到 .env
+    - dev 环境无 .env.dev 时返回 None（使用默认 SQLite 等内置默认值）
+    """
+    env_file = f".env.{app_env}"
+    if os.path.exists(env_file):
+        return env_file
+    if app_env == "prod" and os.path.exists(".env"):
+        return ".env"
+    return None
 
 
 @lru_cache()
 def get_settings() -> Settings:
+    # APP_ENV 优先级：进程环境变量 > .env 文件 > 默认 dev
+    app_env = os.environ.get("APP_ENV")
+    if not app_env:
+        vals = dotenv_values(".env")
+        app_env = (vals or {}).get("APP_ENV", "dev")
+    env_file = _resolve_env_file(app_env)
+    if env_file:
+        return Settings(_env_file=env_file)
     return Settings()

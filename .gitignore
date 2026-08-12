@@ -1,22 +1,49 @@
+# Database
+database/*.db
+database/*.db-*
+
+# Environment
+backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.prod
+
+# Python
 __pycache__/
 *.py[cod]
-*.db
-*.log
-.env
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
 *.egg-info/
 dist/
 build/
-.idea/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
+
+# OS
 .DS_Store
-uploads/
+Thumbs.db
+
+# Logs
+*.log
 logs/
-node_modules/
-flask_session/
-backend/uploads/
-*.pyc
-.pytest_cache/
-__pycache__/
+
+# Temp
+*.tmp
+*.bak
+{{pkgetc}}/
+
+# MinIO/Certs
+*.pem
+*.key
+*.crt

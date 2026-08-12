@@ -28,7 +28,7 @@ def cleanup_expired_runs(self, keep_days: int = 90):
     对应 design.md §9 — 过期数据清理
     """
     async def _cleanup():
-        cutoff = (datetime.utcnow() - timedelta(days=keep_days)).isoformat()
+        cutoff = datetime.utcnow() - timedelta(days=keep_days)  # datetime 对象，PG timestamp 需要
 
         async with AsyncSessionLocal() as db:
             # 1. Find expired runs

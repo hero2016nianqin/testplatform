@@ -785,6 +785,15 @@ async def get_review_events(config_id: int, db: AsyncSession = Depends(get_db)):
     return success(data=events)
 
 
+@router.get("/bom-configs/{config_id}/editing-locks", dependencies=[Depends(require_process)])
+async def get_bom_editing_locks(config_id: int, db: AsyncSession = Depends(get_db)):
+    """获取该 BOM 当前所有编辑锁（供前端定期全量同步，弥补广播丢失导致的缓存残留）。"""
+    config = await bom_svc.get(db, config_id)
+    from app.websockets.bom_ws import get_editing_cells
+    cells = await get_editing_cells(f"{config.bom_code}:{config.version}")
+    return success(data=cells)
+
+
 @router.post("/bom-configs/{config_id}/archive", dependencies=[Depends(require_developer)])
 async def archive_bom(
     config_id: int,
@@ -992,6 +1001,9 @@ async def update_bom_indicator_param(
     user: dict = Depends(get_current_user),
 ):
     params = await bom_svc.update_param(db, bom_indicator_id, param_key, req.model_dump(exclude_unset=True), operator=_get_operator(user), operator_id=user.get("id", 0))
+    # 自动保存/兼容模式：保存成功后广播给房间内其他用户实时同步
+    if req.param_value is not None:
+        await _broadcast_param_change(db, bom_indicator_id, req.test_item_id, param_key, req.param_value, user)
     return success(data=params, message="参数更新成功")
 
 
@@ -1036,6 +1048,48 @@ async def batch_save_bom_indicator_params(
             exclude=user.get("id", 0),
         )
     return success(data=result, message="保存完成")
+
+
+async def _broadcast_param_change(
+    db: AsyncSession,
+    bom_indicator_id: int,
+    test_item_id,
+    param_key: str,
+    param_value,
+    user: dict,
+):
+    """单条参数保存后广播（自动保存/兼容模式），供房间内其他用户实时同步。"""
+    from datetime import datetime
+    from app.routers.ws_router import broadcast_to_bom_room
+    r = await db.execute(select(BomIndicator).where(BomIndicator.id == bom_indicator_id))
+    obj = r.scalar_one_or_none()
+    if not obj:
+        return
+    cfg = await bom_svc.get(db, obj.bom_config_id)
+    room_key = f"{cfg.bom_code}:{cfg.version}"
+    rev = None
+    if test_item_id:
+        r2 = await db.execute(
+            select(CollectionTestItem.item_revision).where(CollectionTestItem.id == test_item_id)
+        )
+        rev = r2.scalar_one_or_none()
+    await broadcast_to_bom_room(
+        room_key,
+        {
+            "type": "params_saved",
+            "operator_id": user.get("id", 0),
+            "operator_name": _get_operator(user),
+            "items": [{
+                "test_item_id": test_item_id,
+                "indicator_id": bom_indicator_id,
+                "param_key": param_key,
+                "param_value": str(param_value),
+                "item_revision": rev,
+            }],
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        exclude=user.get("id", 0),
+    )
 
 
 # ── Change Logs ──

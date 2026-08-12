@@ -110,8 +110,8 @@
               type="primary"
               class="font-bold"
               :loading="isSaving"
-              :disabled="pendingChanges.size === 0 || isSaving"
-              @click="flushPendingChanges"
+              :disabled="isSaving"
+              @click="saveAll"
             >
               <el-icon><Download /></el-icon>保存全部 ({{ pendingChanges.size }})
             </el-button>
@@ -178,18 +178,18 @@
       </div>
 
       <!-- Three-column Layout: Left Nav | Middle Content | Right Toolbar -->
-      <div class="flex gap-4 mb-4">
-        <!-- Left: Process→Station→Items Tree Navigation -->
-        <div class="w-60 flex-shrink-0" v-if="showLeftNav && processTreeData.length">
-          <el-card ref="navCardRef" id="tour-nav" shadow="never" class="max-h-[calc(100vh-200px)] overflow-y-auto sticky top-4">
+      <div class="flex gap-4 mb-4" style="height: calc(100vh - 200px)">
+        <!-- Left: Process→Station→Items Tree Navigation (fixed height, independent scroll) -->
+        <div class="w-60 flex-shrink-0 flex flex-col min-h-0" v-if="showLeftNav && processTreeData.length">
+          <div ref="navCardRef" id="tour-nav" class="flex flex-col flex-1 min-h-0 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
             <!-- Search -->
-            <div class="p-2 border-b">
+            <div class="p-2 border-b flex-shrink-0">
               <el-input v-model="processSearch" size="small" placeholder="搜索工序/工位/测试项" clearable @input="onTreeSearch">
                 <template #prefix><el-icon><Search /></el-icon></template>
               </el-input>
             </div>
             <!-- Tree -->
-            <div class="px-1">
+            <div class="px-1 flex-1 overflow-y-auto">
               <el-collapse v-model="expandedProcesses" accordion class="w-full">
                 <el-collapse-item v-for="proc in filteredProcessTree" :key="proc.name" :name="proc.name">
                   <template #title>
@@ -243,18 +243,18 @@
                 </el-collapse-item>
               </el-collapse>
             </div>
-          </el-card>
+          </div>
         </div>
 
-        <!-- Middle: Process→Station Folding Cards -->
-        <div class="flex-1 min-w-0">
+        <!-- Middle: Process→Station Folding Cards (independent scroll) -->
+        <div class="flex-1 min-w-0 flex flex-col">
           <div v-if="!processTreeData.length" class="text-center text-gray-400 py-12">
             <el-empty :description="emptyDescription" :image-size="60" />
           </div>
 
-          <div v-else>
+          <div v-else class="flex flex-col flex-1 min-h-0">
             <!-- Middle Toolbar: Expand/Collapse + Column Options -->
-            <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <div class="flex items-center gap-2 mb-2 flex-wrap flex-shrink-0">
               <el-button size="small" @click="expandAllContent"><el-icon><ArrowDown /></el-icon>全部展开</el-button>
               <el-button size="small" @click="collapseAllContent"><el-icon><ArrowRight /></el-icon>全部折叠</el-button>
               <el-button size="small" type="warning" plain @click="expandOnlyDiff"><el-icon><DataAnalysis /></el-icon>仅展开差异</el-button>
@@ -271,7 +271,8 @@
               <span class="text-xs text-gray-400 ml-auto">Ctrl+S 保存全部 · ↑/↓ 切换测试项 · 编辑中 Tab 切换参数</span>
             </div>
 
-            <div class="space-y-3">
+            <div class="flex-1 min-h-0 overflow-y-auto pr-1">
+              <div class="space-y-3">
             <!-- Process Card -->
             <div v-for="proc in processTreeData" :key="proc.name" :data-process="proc.name" class="border rounded-lg overflow-hidden" :class="{ 'border-red-300': proc.emptyParams > 0, 'border-green-300': proc.emptyParams === 0 && proc.totalParams > 0 }">
               <div class="bg-gray-50 px-4 py-2 border-b flex items-center justify-between" style="cursor:pointer" @click="toggleProcessExpand(proc.name)">
@@ -361,15 +362,15 @@
                                     <el-option v-for="opt in row.options" :key="opt" :label="opt" :value="opt" />
                                   </el-select>
                                   <el-tooltip v-else-if="['number', 'range', 'percent'].includes(row.format)" :content="paramHint(row)" placement="top" :show-after="100">
-                                    <el-input v-model="row._ind._param_map[row.param_key].value" size="small" style="width:130px" :class="{ 'param-invalid': isOutOfRange(row) }" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft()" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
+                                    <el-input v-model="row._ind._param_map[row.param_key].value" size="small" style="width:130px" :class="{ 'param-invalid': isOutOfRange(row) }" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft(); renewLock(row._ind)" @blur="validateAndSaveParam(row._ind, row.param_key)" @keyup.enter="validateAndSaveParam(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
                                       <template v-if="row.unit" #suffix><span class="text-xs text-gray-400 pr-0.5">{{ row.unit }}</span></template>
                                     </el-input>
                                   </el-tooltip>
-                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:120px" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft()" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
+                                  <el-input v-else v-model="row._ind._param_map[row.param_key].value" size="small" style="width:120px" :placeholder="row.default !== '' && row.default !== undefined ? '默认 ' + row.default : ''" @update:model-value="saveDraft(); renewLock(row._ind)" @blur="saveParamValue(row._ind, row.param_key)" @keyup.enter="saveParamValue(row._ind, row.param_key)" @keydown.tab="onInlineEditKeydown($event, row, item)" :disabled="!!isCellBeingEditedByOther(row._ind, row.param_key)">
                                     <template v-if="row.unit" #suffix><span class="text-xs text-gray-400 pr-0.5">{{ row.unit }}</span></template>
                                   </el-input>
                                 </div>
-                                <div v-else-if="isListFormat(row.format)" class="flex items-center gap-1 cursor-pointer" style="min-height:24px" :class="{ 'cursor-not-allowed opacity-60': !canEditItem(item) }" @click.stop="canEditItem(item) && openListEditor(row)" :title="(row.default !== '' && row.default !== undefined ? '默认: ' + row.default + '；' : '') + listDisplay(row)">
+                                <div v-else-if="isListFormat(row.format)" class="flex items-center gap-1 cursor-pointer" style="min-height:24px" :class="{ 'cursor-not-allowed opacity-60': !canEditItem(item) }" @click.stop="canEditItem(item) && beginEdit(row)" :title="(row.default !== '' && row.default !== undefined ? '默认: ' + row.default + '；' : '') + listDisplay(row)">
                                   <span class="text-xs truncate max-w-[180px]" :class="{ 'text-danger font-medium': isParamDirty(row.indicator_id, row.param_key), 'text-red-600': isParamEmpty(row._ind, row.param_key) }">{{ listDisplay(row) }}</span>
                                   <el-tag size="small" type="info" class="flex-shrink-0">列表</el-tag>
                                 </div>
@@ -430,6 +431,7 @@
           </div>
           </div>
         </div>
+        </div>
 
         <!-- Right: Multi-tab Tool Panel -->
         <BomDetailToolPanel
@@ -483,6 +485,7 @@
         placeholder="输入后回车添加，可删除已有标签"
         style="width:100%"
         size="default"
+        @change="renewLock(listEditDialog.indicator)"
       >
         <el-option v-for="opt in listEditDialog.suggestions" :key="opt" :label="opt" :value="opt" />
       </el-select>
@@ -717,19 +720,45 @@
     </div>
 
     <!-- 协同编辑冲突提示 -->
-    <el-dialog v-model="conflictDialog.visible" title="保存冲突提示" width="600px" top="15vh" :close-on-click-modal="false">
-      <el-alert title="部分参数保存失败" type="warning" :description="`以下 ${conflictDialog.conflicts.length} 项因版本冲突或权限不足未能保存。冲突项已从待保存中移除并同步为最新版本，其余未冲突变更仍保留，可再次保存。`" show-icon class="mb-4" />
-      <el-table :data="conflictDialog.conflicts" stripe size="small" style="width:100%" max-height="320">
-        <el-table-column label="指标" min-width="90">
-          <template #default="{ row }">#{{ row.indicator_id }}</template>
+    <el-dialog v-model="conflictDialog.visible" title="保存冲突处理" width="920px" top="10vh" :close-on-click-modal="false">
+      <el-alert title="以下修改未保存成功，请选择处理方式后立即生效" type="warning" show-icon :closable="false" class="mb-3"
+        :description="`你的修改基于旧版本，可能与他人已保存的内容冲突，因此未能保存。逐项选择：「采用最新值」放弃你的修改，以他人值为准；「保留我的值」以你的修改覆盖他人值。选择后立即保存生效。若不处理直接关闭，下次保存将再次提示。`" />
+      <el-table :data="conflictDialog.conflicts" stripe border size="small" style="width:100%" max-height="360">
+        <el-table-column label="指标参数" min-width="170">
+          <template #default="{ row }">
+            <div class="flex flex-col">
+              <span class="text-sm">{{ row.indicator_name || row.indicator_code || `#${row.indicator_id}` }}</span>
+              <span class="text-xs text-gray-400">{{ row.param_name || row.param_key || '-' }}</span>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column prop="message" label="冲突原因" min-width="260" />
-        <el-table-column label="当前版本" width="100">
-          <template #default="{ row }">{{ row.current_revision ?? '-' }}</template>
+        <el-table-column label="你的值（未保存）" width="130" align="center">
+          <template #default="{ row }">
+            <span class="text-xs font-medium">{{ row.you_value !== undefined && row.you_value !== '' ? row.you_value : '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="最新值（他人已保存）" width="150" align="center">
+          <template #default="{ row }">
+            <span class="text-xs font-medium text-danger">{{ row.latest_value !== undefined && row.latest_value !== '' ? row.latest_value : '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="保存人" width="110" align="center">
+          <template #default="{ row }">
+            <span class="text-xs">{{ row.last_operator || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="处理方式" width="200">
+          <template #default="{ row }">
+            <div class="flex gap-1">
+              <el-button size="small" type="primary" plain :loading="row._resolving" @click="applyLatestValue(row)">采用最新值</el-button>
+              <el-button size="small" type="warning" plain :loading="row._resolving" @click="keepMyValue(row)">保留我的值</el-button>
+            </div>
+          </template>
         </el-table-column>
       </el-table>
       <template #footer>
-        <el-button type="primary" @click="conflictDialog.visible = false">知道了</el-button>
+        <span class="text-xs text-gray-400 mr-2 float-left mt-1">未处理项将在下次保存时再次提示</span>
+        <el-button type="primary" @click="conflictDialog.visible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -904,6 +933,7 @@ function enqueueItemSave(itemId: number, task: () => Promise<any>): Promise<any>
 }
 const bomIndicators = ref<any[]>([])
 const navCardRef = ref<any>(null)
+const contentScrollRef = ref<HTMLElement | null>(null)
 const navItemId = ref<number | null>(null)
 
 // ── View Mode & Progress ──
@@ -1040,8 +1070,24 @@ function markSaved() {
 function makePendingKey(test_item_id: number, indicator_id: number, param_key: string): string {
   return `${test_item_id}:${indicator_id}:${param_key}`
 }
+
+// 统一入队：手动保存模式下，把单格/批量修改写入待保存队列（pendingChanges）
+function queueParamChange(item: any, ind: any, paramKey: string, value: string) {
+  if (saveMode.value !== 'unified') return false
+  const key = makePendingKey(item.id, ind.indicator_id, paramKey)
+  pendingChanges.set(key, {
+    indicator_id: ind._bom_indicator_id || 0,
+    param_key: paramKey,
+    param_value: String(value),
+    test_item_id: item.id,
+    item_revision: item.item_revision ?? 0,
+    test_item_name: item.name || '',
+  })
+  return true
+}
 let bomWs: WebSocket | null = null
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let lockSyncTimer: ReturnType<typeof setInterval> | null = null
 
 function getAvatarUrl(name: string): string {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=24`
@@ -1077,8 +1123,10 @@ try {
           // 初始同步编辑状态
           editingCells.value = msg.editing_cells || {}
         } else if (msg.type === 'user_started_editing') {
-          // 他人开始编辑
-          editingCells.value = { ...editingCells.value, [msg.cell_key]: msg.user }
+          // 他人开始编辑（忽略自己的广播，双保险：后端已 exclude，这里再过滤一次）
+          if (msg.user && msg.user.user_id !== getCurrentUserId()) {
+            editingCells.value = { ...editingCells.value, [msg.cell_key]: msg.user }
+          }
         } else if (msg.type === 'user_stopped_editing') {
           // 他人结束编辑
           const { [msg.cell_key]: _, ...rest } = editingCells.value
@@ -1094,8 +1142,21 @@ try {
             editingCells.value = next
           }
         } else if (msg.type === 'editing_rejected') {
-          // 编辑被拒绝（已被他人占用）
-          ElMessage.warning(msg.message || '该参数正在被他人编辑')
+          // 后端确认该测试项被他人占用：更新占用者显示，若正编辑该测试项则退出编辑
+          if (msg.occupied_by && msg.cell_key) {
+            editingCells.value = { ...editingCells.value, [msg.cell_key]: msg.occupied_by }
+          }
+          const occupied = msg.occupied_by
+          const userName = occupied?.user_name || '他人'
+          // 判断是否命中当前请求的测试项（cell_key 形如 item:{test_item_id}）
+          const cellKey = String(msg.cell_key || '')
+          const tid = cellKey.startsWith('item:') ? Number(cellKey.split(':')[1]) : null
+          if (tid && tid === pendingEditItemId) {
+            pendingEditItemId = null
+            editParamKey.value = ''
+            listEditDialog.visible = false
+          }
+          ElMessage.warning(`该测试项正在被 ${userName} 编辑，请稍后再试`)
         } else if (msg.type === 'params_saved') {
           // 他人保存成功 → 本地增量同步（跳过本地有 pending 的单元格）
           applyRemoteSave(msg)
@@ -1132,6 +1193,23 @@ function disconnectBomWebSocket() {
   editingCells.value = {}
 }
 
+// ── 编辑锁定期全量同步 ──
+// WS 广播可能丢失（断线窗口/消息抖动），导致本地 editingCells 残留"幽灵锁定"。
+// 每 25s 从后端 Redis 全量拉取编辑锁并覆盖本地（过滤自己），保证显示与禁用状态正确。
+async function syncEditingLocks() {
+  if (!configId.value) return
+  try {
+    const res = await metricsApi.getEditingLocks(configId.value)
+    const cells: Record<string, any> = (res as any).data || {}
+    const uid = getCurrentUserId()
+    const filtered: Record<string, any> = {}
+    for (const [k, v] of Object.entries(cells)) {
+      if (v && v.user_id !== uid) filtered[k] = v
+    }
+    editingCells.value = filtered
+  } catch { /* 网络波动忽略，下轮再同步 */ }
+}
+
 // 他人保存成功后的本地增量同步：更新对应单元格值并同步 item_revision。
 // 若本地对该单元格有 pending 变更（正在编辑未保存），跳过以保留本地编辑，
 // 稍后统一保存时由乐观锁识别冲突。
@@ -1162,6 +1240,12 @@ function sendStartEditing(ind: any, paramKey: string) {
   if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
   const item = ind._item
   if (!item) return
+  // 自己开始编辑：清除本地该测试项可能的"他人编辑"残留，避免幽灵锁定
+  const key = 'item:' + item.id
+  if (editingCells.value[key]) {
+    const { [key]: _, ...rest } = editingCells.value
+    editingCells.value = rest
+  }
   bomWs.send(JSON.stringify({
     type: 'start_editing',
     data: {
@@ -1186,6 +1270,24 @@ function sendStopEditing(ind: any, paramKey: string) {
   }))
 }
 
+// ── 输入自动续期（TTL 2 分钟滑动窗口）──
+const lockRenewAt = new Map<number, number>()
+const LOCK_RENEW_INTERVAL = 30000 // 30s 节流，避免每次输入都发 WS 消息
+
+function renewLock(ind: any) {
+  const item = ind?._item
+  if (!item) return
+  const now = Date.now()
+  const last = lockRenewAt.get(item.id) || 0
+  if (now - last < LOCK_RENEW_INTERVAL) return
+  lockRenewAt.set(item.id, now)
+  if (!bomWs || bomWs.readyState !== WebSocket.OPEN) return
+  bomWs.send(JSON.stringify({
+    type: 'refresh_editing',
+    data: { test_item_id: item.id },
+  }))
+}
+
 // 检查某测试项是否被他人正在编辑（锁粒度 = 测试项，与后端乐观锁一致）
 function isCellBeingEditedByOther(ind: any, _paramKey: string): any | null {
   const item = ind._item
@@ -1206,6 +1308,13 @@ function editingUserOf(item: any): string | null {
     return info.user_name || '他人'
   }
   return null
+}
+
+// 该测试项是否被他人编辑锁定（用于批量覆盖操作跳过，避免夺取编辑权）
+function isItemLockedByOther(item: any): boolean {
+  if (!item?.id) return false
+  const info = editingCells.value['item:' + item.id]
+  return !!(info && info.user_id !== getCurrentUserId())
 }
 
 const emptyDescription = computed(() => {
@@ -1667,44 +1776,65 @@ async function cellMenuApply(action: 'copy' | 'selected' | 'process') {
       if (t._param_map?.[row.param_key]) {
         t._param_map[row.param_key].value = val
         count++
+        // 手动保存模式下入队；找到真实测试项以定位
+        const realItem = t._item_id != null ? testItems.value.find((it: any) => it.id === t._item_id) : null
+        if (saveMode.value === 'unified' && realItem) {
+          queueParamChange(realItem, t, row.param_key, val)
+        }
       }
     }
-    const ok = await saveAllPendingParams()
-    if (ok) ElMessage.success(`已应用到 ${count} 个选中测试项`)
+    if (saveMode.value === 'unified') {
+      saveDraft()
+      ElMessage.success(`已应用到 ${count} 个选中测试项，已暂存，点「保存全部」或 Ctrl+S 提交`)
+    } else {
+      const ok = await saveAllPendingParams()
+      if (ok) ElMessage.success(`已应用到 ${count} 个选中测试项`)
+    }
     return
   }
   // action === 'process'：应用到同工序所有测试项的对应指标同参数
   let count = 0
+  let skipped = 0
   for (const it of testItems.value) {
     if (it.process_name !== item.process_name) continue
+    if (isItemLockedByOther(it)) { skipped++; continue } // 跳过被他人编辑的测试项
     for (const ind of it.indicatorList || []) {
       if (ind.indicator_id === row.indicator_id && ind._param_map?.[row.param_key]) {
         ind._param_map[row.param_key].value = val
+        queueParamChange(it, ind, row.param_key, val)
         count++
       }
     }
   }
-  const ok = await saveAllPendingParams()
-  if (ok) ElMessage.success(`已应用到同工序 ${count} 处`)
+  if (saveMode.value === 'unified') {
+    saveDraft()
+    ElMessage.success(`已应用到同工序 ${count} 处${skipped ? `（${skipped} 项正被他人编辑已跳过）` : ''}，已暂存，点「保存全部」或 Ctrl+S 提交`)
+  } else {
+    const ok = await saveAllPendingParams()
+    if (ok) ElMessage.success(`已应用到同工序 ${count} 处${skipped ? `（${skipped} 项正被他人编辑已跳过）` : ''}`)
+  }
 }
 
-function startInlineEdit(row: any) {
+// 统一编辑入口：发送 start_editing 由后端（Redis）裁决锁状态，避免前端缓存残留导致的"幽灵锁定"；
+// 仅当后端返回 editing_rejected（确实被他人占用）时才提示并退出。
+let pendingEditItemId: number | null = null
+
+function beginEdit(row: any) {
   if (bom.archived || bom.review_status === 'pending') return
   const item = row._item
   if (item && !canEditItem(item)) return
-  if (isListFormat(row.format)) {
-    openListEditor(row)
-    return
-  }
-  // 检查是否被他人正在编辑
-  const occupied = isCellBeingEditedByOther(row._ind, row.param_key)
-  if (occupied) {
-    ElMessage.warning(`该参数正在被 ${occupied.user_name} 编辑，请稍后再试`)
-    return
-  }
+  pendingEditItemId = item?.id ?? null
   pushUndo(row._ind, row.param_key)
   sendStartEditing(row._ind, row.param_key)
-  editParamKey.value = row._bom_indicator_id + '#val#' + row.param_key
+  if (isListFormat(row.format)) {
+    openListEditor(row)
+  } else {
+    editParamKey.value = row._bom_indicator_id + '#val#' + row.param_key
+  }
+}
+
+function startInlineEdit(row: any) {
+  beginEdit(row)
 }
 
 // ── 撤销 / 重做（P0-4）──
@@ -1765,6 +1895,13 @@ async function redoLast() {
 // ── List-format param: truncated display + tag editing ──
 const listEditDialog = reactive({ visible: false, saving: false, label: '', format: '', indicator: null as any, paramKey: '' as string, tags: [] as string[], suggestions: [] as string[] })
 
+// 列表弹窗关闭（保存/取消/点外部）时释放测试项编辑锁，避免锁残留
+watch(() => listEditDialog.visible, (v) => {
+  if (!v && listEditDialog.indicator) {
+    sendStopEditing(listEditDialog.indicator, listEditDialog.paramKey)
+  }
+})
+
 function isListFormat(format: string): boolean {
   return format === 'array' || format === 'list'
 }
@@ -1804,6 +1941,7 @@ async function saveListEditor() {
   const key = listEditDialog.paramKey
   ind._param_map[key].value = normalized
   listEditDialog.visible = false
+  sendStopEditing(ind, key)
   saveDraft()
   await validateAndSaveParam(ind, key)
   if (normalized) ElMessage.success('已保存列表参数')
@@ -1815,11 +1953,22 @@ async function copyBaselineValue(row: any) {
     ElMessage.warning('该测试项无编辑权限')
     return
   }
+  // 防止夺取他人编辑权：该测试项正被他人编辑时禁止复制覆盖
+  const occupied = isCellBeingEditedByOther(row._ind, row.param_key)
+  if (occupied) {
+    ElMessage.warning(`该测试项正在被 ${occupied.user_name} 编辑，请稍后再试`)
+    return
+  }
+  // 获取测试项编辑锁（后端 Redis 裁决；被拒时由乐观锁兜底阻止覆盖）
+  sendStartEditing(row._ind, row.param_key)
   const bv = baselineParams.value[row.indicator_id + '#' + row.param_key]
-  if (bv === undefined) return
+  if (bv === undefined) {
+    sendStopEditing(row._ind, row.param_key)
+    return
+  }
   row._ind._param_map[row.param_key].value = bv
   saveDraft()
-  await saveParamValue(row._ind, row.param_key)
+  await saveParamValue(row._ind, row.param_key) // 保存时释放锁
   ElMessage.success('已复制归档基准原值')
 }
 
@@ -2026,18 +2175,24 @@ async function copyPrevStation(procName: string, staName: string) {
       { type: 'warning', confirmButtonText: '确认复制', cancelButtonText: '取消' }
     )
   } catch { return }
+  let skipped = 0
   for (const target of targetItems) {
+    if (isItemLockedByOther(target)) { skipped++; continue } // 跳过被他人编辑的测试项，避免夺取编辑权
     const source = sourceItems.find((s: any) => s.name === target.name)
     if (source) {
       for (const targetInd of target.indicatorList || []) {
         const sourceInd = source.indicatorList?.find((s: any) => s.indicator_id === targetInd.indicator_id)
         if (sourceInd) {
-          targetInd._param_map = JSON.parse(JSON.stringify(sourceInd._param_map || {}))
+          const newMap = JSON.parse(JSON.stringify(sourceInd._param_map || {}))
+          targetInd._param_map = newMap
+          if (saveMode.value === 'unified') {
+            for (const [k, info] of Object.entries(newMap) as [string, any][]) queueParamChange(target, targetInd, k, String(info.value))
+          }
         }
       }
     }
   }
-  ElMessage.success(`已复制上工位参数至 ${targetItems.length} 个测试项`)
+  ElMessage.success(`已复制上工位参数至 ${targetItems.length - skipped} 个测试项${skipped ? `（${skipped} 项正被他人编辑已跳过）` : ''}`)
   saveDraft()
 }
 
@@ -2060,22 +2215,28 @@ async function copyPrevProcess(targetProcessName: string) {
       { type: 'warning', confirmButtonText: '确认复制', cancelButtonText: '取消' }
     )
   } catch { return }
+  let skipped = 0
   for (let si = 0; si < targetStations.length && si < sourceStations.length; si++) {
     const sourceItems = sourceStations[si].items
     const targetItems = targetStations[si].items
     for (const target of targetItems) {
+      if (isItemLockedByOther(target)) { skipped++; continue } // 跳过被他人编辑的测试项
       const source = sourceItems.find((s: any) => s.name === target.name)
       if (source) {
         for (const targetInd of target.indicatorList || []) {
           const sourceInd = source.indicatorList?.find((s: any) => s.indicator_id === targetInd.indicator_id)
           if (sourceInd) {
-            targetInd._param_map = JSON.parse(JSON.stringify(sourceInd._param_map || {}))
+            const newMap = JSON.parse(JSON.stringify(sourceInd._param_map || {}))
+            targetInd._param_map = newMap
+            if (saveMode.value === 'unified') {
+              for (const [k, info] of Object.entries(newMap) as [string, any][]) queueParamChange(target, targetInd, k, String(info.value))
+            }
           }
         }
       }
     }
   }
-  ElMessage.success(`已复制上工序参数`)
+  ElMessage.success(`已复制上工序参数${skipped ? `（${skipped} 项正被他人编辑已跳过）` : ''}`)
   saveDraft()
 }
 
@@ -2088,13 +2249,19 @@ async function clearStationParams(procName: string, staName: string) {
     const sta = proc.stations.find(s => s.name === staName)
     if (sta) {
       for (const item of sta.items) {
+        if (isItemLockedByOther(item)) continue // 跳过被他人编辑的测试项
         for (const ind of item.indicatorList || []) {
           const params = ind._param_map || {}
-          for (const p of Object.values(params)) { (p as any).value = '' }
+          for (const [key, p] of Object.entries(params) as [string, any][]) { p.value = ''; queueParamChange(item, ind, key, '') }
         }
       }
-      const ok = await saveAllPendingParams()
-      if (ok) ElMessage.success(`已清空「${procName} / ${staName}」下所有参数`)
+      if (saveMode.value === 'unified') {
+        saveDraft()
+        ElMessage.success(`已清空「${procName} / ${staName}」下所有参数，已暂存，点「保存全部」或 Ctrl+S 提交`)
+      } else {
+        const ok = await saveAllPendingParams()
+        if (ok) ElMessage.success(`已清空「${procName} / ${staName}」下所有参数`)
+      }
     }
   } catch { /* cancelled */ }
 }
@@ -2112,20 +2279,27 @@ async function batchFillStation(procName: string, staName: string) {
       for (const sta of proc.stations) {
         if (sta.name !== staName) continue
         for (const item of sta.items) {
+          if (isItemLockedByOther(item)) continue // 跳过被他人编辑的测试项
           for (const ind of item.indicatorList || []) {
             const params = ind._param_map || {}
             for (const [key, info] of Object.entries(params) as [string, any][]) {
               if (['number', 'range', 'percent'].includes(info.format)) {
                 if (upper) info.value = upper
                 if (lower) info.value = lower
+                queueParamChange(item, ind, key, String(info.value))
               }
             }
           }
         }
       }
     }
-    const ok = await saveAllPendingParams()
-    if (ok) ElMessage.success(`已批量填充工位「${staName}」`)
+    if (saveMode.value === 'unified') {
+      saveDraft()
+      ElMessage.success(`已批量填充工位「${staName}」，改动已暂存，点「保存全部」或 Ctrl+S 提交`)
+    } else {
+      const ok = await saveAllPendingParams()
+      if (ok) ElMessage.success(`已批量填充工位「${staName}」`)
+    }
   } catch { /* cancelled */ }
 }
 
@@ -2161,6 +2335,7 @@ async function syncStationFromHistory(procName: string, staName: string) {
               for (const [key, info] of Object.entries(ind._param_map || {}) as [string, any][]) {
                 if (info.name === paramName || key === paramName) {
                   info.value = mod.oldValue
+                  queueParamChange(item, ind, key, String(mod.oldValue))
                 }
               }
             }
@@ -2168,8 +2343,13 @@ async function syncStationFromHistory(procName: string, staName: string) {
         }
       }
     }
-    const ok = await saveAllPendingParams()
-    if (ok) ElMessage.success(`已同步工位「${staName}」的历史参数`)
+    if (saveMode.value === 'unified') {
+      saveDraft()
+      ElMessage.success(`已同步工位「${staName}」的历史参数，已暂存，点「保存全部」或 Ctrl+S 提交`)
+    } else {
+      const ok = await saveAllPendingParams()
+      if (ok) ElMessage.success(`已同步工位「${staName}」的历史参数`)
+    }
   } catch { /* cancelled */ }
 }
 
@@ -2187,12 +2367,14 @@ async function batchFillProcess(processName: string) {
       if (proc.name === processName) {
         for (const sta of proc.stations) {
           for (const item of sta.items) {
+            if (isItemLockedByOther(item)) continue // 跳过被他人编辑的测试项
             for (const ind of item.indicatorList || []) {
               const params = ind._param_map || {}
               for (const [key, info] of Object.entries(params) as [string, any][]) {
                 if (['number', 'range', 'percent'].includes(info.format)) {
                   if (upper) info.value = upper
                   if (lower) info.value = lower
+                  queueParamChange(item, ind, key, String(info.value))
                 }
               }
             }
@@ -2200,8 +2382,13 @@ async function batchFillProcess(processName: string) {
         }
       }
     }
-    const ok = await saveAllPendingParams()
-    if (ok) ElMessage.success(`已批量填充工序「${processName}」`)
+    if (saveMode.value === 'unified') {
+      saveDraft()
+      ElMessage.success(`已批量填充工序「${processName}」，改动已暂存，点「保存全部」或 Ctrl+S 提交`)
+    } else {
+      const ok = await saveAllPendingParams()
+      if (ok) ElMessage.success(`已批量填充工序「${processName}」`)
+    }
   } catch { /* cancelled */ }
 }
 
@@ -2213,16 +2400,22 @@ async function clearProcessParams(processName: string) {
       if (proc.name === processName) {
         for (const sta of proc.stations) {
           for (const item of sta.items) {
+            if (isItemLockedByOther(item)) continue // 跳过被他人编辑的测试项
             for (const ind of item.indicatorList || []) {
               const params = ind._param_map || {}
-              for (const p of Object.values(params)) { (p as any).value = '' }
+              for (const [key, p] of Object.entries(params) as [string, any][]) { p.value = ''; queueParamChange(item, ind, key, '') }
             }
           }
         }
       }
     }
-    const ok = await saveAllPendingParams()
-    if (ok) ElMessage.success(`已清空工序「${processName}」下所有参数`)
+    if (saveMode.value === 'unified') {
+      saveDraft()
+      ElMessage.success(`已清空工序「${processName}」下所有参数，已暂存，点「保存全部」或 Ctrl+S 提交`)
+    } else {
+      const ok = await saveAllPendingParams()
+      if (ok) ElMessage.success(`已清空工序「${processName}」下所有参数`)
+    }
   } catch { /* cancelled */ }
 }
 
@@ -2235,7 +2428,7 @@ function scrollItemIntoView(itemId: number) {
   nextTick(() => {
     const el = document.getElementById(`item-${itemId}`)
     if (!el) return
-    const scroller = (el.closest('.el-main') || document.scrollingElement) as HTMLElement
+    const scroller = (contentScrollRef.value || el.closest('.el-main') || document.scrollingElement) as HTMLElement
     const sr = scroller.getBoundingClientRect()
     const er = el.getBoundingClientRect()
     const target = scroller.scrollTop + (er.top - sr.top) - (sr.height - er.height) / 2
@@ -2262,6 +2455,7 @@ function applyItemFocus(item: any, procName: string, staName: string, toggle: bo
     } else {
       rightToolbar.selectedItems = indicators.map((ind: any) => ({
         ...ind,
+        _item_id: item.id,
         _item_name: item.name,
         _process_name: procName,
         _station_name: staName,
@@ -2379,23 +2573,49 @@ async function pasteToSelected() {
       )
     } catch { return }
   }
+  let count = 0
   for (const target of rightToolbar.selectedItems) {
     const source = rightToolbar.copySourceItems.find(s => s.indicator_id === target.indicator_id)
     if (source) {
-      target._param_map = JSON.parse(JSON.stringify(source.params))
+      const newMap = JSON.parse(JSON.stringify(source.params))
+      target._param_map = newMap
+      count++
+      // 手动保存模式入队；同时同步到真实指标，确保本地数据一致
+      const realItem = target._item_id != null ? testItems.value.find((it: any) => it.id === target._item_id) : null
+      const realInd = realItem?.indicatorList?.find((i: any) => i.indicator_id === target.indicator_id)
+      if (realInd) realInd._param_map = newMap
+      if (saveMode.value === 'unified' && realItem && realInd) {
+        for (const [k, info] of Object.entries(newMap) as [string, any][]) queueParamChange(realItem, realInd, k, String(info.value))
+      }
     }
   }
-  const ok = await saveAllPendingParams()
-  if (ok) ElMessage.success(`已粘贴到 ${rightToolbar.selectedItems.length} 个测试项`)
+  if (saveMode.value === 'unified') {
+    saveDraft()
+    ElMessage.success(`已粘贴到 ${count} 个测试项，已暂存，点「保存全部」或 Ctrl+S 提交`)
+  } else {
+    const ok = await saveAllPendingParams()
+    if (ok) ElMessage.success(`已粘贴到 ${count} 个测试项`)
+  }
 }
 
 function clearSelectedParams() {
+  let count = 0
   for (const item of rightToolbar.selectedItems) {
     const params = item._param_map || {}
-    for (const p of Object.values(params)) { (p as any).value = '' }
+    for (const [k, p] of Object.entries(params) as [string, any][]) {
+      p.value = ''
+      count++
+      const realItem = item._item_id != null ? testItems.value.find((it: any) => it.id === item._item_id) : null
+      if (saveMode.value === 'unified' && realItem) queueParamChange(realItem, item, k, '')
+    }
   }
-  saveAllPendingParams()
-  ElMessage.success(`已清空 ${rightToolbar.selectedItems.length} 个测试项的参数`)
+  if (saveMode.value === 'unified') {
+    saveDraft()
+    ElMessage.success(`已清空 ${rightToolbar.selectedItems.length} 个测试项的参数，已暂存，点「保存全部」或 Ctrl+S 提交`)
+  } else {
+    saveAllPendingParams()
+    ElMessage.success(`已清空 ${rightToolbar.selectedItems.length} 个测试项的参数`)
+  }
   rightToolbar.selectedItems = []
 }
 
@@ -2698,7 +2918,9 @@ async function loadAll() {
         const fullRes = await metricsApi.getFullIndicatorsByConfig(configId.value)
         const fullItems = fullRes?.data || []
         
-         testItems.value = fullItems.map((item: any) => {
+         testItems.value = fullItems.map((rawItem: any) => {
+          // 构造最终测试项对象，让指标的 _item 指向它（item_revision 等字段与 testItems 同步）
+          const item: any = { ...rawItem }
           // 为每个指标构建 _param_map 供表格单元格编辑使用
           const indicators = Array.isArray(item?.indicators) ? item.indicators : []
           const itemParamCols: any[] = Array.isArray(item?.param_cols) ? item.param_cols : []
@@ -2744,14 +2966,12 @@ async function loadAll() {
               unit: ind?.unit || '',
               _param_map: paramMap,
               _param_cols: perIndCols,
-              _item: { id: item?.id, name: item?.name }
+              _item: item
             }
           })
-          return {
-            ...item,
-            indicatorList,
-            _param_cols: itemParamCols.length ? itemParamCols : (indicatorList[0]?._param_cols || []),
-          }
+          item.indicatorList = indicatorList
+          item._param_cols = itemParamCols.length ? itemParamCols : (indicatorList[0]?._param_cols || [])
+          return item
         })
        
        domainOptions.value = ['全部领域', ...extractDomains(testItems.value)]
@@ -3210,6 +3430,18 @@ async function loadArchivedDiff() {
   }
 }
 
+// ── 统一保存入口：按钮与 Ctrl+S 共用，保证行为一致 ──
+// 所有修改（单格/批量）在手动保存模式下统一进入 pendingChanges，保存只处理 pending；
+// 无待保存变更时不做全量重存，避免"再次保存重复确认全局"。
+async function saveAll(): Promise<boolean> {
+  if (isSaving.value) return false
+  if (pendingChanges.size === 0) {
+    ElMessage.info('无待保存变更')
+    return true
+  }
+  return flushPendingChanges()
+}
+
 // ── 统一保存：flushPendingChanges ──
 async function flushPendingChanges(): Promise<boolean> {
   if (pendingChanges.size === 0) {
@@ -3252,26 +3484,93 @@ async function flushPendingChanges(): Promise<boolean> {
   }
 }
 
-// 冲突处理：从 pendingChanges 中移除冲突测试项的所有待保存变更，并刷新本地 item_revision。
+// 冲突处理：仅移除"已成功保存"测试项的待保存变更；冲突测试项的变更保留（待用户解决），
+// 这样未解决冲突的保存会再次提示，不会被"全量保存兜底"绕过而悄悄生效。
 function resolveSaveConflicts(conflicts: any[]) {
   const conflictItemIds = new Set<number>()
   for (const c of conflicts) {
     if (c.test_item_id) conflictItemIds.add(c.test_item_id)
   }
-  if (conflictItemIds.size === 0) return
-  // 移除冲突测试项相关 pending
+  // 移除成功（非冲突）测试项的相关 pending；冲突项保留待解决
   for (const [key, v] of Array.from(pendingChanges.entries())) {
-    if (conflictItemIds.has(v.test_item_id)) {
+    if (v.test_item_id && !conflictItemIds.has(v.test_item_id)) {
       pendingChanges.delete(key)
     }
   }
-  // 刷新冲突测试项的本地版本号（含该测试项所有指标）
+  // 刷新冲突测试项的本地版本号（供"保留我的值/采用最新值"以最新版本重新提交）
   for (const c of conflicts) {
     if (c.test_item_id && c.current_revision != null) {
       const item = testItems.value.find((t: any) => t.id === c.test_item_id)
       if (item) item.item_revision = c.current_revision
     }
   }
+}
+
+// 选择处理方式后立即保存生效（无需再次 Ctrl+S）；若仍有其它未解决冲突则弹框继续
+async function saveAfterResolve() {
+  const ok = await flushPendingChanges()
+  if (ok && pendingChanges.size === 0) {
+    conflictDialog.visible = false
+  }
+}
+
+// 采用最新值：放弃你的修改，改用他人已保存的值，并立即保存生效
+async function applyLatestValue(row: any) {
+  if (row.latest_value === undefined || row.latest_value === '') return
+  if (row._resolving) return
+  row._resolving = true
+  const item = testItems.value.find((t: any) => t.id === row.test_item_id)
+  const ind = item?.indicatorList?.find(
+    (i: any) => i._bom_indicator_id === row.indicator_id || i.indicator_id === row.indicator_id,
+  )
+  if (item && ind && ind._param_map?.[row.param_key]) {
+    ind._param_map[row.param_key].value = row.latest_value
+    if (saveMode.value === 'unified') {
+      const key = makePendingKey(item.id, ind.indicator_id, row.param_key)
+      pendingChanges.set(key, {
+        indicator_id: ind._bom_indicator_id || 0,
+        param_key: row.param_key,
+        param_value: String(row.latest_value),
+        test_item_id: item.id,
+        item_revision: item.item_revision ?? 0,
+        test_item_name: item.name || '',
+      })
+      saveDraft()
+    }
+    await saveAfterResolve()
+  } else {
+    ElMessage.warning('未找到对应参数，请刷新页面后重试')
+  }
+  row._resolving = false
+}
+
+// 保留我的值：放弃最新值，恢复你的修改（以你的为准），并立即保存覆盖
+async function keepMyValue(row: any) {
+  if (row._resolving) return
+  row._resolving = true
+  const item = testItems.value.find((t: any) => t.id === row.test_item_id)
+  const ind = item?.indicatorList?.find(
+    (i: any) => i._bom_indicator_id === row.indicator_id || i.indicator_id === row.indicator_id,
+  )
+  if (item && ind && ind._param_map?.[row.param_key]) {
+    ind._param_map[row.param_key].value = row.you_value ?? ''
+    if (saveMode.value === 'unified') {
+      const key = makePendingKey(item.id, ind.indicator_id, row.param_key)
+      pendingChanges.set(key, {
+        indicator_id: ind._bom_indicator_id || 0,
+        param_key: row.param_key,
+        param_value: String(row.you_value ?? ''),
+        test_item_id: item.id,
+        item_revision: item.item_revision ?? 0,
+        test_item_name: item.name || '',
+      })
+      saveDraft()
+    }
+    await saveAfterResolve()
+  } else {
+    ElMessage.warning('未找到对应参数，请刷新页面后重试')
+  }
+  row._resolving = false
 }
 
 // Ctrl+S 全局保存快捷键
@@ -3302,7 +3601,7 @@ function setupBeforeUnloadGuard() {
 
 // 在组件挂载时注册快捷键和离开守卫
 onMounted(() => {
-  setupGlobalSaveShortcut()
+  // 快捷键统一由 onGlobalKeydown 处理（Ctrl+S 保存 / Ctrl+Z/Y 撤销重做 / 方向键导航），避免重复触发
   setupBeforeUnloadGuard()
 })
 
@@ -3702,8 +4001,9 @@ async function saveAllPendingParams() {
     const res = await metricsApi.batchSaveIndicatorParams(configId.value, { indicators: payload })
     const conflicts = res.data?.conflicts || []
     if (conflicts.length) {
+      // 与保存全部按钮一致：保留未冲突变更，仅移除冲突项并同步版本号
+      resolveSaveConflicts(conflicts)
       showSaveConflicts(conflicts)
-      await loadAll()
       return false
     }
     // 保存成功：同步本地各测试项版本号（每个成功组 +1），后续再次保存不会误报冲突
@@ -4044,7 +4344,7 @@ async function onGlobalKeydown(e: KeyboardEvent) {
     e.preventDefault()
     if (bom.archived || bom.review_status === 'pending') return
     try {
-      const ok = await saveAllPendingParams()
+      const ok = await saveAll() // 与「保存全部」按钮一致
       if (ok) ElMessage.success('已保存全部参数')
     } catch (err: any) {
       ElMessage.error(err?.response?.data?.message || '保存失败')
@@ -4060,10 +4360,14 @@ onMounted(() => {
   restoreDomainFilter()
   // 刷新"上次保存时间"显示
   window.setInterval(() => { saveTick.value++ }, 30000)
+  // 编辑锁定期全量同步（弥补广播丢失，消除幽灵锁定）
+  syncEditingLocks()
+  lockSyncTimer = setInterval(syncEditingLocks, 25000)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onPageBeforeUnload)
   window.removeEventListener('keydown', onGlobalKeydown)
+  if (lockSyncTimer) clearInterval(lockSyncTimer)
   saveDraft()
   disconnectBomWebSocket()
 })
