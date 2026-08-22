@@ -103,6 +103,30 @@ CREATE TABLE IF NOT EXISTS test_slots (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Cabinet params
+CREATE TABLE IF NOT EXISTS cabinet_params (
+    id SERIAL PRIMARY KEY,
+    cabinet_id INTEGER NOT NULL REFERENCES cabinets(id),
+    param_name VARCHAR(200) NOT NULL,
+    param_value VARCHAR(500) DEFAULT '',
+    group_name VARCHAR(100) DEFAULT 'default',
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cabinet_params_cabinet ON cabinet_params (cabinet_id);
+
+-- Chassis params
+CREATE TABLE IF NOT EXISTS chassis_params (
+    id SERIAL PRIMARY KEY,
+    chassis_id INTEGER NOT NULL REFERENCES test_chassis(id),
+    param_name VARCHAR(200) NOT NULL,
+    param_value VARCHAR(500) DEFAULT '',
+    group_name VARCHAR(100) DEFAULT 'default',
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chassis_params_chassis ON chassis_params (chassis_id);
+
 -- Station configs
 CREATE TABLE IF NOT EXISTS equipment_configs (
     id SERIAL PRIMARY KEY,

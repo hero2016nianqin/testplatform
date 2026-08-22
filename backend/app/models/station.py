@@ -110,6 +110,7 @@ class Cabinet(Base):
 
     station = relationship("TestStation", back_populates="cabinets")
     chassis_list = relationship("TestChassis", back_populates="cabinet", cascade="all, delete-orphan")
+    params = relationship("CabinetParam", back_populates="cabinet", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {"id": self.id, "station_id": self.station_id, "name": self.name, "sort_order": self.sort_order}
@@ -130,6 +131,7 @@ class TestChassis(Base):
     station = relationship("TestStation", back_populates="chassis_list")
     cabinet = relationship("Cabinet", back_populates="chassis_list")
     slots = relationship("TestSlot", back_populates="chassis", cascade="all, delete-orphan")
+    params = relationship("ChassisParam", back_populates="chassis", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -157,4 +159,48 @@ class TestSlot(Base):
             "id": self.id, "chassis_id": self.chassis_id, "name": self.name,
             "status": self.status, "current_batch_id": self.current_batch_id,
             "sort_order": self.sort_order,
+        }
+
+
+class CabinetParam(Base):
+    """机柜参数"""
+    __tablename__ = "cabinet_params"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cabinet_id: Mapped[int] = mapped_column(Integer, ForeignKey("cabinets.id"), nullable=False, index=True)
+    param_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    param_value: Mapped[str] = mapped_column(String(500), default="")
+    group_name: Mapped[str] = mapped_column(String(100), default="default")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    cabinet = relationship("Cabinet", back_populates="params")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "cabinet_id": self.cabinet_id,
+            "param_name": self.param_name, "param_value": self.param_value,
+            "group_name": self.group_name, "sort_order": self.sort_order,
+        }
+
+
+class ChassisParam(Base):
+    """机框参数"""
+    __tablename__ = "chassis_params"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chassis_id: Mapped[int] = mapped_column(Integer, ForeignKey("test_chassis.id"), nullable=False, index=True)
+    param_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    param_value: Mapped[str] = mapped_column(String(500), default="")
+    group_name: Mapped[str] = mapped_column(String(100), default="default")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    chassis = relationship("TestChassis", back_populates="params")
+
+    def to_dict(self):
+        return {
+            "id": self.id, "chassis_id": self.chassis_id,
+            "param_name": self.param_name, "param_value": self.param_value,
+            "group_name": self.group_name, "sort_order": self.sort_order,
         }

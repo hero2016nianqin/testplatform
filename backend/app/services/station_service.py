@@ -96,7 +96,15 @@ class StationService:
         return list(result.scalars().all())
 
     @staticmethod
+    def _normalize_code(data: dict) -> dict:
+        if "code" in data:
+            code = data["code"]
+            data["code"] = code.strip() if isinstance(code, str) and code.strip() else None
+        return data
+
+    @staticmethod
     async def create_definition(db, data: dict) -> EquipmentDefinition:
+        StationService._normalize_code(data)
         d = EquipmentDefinition(**data)
         db.add(d)
         await db.flush()
@@ -125,6 +133,7 @@ class StationService:
         d = r.scalar_one_or_none()
         if not d:
             raise NotFoundError("装备定义不存在")
+        StationService._normalize_code(data)
         for k, v in data.items():
             if v is not None:
                 setattr(d, k, v)
@@ -211,8 +220,9 @@ class StationService:
         db.add(EquipmentConfig(station_id=station.id))
         db.add(SoftwareConfig(station_id=station.id))
         db.add(ScenarioConfig(station_id=station.id))
-        db.add(EquipmentMetrics(station_id=station.id))
-        db.add(EquipmentPropertyPage(station_id=station.id))
+        # 使用 get_metrics/get_property_page 避免唯一约束冲突
+        await StationService.get_metrics(db, station.id)
+        await StationService.get_property_page(db, station.id)
 
         # 按 layout_config 创建机柜->机框->槽位
         layout = definition.layout_config or {}
@@ -467,6 +477,86 @@ class StationService:
                 setattr(s, k, v)
         await db.flush()
         return s
+
+    # ── Cabinet Params ──
+    @staticmethod
+    async def list_cabinet_params(db, cabinet_id: int):
+        from app.models.station import CabinetParam
+        r = await db.execute(
+            select(CabinetParam).where(CabinetParam.cabinet_id == cabinet_id).order_by(CabinetParam.sort_order)
+        )
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def create_cabinet_param(db, cabinet_id: int, data: dict):
+        from app.models.station import CabinetParam
+        p = CabinetParam(cabinet_id=cabinet_id, **data)
+        db.add(p)
+        await db.flush()
+        return p
+
+    @staticmethod
+    async def update_cabinet_param(db, param_id: int, data: dict):
+        from app.models.station import CabinetParam
+        r = await db.execute(select(CabinetParam).where(CabinetParam.id == param_id))
+        p = r.scalar_one_or_none()
+        if not p:
+            raise NotFoundError("参数不存在")
+        for k, v in data.items():
+            if v is not None:
+                setattr(p, k, v)
+        await db.flush()
+        return p
+
+    @staticmethod
+    async def delete_cabinet_param(db, param_id: int):
+        from app.models.station import CabinetParam
+        r = await db.execute(select(CabinetParam).where(CabinetParam.id == param_id))
+        p = r.scalar_one_or_none()
+        if not p:
+            raise NotFoundError("参数不存在")
+        await db.delete(p)
+        await db.flush()
+
+    # ── Chassis Params ──
+    @staticmethod
+    async def list_chassis_params(db, chassis_id: int):
+        from app.models.station import ChassisParam
+        r = await db.execute(
+            select(ChassisParam).where(ChassisParam.chassis_id == chassis_id).order_by(ChassisParam.sort_order)
+        )
+        return list(r.scalars().all())
+
+    @staticmethod
+    async def create_chassis_param(db, chassis_id: int, data: dict):
+        from app.models.station import ChassisParam
+        p = ChassisParam(chassis_id=chassis_id, **data)
+        db.add(p)
+        await db.flush()
+        return p
+
+    @staticmethod
+    async def update_chassis_param(db, param_id: int, data: dict):
+        from app.models.station import ChassisParam
+        r = await db.execute(select(ChassisParam).where(ChassisParam.id == param_id))
+        p = r.scalar_one_or_none()
+        if not p:
+            raise NotFoundError("参数不存在")
+        for k, v in data.items():
+            if v is not None:
+                setattr(p, k, v)
+        await db.flush()
+        return p
+
+    @staticmethod
+    async def delete_chassis_param(db, param_id: int):
+        from app.models.station import ChassisParam
+        r = await db.execute(select(ChassisParam).where(ChassisParam.id == param_id))
+        p = r.scalar_one_or_none()
+        if not p:
+            raise NotFoundError("参数不存在")
+        await db.delete(p)
+        await db.flush()
 
     # ── Version Check ──
     @staticmethod

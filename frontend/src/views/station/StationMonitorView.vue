@@ -38,8 +38,8 @@
       </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
+      <!-- Main Content -->
+      <div class="main-content">
       <!-- Loading -->
       <div v-if="loading" class="loading-state">
         <el-icon class="is-loading" :size="40"><Loading /></el-icon>
@@ -50,78 +50,62 @@
       <div v-else-if="detailError" class="error-state">{{ detailError }}</div>
 
       <!-- Main Equipment View -->
-      <div v-else class="equipment-view">
-        <div
-          class="station-frame"
-          @contextmenu.prevent="showStationMenu($event, stationId)"
-          title="右键菜单"
-        >
-          <div class="station-frame-header">
-            <div class="frame-header-left">
-              <span class="frame-icon"><Cpu /></span>
-              <span class="frame-title">{{ station?.name || '测试工站' }}</span>
-              <span class="frame-subtitle">{{ station?.process_type || '' }}{{ station?.workstation ? ' / ' + station.workstation : '' }}</span>
-            </div>
-            <div class="frame-header-right">
-              <span class="param-link" @click.stop="openParamsPanel()">
-                <el-icon><Setting /></el-icon> 参数设置
+      <div v-else class="equipment-view" :class="{ 'single-cab': cabinets.length === 1 }"
+        @contextmenu.prevent="showStationMenu($event, stationId)"
+        title="右键菜单"
+      >
+        <!-- Cabinet Row -->
+        <div v-if="cabinets.length === 0" class="empty-cabinets">
+          <el-icon :size="32"><FolderOpened /></el-icon>
+          <p>该装备暂无机柜</p>
+        </div>
+        <div v-else class="cabinet-row">
+          <div
+            v-for="cab in cabinets"
+            :key="cab.id"
+            class="cabinet-unit"
+            @contextmenu.stop.prevent="showCabinetMenu($event, cab)"
+          >
+            <div class="cabinet-unit-header">
+              <span class="cabinet-unit-name">{{ cab.name }}</span>
+              <span class="cabinet-param-link" @click.stop="showCabinetParams(cab.id)">
+                <el-icon><Setting /></el-icon>
               </span>
             </div>
-          </div>
 
-          <!-- Cabinet Row -->
-          <div v-if="cabinets.length === 0" class="empty-cabinets">
-            <el-icon :size="32"><FolderOpened /></el-icon>
-            <p>该装备暂无机柜</p>
-          </div>
-          <div v-else class="cabinet-row">
-            <div
-              v-for="cab in cabinets"
-              :key="cab.id"
-              class="cabinet-unit"
-              @contextmenu.stop.prevent="showCabinetMenu($event, cab)"
-            >
-              <div class="cabinet-unit-header">
-                <span class="cabinet-unit-name">{{ cab.name }}</span>
-                <span class="cabinet-param-link" @click.stop="showCabinetParams(cab.id)">
-                  <el-icon><Setting /></el-icon>
-                </span>
-              </div>
+            <!-- Chassis inside cabinet -->
+            <div class="chassis-list">
+              <div
+                v-for="ch in cab.chassis_list"
+                :key="ch.id"
+                class="chassis-unit"
+                @contextmenu.stop.prevent="showChassisMenu($event, ch)"
+              >
+                <div class="chassis-unit-header">
+                  <span class="chassis-unit-name">{{ ch.name }}</span>
+                  <span class="chassis-slot-count">{{ ch.slot_count }} 槽</span>
+                  <span class="chassis-param-link" @click.stop="showChassisParams(ch.id)">
+                    <el-icon><Setting /></el-icon>
+                  </span>
+                </div>
 
-              <!-- Chassis inside cabinet -->
-              <div class="chassis-list">
-                <div
-                  v-for="ch in cab.chassis_list"
-                  :key="ch.id"
-                  class="chassis-unit"
-                  @contextmenu.stop.prevent="showChassisMenu($event, ch)"
-                >
-                  <div class="chassis-unit-header">
-                    <span class="chassis-unit-name">{{ ch.name }}</span>
-                    <span class="chassis-slot-count">{{ ch.slot_count }} 槽</span>
-                    <span class="chassis-param-link" @click.stop="showChassisParams(ch.id)">
-                      <el-icon><Setting /></el-icon>
-                    </span>
-                  </div>
-
-                  <!-- Slots grid -->
-                  <div class="slot-grid">
-                    <div
-                      v-for="slot in ch.slots"
-                      :key="slot.id"
-                      class="slot-cell"
-                      :class="'slot-' + slot.status"
-                      @click="selectSlot(slot)"
-                      @dblclick="openScanDialog(slot)"
-                      @contextmenu.stop.prevent="showSlotMenu($event, slot, ch)"
-                    >
-                      <div class="slot-led" :class="'led-' + slot.status" />
-                      <div class="slot-name">{{ slot.name.replace('槽位 ', 'S') }}</div>
-                      <div class="slot-status">{{ slotStatusLabel(slot.status) }}</div>
-                      <div v-if="slot.current_batch_id" class="slot-batch" :title="slot.current_batch_id">#{{ slot.current_batch_id.slice(-6) }}</div>
-                      <div class="slot-progress" :class="{ active: slot.status === 'testing' }">
-                        <div class="slot-progress-bar" :style="{ width: slot.status === 'pass' ? '100%' : slot.status === 'fail' ? '100%' : slot.status === 'testing' ? '60%' : '0%' }" />
-                      </div>
+                <!-- Slots grid -->
+                <div class="slot-grid" :style="{ gridTemplateColumns: 'repeat(' + ch.slots.length + ', 1fr)' }">
+                  <div
+                    v-for="slot in ch.slots"
+                    :key="slot.id"
+                    class="slot-cell"
+                    :class="'slot-' + slot.status"
+                    @click="selectSlot(slot)"
+                    @dblclick="openScanDialog(slot)"
+                    @contextmenu.stop.prevent="showSlotMenu($event, slot, ch)"
+                  >
+                    <div class="slot-led" :class="'led-' + slot.status" />
+                    <div class="slot-name">{{ slot.name.replace('槽位 ', 'S') }}</div>
+                    <div class="slot-status">{{ slotStatusLabel(slot.status) }}</div>
+                    <div v-if="slot.current_batch_id" class="slot-batch" :title="slot.current_batch_id">#{{ slot.current_batch_id.slice(-6) }}</div>
+                    <div class="slot-progress" :class="{ active: slot.status === 'testing' }">
+                      <div class="slot-progress-bar" :style="{ width: slot.status === 'pass' ? '100%' : slot.status === 'fail' ? '100%' : slot.status === 'testing' ? '60%' : '0%' }" />
                     </div>
                   </div>
                 </div>
@@ -381,6 +365,92 @@
       </template>
     </el-dialog>
 
+    <!-- Cabinet Params Dialog -->
+    <el-dialog v-model="cabinetParamsVisible" title="机柜参数设置" width="560px" append-to-body destroy-on-close>
+      <div style="margin-bottom: 12px; text-align: right;">
+        <el-button type="primary" size="small" @click="addCabinetParam">添加参数</el-button>
+      </div>
+      <el-table :data="cabinetParamsList" border size="small" max-height="400">
+        <el-table-column prop="param_name" label="参数名" />
+        <el-table-column prop="param_value" label="参数值" />
+        <el-table-column prop="group_name" label="分组" width="100" />
+        <el-table-column label="操作" width="120" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="editCabinetParam(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click="deleteCabinetParamItem(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="cabinetParamsVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Cabinet Param Edit Dialog -->
+    <el-dialog v-model="cabinetParamDialogVisible" :title="cabinetParamDialogEdit ? '编辑参数' : '新建参数'" width="460px" append-to-body destroy-on-close>
+      <el-form :model="cabinetParamForm" label-width="100px">
+        <el-form-item label="参数名">
+          <el-input v-model="cabinetParamForm.param_name" />
+        </el-form-item>
+        <el-form-item label="参数值">
+          <el-input v-model="cabinetParamForm.param_value" />
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-input v-model="cabinetParamForm.group_name" placeholder="default" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="cabinetParamForm.sort_order" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cabinetParamDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveCabinetParam">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Chassis Params Dialog -->
+    <el-dialog v-model="chassisParamsVisible" title="机框参数设置" width="560px" append-to-body destroy-on-close>
+      <div style="margin-bottom: 12px; text-align: right;">
+        <el-button type="primary" size="small" @click="addChassisParam">添加参数</el-button>
+      </div>
+      <el-table :data="chassisParamsList" border size="small" max-height="400">
+        <el-table-column prop="param_name" label="参数名" />
+        <el-table-column prop="param_value" label="参数值" />
+        <el-table-column prop="group_name" label="分组" width="100" />
+        <el-table-column label="操作" width="120" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="editChassisParam(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click="deleteChassisParamItem(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="chassisParamsVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Chassis Param Edit Dialog -->
+    <el-dialog v-model="chassisParamDialogVisible" :title="chassisParamDialogEdit ? '编辑参数' : '新建参数'" width="460px" append-to-body destroy-on-close>
+      <el-form :model="chassisParamForm" label-width="100px">
+        <el-form-item label="参数名">
+          <el-input v-model="chassisParamForm.param_name" />
+        </el-form-item>
+        <el-form-item label="参数值">
+          <el-input v-model="chassisParamForm.param_value" />
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-input v-model="chassisParamForm.group_name" placeholder="default" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="chassisParamForm.sort_order" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="chassisParamDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveChassisParam">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Batch Replace Dialog -->
     <el-dialog v-model="showBatchReplace" title="批量替换硬件参数" width="560px" append-to-body destroy-on-close>
       <p class="text-sm text-gray-400 mb-2">每行一个，格式：参数名=参数值</p>
@@ -393,42 +463,41 @@
 
     <!-- Log Panel -->
     <div v-if="showLogPanel" class="log-panel" :style="{ height: logPanelHeight + 'px' }">
-      <div class="log-resize-handle" @mousedown="startResize" />
-      <div class="log-panel-header">
-        <span><span class="log-led" /> 运行日志</span>
-        <div class="log-header-actions">
-          <span class="log-header-btn" @click="logs = []">清空</span>
-          <span class="log-header-btn" @click="showLogPanel = false">隐藏</span>
-        </div>
-      </div>
-      <div class="log-panel-body-wrapper">
-        <div class="log-filter-sidebar">
-          <div
-            v-for="level in logLevels"
-            :key="level.key"
-            class="log-filter-item"
-            :class="{ active: logFilter === level.key }"
-            :style="{ color: level.color, borderLeftColor: logFilter === level.key ? level.color : 'transparent' }"
-            @click="logFilter = level.key"
-          >
-            <span class="filter-label">{{ level.label }}</span>
+        <div class="log-resize-handle" @mousedown="startResize" />
+        <div class="log-panel-header">
+          <span><span class="log-led" /> 运行日志</span>
+          <div class="log-header-actions">
+            <span class="log-header-btn" @click="logs = []">清空</span>
+            <span class="log-header-btn" @click="showLogPanel = false">隐藏</span>
           </div>
         </div>
-        <div class="log-panel-body" ref="logBodyRef">
-          <div v-for="(l, i) in filteredLogs" :key="i" class="log-line" :class="'log-' + l.level">
-            <span class="log-time">{{ l.time }}</span>
-            <span class="log-msg">{{ l.message }}</span>
+        <div class="log-panel-body-wrapper">
+          <div class="log-filter-sidebar">
+            <div
+              v-for="level in logLevels"
+              :key="level.key"
+              class="log-filter-item"
+              :class="{ active: logFilter === level.key }"
+              :style="{ color: level.color, borderLeftColor: logFilter === level.key ? level.color : 'transparent' }"
+              @click="logFilter = level.key"
+            >
+              <span class="filter-label">{{ level.label }}</span>
+            </div>
           </div>
-          <div v-if="logs.length === 0" class="log-empty">等待测试事件...</div>
+          <div class="log-panel-body" ref="logBodyRef">
+            <div v-for="(l, i) in filteredLogs" :key="i" class="log-line" :class="'log-' + l.level">
+              <span class="log-time">{{ l.time }}</span>
+              <span class="log-msg">{{ l.message }}</span>
+            </div>
+            <div v-if="logs.length === 0" class="log-empty">等待测试事件...</div>
+          </div>
         </div>
       </div>
-    </div>
-    <button v-else class="log-float-btn" @click="showLogPanel = true">日志</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { stationApi } from '@/api/station'
 import { versionApi } from '@/api/version'
@@ -436,7 +505,7 @@ import { testApi } from '@/api/test'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { slotStatusLabel } from '@/utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Cpu, Setting, Memo, FolderOpened, Loading, Refresh, Delete, Close } from '@element-plus/icons-vue'
+import { Setting, Memo, FolderOpened, Loading, Refresh, Delete, Close } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -478,6 +547,24 @@ const hwDialogVisible = ref(false)
 const hwDialogEdit = ref(false)
 const hwDialogId = ref(0)
 const hwForm = reactive({ param_name: '', param_value: '', group_name: 'default', sort_order: 0 })
+
+// Cabinet params
+const cabinetParamsVisible = ref(false)
+const cabinetParamsCabinetId = ref(0)
+const cabinetParamsList = ref<any[]>([])
+const cabinetParamDialogVisible = ref(false)
+const cabinetParamDialogEdit = ref(false)
+const cabinetParamDialogId = ref(0)
+const cabinetParamForm = reactive({ param_name: '', param_value: '', group_name: 'default', sort_order: 0 })
+
+// Chassis params
+const chassisParamsVisible = ref(false)
+const chassisParamsChassisId = ref(0)
+const chassisParamsList = ref<any[]>([])
+const chassisParamDialogVisible = ref(false)
+const chassisParamDialogEdit = ref(false)
+const chassisParamDialogId = ref(0)
+const chassisParamForm = reactive({ param_name: '', param_value: '', group_name: 'default', sort_order: 0 })
 
 // Software config + version cascade
 const softForm = ref<any>(null)
@@ -597,13 +684,48 @@ function startResize(e: MouseEvent) {
 function onResize(e: MouseEvent) {
   if (!resizeState) return
   const dy = resizeState.startY - e.clientY
-  logPanelHeight.value = Math.max(80, Math.min(600, resizeState.startH + dy))
+  logPanelHeight.value = Math.max(80, resizeState.startH + dy)
 }
 function stopResize() {
   resizeState = null
   document.removeEventListener('mousemove', onResize)
   document.removeEventListener('mouseup', stopResize)
 }
+
+function applyLogLayout(open: boolean) {
+  const app = document.getElementById('app') as HTMLElement | null
+  if (!app) return
+  if (open) {
+    app.style.setProperty('height', 'auto', 'important')
+    app.style.setProperty('overflow', 'auto', 'important')
+    const hScreen = app.querySelector('.h-screen') as HTMLElement | null
+    if (hScreen) hScreen.style.setProperty('height', 'auto', 'important')
+    const inner = hScreen?.children[1] as HTMLElement | null
+    if (inner) { inner.style.setProperty('height', 'auto', 'important'); inner.style.setProperty('flex', 'none', 'important') }
+    const elMain = inner?.querySelector('.el-main') as HTMLElement | null
+    if (elMain) {
+      elMain.style.setProperty('flex', 'none', 'important')
+      elMain.style.setProperty('height', 'auto', 'important')
+      elMain.style.setProperty('overflow', 'visible', 'important')
+    }
+    const mon = app.querySelector('.station-monitor') as HTMLElement | null
+    if (mon) mon.style.setProperty('height', 'auto', 'important')
+  } else {
+    app.style.removeProperty('height'); app.style.removeProperty('overflow')
+    const hScreen = app.querySelector('.h-screen') as HTMLElement | null
+    if (hScreen) hScreen.style.removeProperty('height')
+    const inner = hScreen?.children[1] as HTMLElement | null
+    if (inner) { inner.style.removeProperty('height'); inner.style.removeProperty('flex') }
+    const elMain = inner?.querySelector('.el-main') as HTMLElement | null
+    if (elMain) { elMain.style.removeProperty('flex'); elMain.style.removeProperty('height'); elMain.style.removeProperty('overflow') }
+    const mon = app.querySelector('.station-monitor') as HTMLElement | null
+    if (mon) mon.style.removeProperty('height')
+  }
+}
+
+watch(showLogPanel, (v) => {
+  nextTick(() => applyLogLayout(v))
+})
 
 function addLog(level: string, message: string) {
   const now = new Date()
@@ -776,12 +898,92 @@ async function showStationParams() {
   paramsLoading.value = false
 }
 
-function showCabinetParams(id: number) {
-  ElMessage.info('机柜级参数设置待开发')
+async function showCabinetParams(id: number) {
+  cabinetParamsCabinetId.value = id
+  cabinetParamsVisible.value = true
+  try {
+    const res = await stationApi.listCabinetParams(id)
+    cabinetParamsList.value = res.data || []
+  } catch { cabinetParamsList.value = [] }
 }
 
-function showChassisParams(id: number) {
-  ElMessage.info('机框级参数设置待开发')
+function addCabinetParam() {
+  cabinetParamDialogEdit.value = false
+  cabinetParamDialogId.value = 0
+  Object.assign(cabinetParamForm, { param_name: '', param_value: '', group_name: 'default', sort_order: 0 })
+  cabinetParamDialogVisible.value = true
+}
+
+function editCabinetParam(row: any) {
+  cabinetParamDialogEdit.value = true
+  cabinetParamDialogId.value = row.id
+  Object.assign(cabinetParamForm, { param_name: row.param_name, param_value: row.param_value, group_name: row.group_name, sort_order: row.sort_order })
+  cabinetParamDialogVisible.value = true
+}
+
+async function saveCabinetParam() {
+  try {
+    if (cabinetParamDialogEdit.value) {
+      await stationApi.updateCabinetParam(cabinetParamDialogId.value, { ...cabinetParamForm })
+    } else {
+      await stationApi.createCabinetParam(cabinetParamsCabinetId.value, { ...cabinetParamForm })
+    }
+    cabinetParamDialogVisible.value = false
+    showCabinetParams(cabinetParamsCabinetId.value)
+    ElMessage.success('保存成功')
+  } catch { /* empty */ }
+}
+
+async function deleteCabinetParamItem(id: number) {
+  try {
+    await stationApi.deleteCabinetParam(id)
+    showCabinetParams(cabinetParamsCabinetId.value)
+    ElMessage.success('删除成功')
+  } catch { /* empty */ }
+}
+
+async function showChassisParams(id: number) {
+  chassisParamsChassisId.value = id
+  chassisParamsVisible.value = true
+  try {
+    const res = await stationApi.listChassisParams(id)
+    chassisParamsList.value = res.data || []
+  } catch { chassisParamsList.value = [] }
+}
+
+function addChassisParam() {
+  chassisParamDialogEdit.value = false
+  chassisParamDialogId.value = 0
+  Object.assign(chassisParamForm, { param_name: '', param_value: '', group_name: 'default', sort_order: 0 })
+  chassisParamDialogVisible.value = true
+}
+
+function editChassisParam(row: any) {
+  chassisParamDialogEdit.value = true
+  chassisParamDialogId.value = row.id
+  Object.assign(chassisParamForm, { param_name: row.param_name, param_value: row.param_value, group_name: row.group_name, sort_order: row.sort_order })
+  chassisParamDialogVisible.value = true
+}
+
+async function saveChassisParam() {
+  try {
+    if (chassisParamDialogEdit.value) {
+      await stationApi.updateChassisParam(chassisParamDialogId.value, { ...chassisParamForm })
+    } else {
+      await stationApi.createChassisParam(chassisParamsChassisId.value, { ...chassisParamForm })
+    }
+    chassisParamDialogVisible.value = false
+    showChassisParams(chassisParamsChassisId.value)
+    ElMessage.success('保存成功')
+  } catch { /* empty */ }
+}
+
+async function deleteChassisParamItem(id: number) {
+  try {
+    await stationApi.deleteChassisParam(id)
+    showChassisParams(chassisParamsChassisId.value)
+    ElMessage.success('删除成功')
+  } catch { /* empty */ }
 }
 
 // ── Equipment params ──
@@ -1054,12 +1256,13 @@ onUnmounted(() => {
   for (const { event, handler } of wsHandlers) wsOff(event, handler)
   document.removeEventListener('click', closeCtx)
   stopResize()
+  applyLogLayout(false)
 })
 </script>
 
 <style scoped>
-.station-monitor { padding: 4px 0; min-height: calc(100vh - 80px); color: #e0e0e0;
-  display: flex; flex-direction: column; height: 100%; }
+.station-monitor { padding: 4px 0; color: #e0e0e0;
+  display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 /* Header */
 .monitor-header {
@@ -1098,48 +1301,40 @@ onUnmounted(() => {
 .loading-state .is-loading { animation: spin 1s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* Equipment View - Industrial style */
+/* Equipment View */
 .equipment-view {
   background: #0d1b2a;
   border: 1px solid #1b2d3e;
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px 4px;
   min-height: 200px;
+  margin: 10px 0 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
-
-.station-frame {
-  background: #0f1e2f;
-  border: 1px solid #1e3350;
-  border-radius: 6px;
+.equipment-view.single-cab .cabinet-row {
+  justify-content: center;
 }
-.station-frame-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 10px;
-  background: linear-gradient(90deg, #152238 0%, #1a2d47 100%);
-  border-bottom: 1px solid #1e3350;
-  cursor: default;
+.equipment-view.single-cab .cabinet-unit {
+  max-width: none;
 }
-.frame-header-left { display: flex; align-items: center; gap: 6px; }
-.frame-icon { color: #4fc3f7; font-size: 1rem; }
-.frame-title { font-weight: 700; font-size: 0.85rem; color: #e0e0e0; }
-.frame-subtitle { font-size: 0.65rem; color: #64b5f6; text-transform: uppercase; }
-.frame-header-right { display: flex; align-items: center; gap: 6px; }
-.param-link {
-  font-size: 0.7rem; color: #90a4ae; cursor: pointer; display: flex; align-items: center; gap: 2px;
+.equipment-view.single-cab .slot-grid {
+  display: grid;
+  gap: 8px;
+  flex: 1;
 }
-.param-link:hover { color: #4fc3f7; }
 
 .empty-cabinets { text-align: center; padding: 40px 0; color: #546e7a; }
 
 /* Cabinet Row */
-.cabinet-row { display: flex; gap: 10px; padding: 8px; flex-wrap: wrap; justify-content: center; }
+.cabinet-row { display: flex; gap: 12px; padding: 8px; flex-wrap: wrap; justify-content: center; }
 .cabinet-unit {
   background: #112233;
   border: 1px solid #1e3350;
   border-radius: 6px;
-  min-width: 260px;
-  max-width: 380px;
-  flex: 0 1 auto;
+  min-width: 320px;
+  max-width: 480px;
+  flex: 1 1 auto;
 }
 .cabinet-unit-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -1158,25 +1353,25 @@ onUnmounted(() => {
   background: #0a1929;
   border: 1px solid #1a2d47;
   border-radius: 6px;
-  padding: 6px;
+  padding: 10px;
 }
 .chassis-unit-header {
   display: flex; align-items: center; gap: 6px;
-  margin-bottom: 4px; padding-bottom: 4px;
+  margin-bottom: 6px; padding-bottom: 6px;
   border-bottom: 1px solid #1a2d47;
   cursor: default;
 }
-.chassis-unit-name { font-weight: 600; font-size: 0.78rem; color: #b0c4de; }
-.chassis-slot-count { margin-left: auto; font-size: 0.65rem; color: #546e7a; }
+.chassis-unit-name { font-weight: 600; font-size: 0.82rem; color: #b0c4de; }
+.chassis-slot-count { margin-left: auto; font-size: 0.68rem; color: #546e7a; }
 .chassis-param-link { color: #546e7a; cursor: pointer; font-size: 0.75rem; }
 .chassis-param-link:hover { color: #4fc3f7; }
 
-/* Slot Grid */
-.slot-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Slot Grid - 固定4列 */
+.slot-grid { display: grid; gap: 6px; }
 .slot-cell {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: 76px; height: 58px;
+  height: 72px;
   border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1220,8 +1415,8 @@ onUnmounted(() => {
 .slot-cell.slot-disabled {
   background: #121e2c; border: 1px solid #263543; color: #455a64; opacity: 0.6; cursor: default;
 }
-.slot-name { font-weight: 600; font-size: 0.8rem; line-height: 1.2; }
-.slot-status { font-size: 0.6rem; line-height: 1; }
+.slot-name { font-weight: 600; font-size: 0.85rem; line-height: 1.2; }
+.slot-status { font-size: 0.65rem; line-height: 1; }
 .slot-batch {
   font-size: 0.55rem; color: #546e7a; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1275,71 +1470,6 @@ onUnmounted(() => {
 .scan-progress { margin-top: 16px; }
 .scan-status { text-align: center; font-size: 0.8rem; color: #809ab3; margin-top: 4px; }
 
-/* Log panel */
-.log-panel {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 1050;
-  background: #0d1b2a;
-  border-top: 2px solid #1976d2; display: flex; flex-direction: column;
-  font-family: 'SF Mono','Consolas',monospace; font-size: 0.78rem;
-}
-.log-resize-handle {
-  position: absolute; top: -4px; left: 0; right: 0; height: 8px;
-  cursor: ns-resize; z-index: 1;
-}
-.log-resize-handle:hover { background: rgba(100,181,246,0.15); }
-.log-panel-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 4px 14px; background: #0a1522;
-  border-bottom: 1px solid #1e3350; color: #b0c4de; flex-shrink: 0;
-}
-.log-led { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #00e676; box-shadow: 0 0 4px #00e676; margin-right: 6px; }
-.log-header-actions { display: flex; gap: 8px; }
-.log-header-btn { font-size: 0.75rem; cursor: pointer; color: #546e7a; }
-.log-header-btn:hover { color: #b0c4de; }
-.log-panel-body-wrapper {
-  display: flex; flex: 1; overflow: hidden;
-}
-
-/* Filter sidebar - compact colored labels */
-.log-filter-sidebar {
-  width: 44px; flex-shrink: 0;
-  display: flex; flex-direction: column;
-  border-right: 1px solid #1e3350;
-  padding: 6px 0;
-  background: #0a1522;
-  align-items: stretch;
-}
-.log-filter-item {
-  display: flex; align-items: center; justify-content: center;
-  padding: 5px 2px; cursor: pointer;
-  font-size: 0.7rem; font-weight: 700;
-  transition: all 0.1s;
-  border-left: 3px solid transparent;
-  writing-mode: horizontal-tb;
-  text-align: center;
-}
-.log-filter-item:hover { background: #1a2d47; }
-.log-filter-item.active { background: rgba(255,255,255,0.05); }
-.filter-label { line-height: 1.2; }
-
-.log-panel-body { flex: 1; overflow-y: auto; padding: 2px 0; }
-.log-line {
-  padding: 1px 10px; display: flex; gap: 8px; align-items: baseline;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-.log-time { color: #546e7a; flex-shrink: 0; min-width: 70px; }
-.log-msg { color: #b0c4de; word-break: break-all; }
-.log-info .log-msg { color: #b0c4de; }
-.log-warn .log-msg { color: #ffc107; font-weight: 600; }
-.log-error .log-msg { color: #ef5350; font-weight: 600; }
-.log-empty { color: #546e7a; text-align: center; padding: 8px; }
-.log-float-btn {
-  position: fixed; bottom: 8px; right: 16px; z-index: 1060;
-  background: #1a2332; color: #64b5f6; border: 1px solid #2d4055;
-  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
-}
-.log-float-btn:hover { background: #243044; }
-
 /* Version cascade */
 .hw-params-preview { display: flex; flex-wrap: wrap; gap: 4px; }
 .version-cascade .el-form-item { margin-bottom: 0; }
@@ -1361,11 +1491,7 @@ onUnmounted(() => {
 
 /* Main content flex layout */
 .main-content {
-  display: flex; flex: 1; overflow: hidden; min-height: 0;
-}
-.equipment-view {
-  flex: 1; overflow-y: auto; padding: 10px;
-  min-width: 0;
+  display: flex; flex: 1; min-height: 0; overflow: auto;
 }
 
 /* Params Panel - light theme for visual differentiation */
@@ -1458,4 +1584,61 @@ onUnmounted(() => {
 .params-tabs.el-tabs--top > .el-tabs__header { background: #ffffff; margin-bottom: 10px; border-radius: 6px 6px 0 0; }
 .params-tabs .el-tabs__item { height: 32px; line-height: 32px; font-size: 0.8rem; }
 .params-tabs .el-tabs__active-bar { background: #1976d2; }
+</style>
+
+<style>
+.log-panel {
+  flex-shrink: 0;
+  position: relative;
+  background: #0d1b2a;
+  border-top: 2px solid #1976d2; display: flex; flex-direction: column;
+  font-family: 'SF Mono','Consolas',monospace; font-size: 0.78rem;
+}
+.log-resize-handle {
+  position: absolute; top: -4px; left: 0; right: 0; height: 8px;
+  cursor: ns-resize; z-index: 1;
+}
+.log-resize-handle:hover { background: rgba(100,181,246,0.15); }
+.log-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 14px; background: #0a1522;
+  border-bottom: 1px solid #1e3350; color: #b0c4de; flex-shrink: 0;
+}
+.log-led { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #00e676; box-shadow: 0 0 4px #00e676; margin-right: 6px; }
+.log-header-actions { display: flex; gap: 8px; }
+.log-header-btn { font-size: 0.75rem; cursor: pointer; color: #546e7a; }
+.log-header-btn:hover { color: #b0c4de; }
+.log-panel-body-wrapper {
+  display: flex; flex: 1; overflow: hidden;
+}
+.log-filter-sidebar {
+  width: 44px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  border-right: 1px solid #1e3350;
+  padding: 6px 0;
+  background: #0a1522;
+  align-items: stretch;
+}
+.log-filter-item {
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px 2px; cursor: pointer;
+  font-size: 0.7rem; font-weight: 700;
+  transition: all 0.1s;
+  border-left: 3px solid transparent;
+  text-align: center;
+}
+.log-filter-item:hover { background: #1a2d47; }
+.log-filter-item.active { background: rgba(255,255,255,0.05); }
+.filter-label { line-height: 1.2; }
+.log-panel-body { flex: 1; overflow-y: auto; padding: 2px 0; }
+.log-line {
+  padding: 1px 10px; display: flex; gap: 8px; align-items: baseline;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.log-time { color: #546e7a; flex-shrink: 0; min-width: 70px; }
+.log-msg { color: #b0c4de; word-break: break-all; }
+.log-info .log-msg { color: #b0c4de; }
+.log-warn .log-msg { color: #ffc107; font-weight: 600; }
+.log-error .log-msg { color: #ef5350; font-weight: 600; }
+.log-empty { color: #546e7a; text-align: center; padding: 8px; }
 </style>

@@ -30,6 +30,7 @@ COPY_TABLES = [
     "bom_config", "collection_test_item",
     "factories", "production_lines", "equipment_definitions",
     "test_stations", "cabinets", "test_chassis", "test_slots",
+    "cabinet_params", "chassis_params",
     "equipment_configs", "equipment_metrics", "equipment_property_pages",
     "scenario_configs", "software_configs",
     "bom_indicator", "test_item_indicator",

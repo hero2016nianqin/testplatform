@@ -157,6 +157,52 @@ class CabinetResp(BaseModel):
     chassis_list: List[ChassisResp] = []
 
 
+class CabinetParamResp(BaseModel):
+    id: int
+    cabinet_id: int
+    param_name: str
+    param_value: str
+    group_name: str
+    sort_order: int
+
+
+class CabinetParamCreateReq(BaseModel):
+    param_name: str
+    param_value: str = ""
+    group_name: str = "default"
+    sort_order: int = 0
+
+
+class CabinetParamUpdateReq(BaseModel):
+    param_name: Optional[str] = None
+    param_value: Optional[str] = None
+    group_name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class ChassisParamResp(BaseModel):
+    id: int
+    chassis_id: int
+    param_name: str
+    param_value: str
+    group_name: str
+    sort_order: int
+
+
+class ChassisParamCreateReq(BaseModel):
+    param_name: str
+    param_value: str = ""
+    group_name: str = "default"
+    sort_order: int = 0
+
+
+class ChassisParamUpdateReq(BaseModel):
+    param_name: Optional[str] = None
+    param_value: Optional[str] = None
+    group_name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
 class StationDetailResp(BaseModel):
     station: StationResp
     cabinets: List[CabinetResp] = []

@@ -208,7 +208,7 @@
     <el-dialog
       v-model="defDialog.visible"
       :title="defDialog.isEdit ? '编辑装备定义' : '新建装备定义'"
-      width="860px"
+      width="1000px"
       :close-on-click-modal="false"
       destroy-on-close
     >
@@ -242,47 +242,49 @@
           <p class="text-gray-400 text-sm mt-2">暂无机柜，点击下方按钮添加</p>
         </div>
 
-        <div v-for="(cab, ci) in layoutCabinets" :key="ci" class="layout-cabinet">
-          <div class="cabinet-head">
-            <el-icon :size="18" color="#409EFF"><Cpu /></el-icon>
-            <el-input v-model="cab.name" class="cabinet-name-input" size="small" placeholder="机柜名称" />
-            <el-tag size="small" type="info" class="ml-1">{{ cab.chassis.length }} 个机框</el-tag>
-            <div class="cabinet-actions">
-              <el-button size="small" @click="addChassis(ci)">
-                <el-icon><Plus /></el-icon> 机框
-              </el-button>
-              <el-button size="small" type="danger" plain @click="removeCabinet(ci)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </div>
-          </div>
-
-          <div v-if="cab.chassis.length === 0" class="chassis-empty">
-            暂无机框，点击上方「机框」按钮添加
-          </div>
-
-          <div v-for="(ch, si) in cab.chassis" :key="si" class="layout-chassis">
-            <div class="chassis-head">
-              <span class="chassis-icon">📦</span>
-              <el-input v-model="ch.name" class="chassis-name-input" size="small" placeholder="机框名称" />
-              <span class="slot-label ml-auto">槽位:</span>
-              <el-input-number v-model="ch.slot_count" :min="1" :max="48" size="small" class="slot-count-input" controls-position="right" />
-              <el-button size="small" circle text @click="removeChassis(ci, si)">
-                <el-icon><Close /></el-icon>
-              </el-button>
-            </div>
-            <!-- Slot Visual Preview -->
-            <div class="slot-preview">
-              <div
-                v-for="s in Math.min(ch.slot_count, 24)"
-                :key="s"
-                class="slot-dot"
-                :title="'槽位 ' + s"
-              >
-                <span class="slot-dot-label">S{{ s }}</span>
+        <div class="cabinet-row" v-if="layoutCabinets.length > 0">
+          <div v-for="(cab, ci) in layoutCabinets" :key="ci" class="layout-cabinet">
+            <div class="cabinet-head">
+              <el-icon :size="18" color="#67c23a"><Cpu /></el-icon>
+              <el-input v-model="cab.name" class="cabinet-name-input" size="small" placeholder="机柜名称" />
+              <el-tag size="small" type="info" class="ml-1">{{ cab.chassis.length }} 个机框</el-tag>
+              <div class="cabinet-actions">
+                <el-button size="small" @click="addChassis(ci)">
+                  <el-icon><Plus /></el-icon> 机框
+                </el-button>
+                <el-button size="small" type="danger" plain @click="removeCabinet(ci)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
               </div>
-              <div v-if="ch.slot_count > 24" class="slot-dot slot-dot-more" title="更多槽位">
-                <span class="slot-dot-label">+{{ ch.slot_count - 24 }}</span>
+            </div>
+
+            <div v-if="cab.chassis.length === 0" class="chassis-empty">
+              暂无机框，点击上方「机框」按钮添加
+            </div>
+
+            <div v-for="(ch, si) in cab.chassis" :key="si" class="layout-chassis">
+              <div class="chassis-head">
+                <span class="chassis-icon">📦</span>
+                <el-input v-model="ch.name" class="chassis-name-input" size="small" placeholder="机框名称" />
+                <span class="slot-label ml-auto">槽位:</span>
+                <el-input-number v-model="ch.slot_count" :min="1" :max="48" size="small" class="slot-count-input" controls-position="right" />
+                <el-button size="small" circle text @click="removeChassis(ci, si)">
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </div>
+              <!-- Slot Visual Preview -->
+              <div class="slot-preview">
+                <div
+                  v-for="s in Math.min(ch.slot_count, 24)"
+                  :key="s"
+                  class="slot-dot"
+                  :title="'槽位 ' + s"
+                >
+                  <span class="slot-dot-label">S{{ s }}</span>
+                </div>
+                <div v-if="ch.slot_count > 24" class="slot-dot slot-dot-more" title="更多槽位">
+                  <span class="slot-dot-label">+{{ ch.slot_count - 24 }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -654,57 +656,86 @@ onMounted(async () => {
 
 <style scoped>
 .layout-empty {
-  text-align: center; padding: 24px 0;
+  text-align: center; padding: 32px 0;
   border: 2px dashed #d9d9d9; border-radius: 8px;
   margin-bottom: 12px;
 }
+.cabinet-row {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  align-items: flex-start;
+  width: fit-content;
+}
 .layout-cabinet {
-  border: 1px solid #e4e7ed; border-radius: 8px;
-  margin-bottom: 12px; overflow: hidden;
+  border: 2px solid #b0b8c4; border-radius: 10px;
+  overflow: hidden;
+  background: #1a1d23;
+  min-width: 240px; max-width: 320px;
+  display: inline-flex; flex-direction: column;
+  vertical-align: top;
 }
 .cabinet-head {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px;
-  background: linear-gradient(135deg, #f0f5ff 0%, #e8f0fe 100%);
-  border-bottom: 1px solid #e4e7ed;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #3a3f4a 0%, #2a2f38 100%);
+  border-bottom: 2px solid #555;
+  min-height: 44px;
 }
-.cabinet-name-input { width: 160px; }
+.cabinet-head .el-icon { color: #67c23a; }
+.cabinet-head .el-input__inner { color: #e0e0e0; background: transparent; }
+.cabinet-head .el-tag { background: #3a3f4a; border-color: #555; color: #aaa; }
+.cabinet-head .el-button { margin-left: auto; }
+.cabinet-name-input { width: 130px; }
 .cabinet-actions { margin-left: auto; display: flex; gap: 4px; }
 .chassis-empty {
-  padding: 16px; text-align: center; color: #999; font-size: 0.85rem;
+  padding: 20px; text-align: center; color: #666; font-size: 0.8rem;
 }
 .layout-chassis {
-  margin: 8px 12px;
-  border: 1px solid #ebeef5; border-radius: 6px;
-  background: #fafafa;
+  margin: 6px 8px;
+  border: 1px solid #555; border-radius: 6px;
+  background: #2a2d33;
 }
 .chassis-head {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #ebeef5;
-}
-.chassis-icon { font-size: 1rem; }
-.chassis-name-input { width: 140px; }
-.slot-label { font-size: 0.8rem; color: #909399; margin-right: 4px; }
-.slot-count-input { width: 100px; }
-.slot-preview {
-  display: flex; flex-wrap: wrap; gap: 6px;
   padding: 8px 10px;
+  border-bottom: 1px solid #444;
+  min-height: 40px;
+}
+.chassis-icon { font-size: 0.95rem; }
+.chassis-name-input { width: 120px; }
+.chassis-name-input .el-input__inner { color: #ccc; background: transparent; }
+.slot-label { font-size: 0.78rem; color: #888; margin-right: 4px; font-weight: 500; }
+.slot-count-input { width: 90px; }
+.slot-preview {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 8px 10px;
+  justify-content: flex-start;
 }
 .slot-dot {
-  width: 36px; height: 28px;
+  width: 30px; height: 44px;
   display: flex; align-items: center; justify-content: center;
-  background: #ecf5ff; border: 1px solid #d9ecff;
-  border-radius: 4px; font-size: 0.7rem; color: #409EFF;
-  font-weight: 600;
+  background: linear-gradient(180deg, #2d5a27 0%, #1e3d1a 100%);
+  border: 1px solid #4a8c3f;
+  border-radius: 3px; font-size: 0.7rem; color: #8fd88a;
+  font-weight: 700;
+  transition: all 0.15s;
+  writing-mode: horizontal-tb;
+}
+.slot-dot:hover {
+  background: linear-gradient(180deg, #3a7a33 0%, #2d5a27 100%);
+  border-color: #67c23a;
+  transform: scale(1.08);
+  box-shadow: 0 0 6px rgba(103,194,58,0.4);
 }
 .slot-dot-more {
-  background: #f5f7fa; border-color: #e4e7ed; color: #909399;
+  background: #3a3f4a; border-color: #555; color: #888;
 }
 .slot-dot-label { line-height: 1; }
 .layout-summary {
-  text-align: right; font-size: 0.8rem; color: #909399;
-  margin-top: 8px; padding-top: 8px;
+  text-align: left; font-size: 0.85rem; color: #909399;
+  margin-top: 10px; padding-top: 10px;
   border-top: 1px solid #ebeef5;
+}
+:deep(.el-dialog__body) {
+  overflow-x: auto;
 }
 </style>

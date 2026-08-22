@@ -115,4 +115,30 @@ export const stationApi = {
   updateDefinition(id: number, data: any) {
     return api.put(`/stations/definitions/${id}`, data)
   },
+  // Cabinet Params
+  listCabinetParams(cabinetId: number) {
+    return api.get(`/stations/cabinets/${cabinetId}/params`)
+  },
+  createCabinetParam(cabinetId: number, data: any) {
+    return api.post(`/stations/cabinets/${cabinetId}/params`, data)
+  },
+  updateCabinetParam(paramId: number, data: any) {
+    return api.put(`/stations/cabinet-params/${paramId}`, data)
+  },
+  deleteCabinetParam(paramId: number) {
+    return api.delete(`/stations/cabinet-params/${paramId}`)
+  },
+  // Chassis Params
+  listChassisParams(chassisId: number) {
+    return api.get(`/stations/chassis/${chassisId}/params`)
+  },
+  createChassisParam(chassisId: number, data: any) {
+    return api.post(`/stations/chassis/${chassisId}/params`, data)
+  },
+  updateChassisParam(paramId: number, data: any) {
+    return api.put(`/stations/chassis-params/${paramId}`, data)
+  },
+  deleteChassisParam(paramId: number) {
+    return api.delete(`/stations/chassis-params/${paramId}`)
+  },
 }

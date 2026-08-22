@@ -206,10 +206,4 @@
   background-color: var(--el-color-primary);
 }
 
-/* 日志面板 */
-.log-panel {
-  max-height: 200px;
-  overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-}
+/* 日志面板 - styles moved to StationMonitorView.vue non-scoped block */

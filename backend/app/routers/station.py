@@ -15,6 +15,8 @@ from app.schemas.station import (
     DefinitionCreateReq, DefinitionUpdateReq, DefinitionResp,
     StationCreateReq, StationUpdateReq, StationResp,
     StationDetailResp, CabinetResp, ChassisResp, SlotResp,
+    CabinetParamCreateReq, CabinetParamUpdateReq, CabinetParamResp,
+    ChassisParamCreateReq, ChassisParamUpdateReq, ChassisParamResp,
 )
 from app.schemas.equipment import (
     EquipmentConfigReq, EquipmentConfigResp,
@@ -215,6 +217,72 @@ async def update_slot(
 ):
     s = await svc.update_slot(db, slot_id, req.model_dump(exclude_none=True))
     return success(data=SlotResp(**s.to_dict()), message="槽位更新成功")
+
+
+# ── Cabinet Params ──
+@router.get("/cabinets/{cabinet_id}/params")
+async def list_cabinet_params(cabinet_id: int, db: AsyncSession = Depends(get_db)):
+    params = await svc.list_cabinet_params(db, cabinet_id)
+    return success(data=[CabinetParamResp(**p.to_dict()) for p in params])
+
+
+@router.post("/cabinets/{cabinet_id}/params", dependencies=[Depends(require_process)])
+async def create_cabinet_param(
+    cabinet_id: int,
+    req: CabinetParamCreateReq,
+    db: AsyncSession = Depends(get_db),
+):
+    p = await svc.create_cabinet_param(db, cabinet_id, req.model_dump())
+    return success(data=CabinetParamResp(**p.to_dict()), message="参数创建成功")
+
+
+@router.put("/cabinet-params/{param_id}", dependencies=[Depends(require_process)])
+async def update_cabinet_param(
+    param_id: int,
+    req: CabinetParamUpdateReq,
+    db: AsyncSession = Depends(get_db),
+):
+    p = await svc.update_cabinet_param(db, param_id, req.model_dump(exclude_none=True))
+    return success(data=CabinetParamResp(**p.to_dict()), message="参数更新成功")
+
+
+@router.delete("/cabinet-params/{param_id}", dependencies=[Depends(require_process)])
+async def delete_cabinet_param(param_id: int, db: AsyncSession = Depends(get_db)):
+    await svc.delete_cabinet_param(db, param_id)
+    return success(message="参数已删除")
+
+
+# ── Chassis Params ──
+@router.get("/chassis/{chassis_id}/params")
+async def list_chassis_params(chassis_id: int, db: AsyncSession = Depends(get_db)):
+    params = await svc.list_chassis_params(db, chassis_id)
+    return success(data=[ChassisParamResp(**p.to_dict()) for p in params])
+
+
+@router.post("/chassis/{chassis_id}/params", dependencies=[Depends(require_process)])
+async def create_chassis_param(
+    chassis_id: int,
+    req: ChassisParamCreateReq,
+    db: AsyncSession = Depends(get_db),
+):
+    p = await svc.create_chassis_param(db, chassis_id, req.model_dump())
+    return success(data=ChassisParamResp(**p.to_dict()), message="参数创建成功")
+
+
+@router.put("/chassis-params/{param_id}", dependencies=[Depends(require_process)])
+async def update_chassis_param(
+    param_id: int,
+    req: ChassisParamUpdateReq,
+    db: AsyncSession = Depends(get_db),
+):
+    p = await svc.update_chassis_param(db, param_id, req.model_dump(exclude_none=True))
+    return success(data=ChassisParamResp(**p.to_dict()), message="参数更新成功")
+
+
+@router.delete("/chassis-params/{param_id}", dependencies=[Depends(require_process)])
+async def delete_chassis_param(param_id: int, db: AsyncSession = Depends(get_db)):
+    await svc.delete_chassis_param(db, param_id)
+    return success(message="参数已删除")
 
 
 # ── Equipment Config ──
