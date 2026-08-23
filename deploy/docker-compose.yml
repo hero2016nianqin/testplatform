@@ -27,8 +27,10 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: redis-server /etc/redis/redis.conf
     volumes:
       - redisdata:/data
+      - ./redis.conf:/etc/redis/redis.conf:ro
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -122,8 +124,26 @@ services:
       - backend
     logging: *default-logging
 
+  pg-backup:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-testplatform}
+    volumes:
+      - pgdata_backup:/backups
+      - ./scripts/backup_pg.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "0 2 * * * DB_HOST=postgres DB_PASSWORD=$${PGPASSWORD} /backup.sh >> /var/log/backup.log 2>&1" > /etc/crontabs/root
+        crond -f -l 2
+    logging: *default-logging
+
 volumes:
   pgdata:
   redisdata:
   minio_data:
   backend_logs:
+  pgdata_backup:
