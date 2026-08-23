@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_MAX_CONNECTIONS: int = 50
     REDIS_SESSION_DB: int = 0
     REDIS_CACHE_DB: int = 0
     REDIS_PUBSUB_DB: int = 0

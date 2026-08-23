@@ -25,7 +25,7 @@ def run_sync(coro):
         loop.close()
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def compress_old_logs(self, days: int = 30):
     """
     压缩指定天数前的日志并归档至 MinIO
@@ -89,10 +89,10 @@ def compress_old_logs(self, days: int = 30):
     try:
         return run_sync(_compress())
     except Exception as exc:
-        return {"status": "error", "error": str(exc)}
+        raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def archive_version_files(self, version_id: int):
     """
     将版本二进制文件归档至 MinIO
@@ -124,10 +124,10 @@ def archive_version_files(self, version_id: int):
     try:
         return run_sync(_archive())
     except Exception as exc:
-        return {"version_id": version_id, "error": str(exc)}
+        raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def export_test_records_task(self, run_ids: list[int], format: str = "csv"):
     """异步导出测试记录"""
     async def _export():
@@ -195,4 +195,4 @@ def export_test_records_task(self, run_ids: list[int], format: str = "csv"):
     try:
         return run_sync(_export())
     except Exception as exc:
-        return {"error": str(exc)}
+        raise self.retry(exc=exc)

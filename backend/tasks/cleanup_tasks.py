@@ -21,7 +21,7 @@ def run_sync(coro):
         loop.close()
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def cleanup_expired_runs(self, keep_days: int = 90):
     """
     清理过期测试批次和结果
@@ -67,21 +67,20 @@ def cleanup_expired_runs(self, keep_days: int = 90):
     try:
         return run_sync(_cleanup())
     except Exception as exc:
-        return {"status": "error", "error": str(exc)}
+        raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30)
 def cleanup_old_sessions(self, max_age_hours: int = 48):
-    """清理过期 Redis Session（兜底）"""
+    """清理过期 Redis Session（兜底）使用 SCAN 避免阻塞"""
     async def _cleanup():
         from app.core.redis import get_redis_pool
         from redis.asyncio import Redis
 
         pool = get_redis_pool()
         async with Redis(connection_pool=pool) as r:
-            keys = await r.keys("session:*")
             deleted = 0
-            for key in keys:
+            async for key in r.scan_iter("session:*"):
                 ttl = await r.ttl(key)
                 if ttl < 0:
                     await r.delete(key)
@@ -91,4 +90,4 @@ def cleanup_old_sessions(self, max_age_hours: int = 48):
     try:
         return run_sync(_cleanup())
     except Exception as exc:
-        return {"status": "error", "error": str(exc)}
+        raise self.retry(exc=exc)

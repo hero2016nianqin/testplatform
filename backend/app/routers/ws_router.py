@@ -3,6 +3,7 @@ WebSocket 实时通信端点
 对应 design.md §12 — 心跳/断线重连/4 事件广播
 """
 import asyncio
+import json
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
@@ -11,19 +12,9 @@ router = APIRouter(tags=["WebSocket"])
 # ── BOM 协同编辑 WebSocket (新版：支持编辑状态同步) ──
 
 from app.websockets.bom_ws import (
-    online_users as bom_online_users,
-    broadcast_to_room as broadcast_bom_room,
     get_online_users as get_bom_online_users,
     get_editing_cells as get_bom_editing_cells,
 )
-
-# 保持兼容旧导入
-bom_online_users_dict: dict[str, dict[int, dict]] = {}
-
-# 兼容旧版导出函数
-def get_bom_online_users(room_key: str) -> list[dict]:
-    from app.websockets.bom_ws import get_online_users
-    return get_online_users(room_key)
 
 # 供旧代码调用
 def broadcast_bom_online_users(room_key: str, message: str = ""):
@@ -76,13 +67,35 @@ async def get_bom_editing_cells_http(bom_code: str, version: int):
 # ── 原有 station / global 实时事件 WebSocket（供 useWebSocket 使用） ──
 
 from app.ws.manager import get_manager
+from app.services.auth_service import AuthService
+from app.core.redis import get_redis_pool
+from redis.asyncio import Redis
 
 _manager = get_manager()
+
+
+async def _verify_ws_session(websocket: WebSocket) -> bool:
+    """验证 WebSocket 连接的 session，返回是否通过"""
+    session_id = websocket.cookies.get("session_id")
+    if not session_id:
+        return False
+    r = Redis(connection_pool=get_redis_pool())
+    try:
+        user = await AuthService.get_current_user(r, session_id)
+        return user is not None
+    except Exception:
+        return False
+    finally:
+        await r.aclose()
 
 
 @router.websocket("/ws/stations/{station_id}")
 async def station_websocket(websocket: WebSocket, station_id: int):
     """工位级实时事件推送（run_started/item_tested/run_completed/run_failed）"""
+    if not await _verify_ws_session(websocket):
+        await websocket.close(code=1008, reason="未登录")
+        return
+
     channel = _manager.get_channel_for_station(station_id)
     await _manager.connect(channel, websocket)
     heartbeat_task = asyncio.create_task(_manager.heartbeat(websocket))
@@ -106,6 +119,10 @@ async def station_websocket(websocket: WebSocket, station_id: int):
 @router.websocket("/ws/global")
 async def global_websocket(websocket: WebSocket):
     """全局实时事件推送"""
+    if not await _verify_ws_session(websocket):
+        await websocket.close(code=1008, reason="未登录")
+        return
+
     channel = _manager.get_channel_global()
     await _manager.connect(channel, websocket)
     heartbeat_task = asyncio.create_task(_manager.heartbeat(websocket))

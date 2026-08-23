@@ -168,9 +168,24 @@ async def _push_to_single_station(db, station_id: int, version: TestVersion, arc
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
 def batch_deploy_versions(self, version_ids: list[int]):
-    """批量部署多个版本"""
-    results = []
-    for vid in version_ids:
-        result = push_version_to_station.delay(vid)
-        results.append({"version_id": vid, "task_id": result.id})
-    return results
+    """批量部署多个版本 — 查询每个版本的已审批 deployment 并逐个推送"""
+    async def _batch():
+        results = []
+        async with AsyncSessionLocal() as db:
+            for vid in version_ids:
+                r = await db.execute(
+                    select(ReleaseDeployment).where(
+                        ReleaseDeployment.version_id == vid,
+                        ReleaseDeployment.status == "approved",
+                    )
+                )
+                deps = list(r.scalars().all())
+                for dep in deps:
+                    try:
+                        result = push_version_to_station.delay(dep.id)
+                        results.append({"deployment_id": dep.id, "version_id": vid, "task_id": result.id})
+                    except Exception as e:
+                        results.append({"deployment_id": dep.id, "version_id": vid, "error": str(e)})
+        return results
+
+    return run_sync(_batch())
