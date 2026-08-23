@@ -1185,8 +1185,12 @@ async function forceRestartStation(id: number) {
 async function forceRestartCabinet(id: number) {
   try {
     const res = await stationApi.forceRestartCabinet(id)
-    const count = res.data?.data?.reset_count ?? 0
-    addLog('warn', `强制重启机柜 ${id}，已重置 ${count} 个槽位`)
+    const info = res.data?.data
+    const count = info?.reset_count ?? 0
+    const details = (info?.chassis || []).map((ch: any) =>
+      `${ch.chassis_name}(${ch.slot_names.join(',')})`
+    ).join('、')
+    addLog('warn', `强制重启机柜 ${info?.cabinet_name || id}，已重置 ${count} 个槽位: ${details}`)
     ElMessage.success(`已重置 ${count} 个槽位`)
     await loadFullDetail()
   } catch (e: any) {
@@ -1197,8 +1201,10 @@ async function forceRestartCabinet(id: number) {
 async function forceRestartChassis(id: number) {
   try {
     const res = await stationApi.forceRestartChassis(id)
-    const count = res.data?.data?.reset_count ?? 0
-    addLog('warn', `强制重启机框 ${id}，已重置 ${count} 个槽位`)
+    const info = res.data?.data
+    const count = info?.reset_count ?? 0
+    const slotNames = (info?.slot_names || []).join(',')
+    addLog('warn', `强制重启机框 ${info?.chassis_name || id}，已重置 ${count} 个槽位: ${slotNames}`)
     ElMessage.success(`已重置 ${count} 个槽位`)
     await loadFullDetail()
   } catch (e: any) {

@@ -439,11 +439,11 @@ async def get_station_deployed_archives(station_id: int, db: AsyncSession = Depe
 # ── Force Restart ──
 @router.post("/chassis/{chassis_id}/restart", dependencies=[Depends(require_process)])
 async def force_restart_chassis(chassis_id: int, db: AsyncSession = Depends(get_db)):
-    count = await svc.force_restart_chassis(db, chassis_id)
-    return success(data={"reset_count": count}, message=f"已重置 {count} 个槽位")
+    info = await svc.force_restart_chassis(db, chassis_id)
+    return success(data=info, message=f"已重置 {info['chassis_name']} 下 {info['reset_count']} 个槽位")
 
 
 @router.post("/cabinets/{cabinet_id}/restart", dependencies=[Depends(require_process)])
 async def force_restart_cabinet(cabinet_id: int, db: AsyncSession = Depends(get_db)):
-    count = await svc.force_restart_cabinet(db, cabinet_id)
-    return success(data={"reset_count": count}, message=f"已重置 {count} 个槽位")
+    info = await svc.force_restart_cabinet(db, cabinet_id)
+    return success(data=info, message=f"已重置 {info['cabinet_name']} 下 {info['reset_count']} 个槽位")
