@@ -490,11 +490,10 @@ class StationService:
         slots = list(r.scalars().all())
         count = 0
         for slot in slots:
-            if slot.status != "idle" or slot.current_batch_id or slot.serial_number:
-                slot.status = "idle"
-                slot.current_batch_id = None
-                slot.serial_number = None
-                count += 1
+            slot.status = "idle"
+            slot.current_batch_id = None
+            slot.serial_number = None
+            count += 1
         await db.flush()
 
         # 释放 Redis 锁
