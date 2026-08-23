@@ -22,6 +22,7 @@ from app.config import (
 )
 from app.ws.handlers import notify_run_started, notify_item_tested, notify_run_completed, notify_run_failed
 from app.services.run_log_saver import save_run_log
+from app.utils.slot_lock import acquire_slot_lock, release_slot_lock, is_slot_locked
 
 
 class TestExecutor:
@@ -35,9 +36,10 @@ class TestExecutor:
         operator: str,
         sequence_id: Optional[int] = None,
     ) -> dict:
-        """扫码即测入口 — 单个槽位扫码立即执行测试"""
-        # Validate slot
+        """扫码即测入口 — 验证槽位 → 创建 PENDING 批次 → 分发 Celery 任务"""
         from sqlalchemy import select
+
+        # 1. 校验槽位
         r = await db.execute(select(TestSlot).where(TestSlot.id == slot_id))
         slot = r.scalar_one_or_none()
         if not slot:
@@ -45,24 +47,47 @@ class TestExecutor:
         if slot.status == SLOT_STATUS_TESTING:
             raise BusinessException(400, "槽位正在测试中")
 
-        # Get software config for test selection
-        r = await db.execute(
-            select(SoftwareConfig).where(SoftwareConfig.station_id == station_id)
-        )
-        sw_cfg = r.scalar_one_or_none()
+        # 2. 获取 Redis 分布式锁（非阻塞，失败则拒绝）
+        acquired, lock_token = await acquire_slot_lock(slot_id, ttl=10)
+        if not acquired:
+            raise BusinessException(409, "槽位正在测试中，请稍后再试")
 
-        # Determine mode: sequence mode or traditional mode
-        use_sequence = sequence_id or (sw_cfg and sw_cfg.sequence_id and sw_cfg.sequence_id > 0)
-        seq_id = sequence_id or (sw_cfg.sequence_id if sw_cfg else 0)
+        try:
+            # 3. 创建 PENDING 批次
+            from app.services.test_service import TestService
+            run = await TestService.create_pending_run(db, {
+                "station_id": station_id,
+                "slot_id": slot_id,
+                "serial_number": serial_number,
+                "operator": operator,
+                "sequence_id": sequence_id or 0,
+            })
+            await db.commit()
 
-        if use_sequence and seq_id:
-            return await TestExecutor._execute_sequence_mode(
-                db, station_id, slot_id, serial_number, operator, seq_id
+            # 4. 判断模式并分发 Celery 任务
+            r2 = await db.execute(
+                select(SoftwareConfig).where(SoftwareConfig.station_id == station_id)
             )
-        else:
-            return await TestExecutor._execute_traditional_mode(
-                db, station_id, slot_id, serial_number, operator, sw_cfg
-            )
+            sw_cfg = r2.scalar_one_or_none()
+            use_sequence = sequence_id or (sw_cfg and sw_cfg.sequence_id and sw_cfg.sequence_id > 0)
+
+            if use_sequence:
+                from tasks.test_tasks import execute_sequence_run
+                execute_sequence_run.delay(run.id)
+            else:
+                from tasks.test_tasks import execute_test_run
+                execute_test_run.delay(run.id)
+
+            return {
+                "run_id": run.id,
+                "batch_id": run.batch_id,
+                "slot_id": slot_id,
+                "status": "pending",
+                "message": "测试已分发到后台执行",
+            }
+        except Exception:
+            await release_slot_lock(slot_id, lock_token)
+            raise
 
     @staticmethod
     async def _execute_sequence_mode(

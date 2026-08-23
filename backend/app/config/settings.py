@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    CELERY_WORKER_CONCURRENCY: int = 8
 
     # XXL-Job
     XXL_JOB_ADMIN_URL: str = "http://localhost:8080/xxl-job-admin"

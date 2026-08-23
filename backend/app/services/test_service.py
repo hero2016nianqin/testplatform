@@ -188,6 +188,25 @@ class TestService:
         return run
 
     @staticmethod
+    async def create_pending_run(db: AsyncSession, data: dict) -> TestRun:
+        """创建待执行的测试批次（PENDING 状态），槽位状态由 Celery 任务更新"""
+        run = TestRun(
+            batch_id=generate_batch_id(),
+            product_type=data.get("product_type", ""),
+            task_order=data.get("task_order", ""),
+            serial_number=data.get("serial_number", ""),
+            operator=data.get("operator", ""),
+            status=RUN_STATUS_PENDING,
+            station_id=data.get("station_id"),
+            slot_id=data.get("slot_id"),
+            sequence_id=data.get("sequence_id", 0),
+            sequence_name=data.get("sequence_name", ""),
+        )
+        db.add(run)
+        await db.flush()
+        return run
+
+    @staticmethod
     async def update_run(db: AsyncSession, run_id: int, data: dict) -> TestRun:
         r = await db.execute(select(TestRun).where(TestRun.id == run_id))
         run = r.scalar_one_or_none()

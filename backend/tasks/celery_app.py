@@ -22,7 +22,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_track_published=True,
     result_expires=3600 * 24 * 7,
-    worker_concurrency=4,
+    worker_concurrency=settings.CELERY_WORKER_CONCURRENCY,
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
