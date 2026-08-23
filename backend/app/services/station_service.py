@@ -480,7 +480,7 @@ class StationService:
 
     @staticmethod
     async def force_restart_chassis(db, chassis_id: int) -> dict:
-        """强制重启机框 — 重置所有槽位状态为 idle，释放 Redis 锁"""
+        """强制重启机框 — 重置非 idle 的槽位状态为 idle，释放 Redis 锁"""
         r = await db.execute(select(TestChassis).where(TestChassis.id == chassis_id))
         ch = r.scalar_one_or_none()
         if not ch:
@@ -488,16 +488,16 @@ class StationService:
 
         r = await db.execute(select(TestSlot).where(TestSlot.chassis_id == chassis_id).order_by(TestSlot.sort_order))
         slots = list(r.scalars().all())
-        slot_names = []
-        for slot in slots:
+        reset_slots = [s for s in slots if s.status != "idle"]
+        reset_names = []
+        for slot in reset_slots:
             slot.status = "idle"
             slot.current_batch_id = None
             slot.serial_number = None
-            slot_names.append(slot.name)
+            reset_names.append(slot.name)
         await db.flush()
 
-        # 释放 Redis 锁
-        for slot in slots:
+        for slot in reset_slots:
             try:
                 from app.core.redis import get_redis_pool
                 from redis.asyncio import Redis
@@ -507,7 +507,32 @@ class StationService:
             except Exception:
                 pass
 
-        return {"chassis_name": ch.name, "reset_count": len(slot_names), "slot_names": slot_names}
+        return {"chassis_name": ch.name, "reset_count": len(reset_names), "slot_names": reset_names}
+
+    @staticmethod
+    async def force_restart_slot(db, slot_id: int) -> dict:
+        """强制重启单个槽位 — 重置为 idle，释放 Redis 锁"""
+        r = await db.execute(select(TestSlot).where(TestSlot.id == slot_id))
+        slot = r.scalar_one_or_none()
+        if not slot:
+            raise NotFoundError("槽位不存在")
+
+        old_status = slot.status
+        slot.status = "idle"
+        slot.current_batch_id = None
+        slot.serial_number = None
+        await db.flush()
+
+        try:
+            from app.core.redis import get_redis_pool
+            from redis.asyncio import Redis
+            pool = get_redis_pool()
+            async with Redis(connection_pool=pool) as redis:
+                await redis.delete(f"slot_lock:{slot_id}")
+        except Exception:
+            pass
+
+        return {"slot_name": slot.name, "old_status": old_status, "reset": old_status != "idle"}
 
     @staticmethod
     async def force_restart_cabinet(db, cabinet_id: int) -> dict:

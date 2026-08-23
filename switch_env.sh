@@ -8,16 +8,28 @@
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE=/tmp/testplatform_env
-LOG=/tmp/testplatform_backend.log
-PORT=8000
+BACKEND_LOG=/tmp/testplatform_backend.log
+FRONTEND_LOG=/tmp/testplatform_frontend.log
+BACKEND_PORT=8000
+FRONTEND_PORT=5173
 
 stop_backend() {
   local pids
-  pids=$(lsof -ti:"$PORT" 2>/dev/null)
+  pids=$(lsof -ti:"$BACKEND_PORT" 2>/dev/null)
   if [ -n "$pids" ]; then
-    echo "停止当前后端 (PID: $pids)..."
+    echo "停止后端 (PID: $pids)..."
     kill $pids 2>/dev/null
-    sleep 2
+    sleep 1
+  fi
+}
+
+stop_frontend() {
+  local pids
+  pids=$(lsof -ti:"$FRONTEND_PORT" 2>/dev/null)
+  if [ -n "$pids" ]; then
+    echo "停止前端 (PID: $pids)..."
+    kill $pids 2>/dev/null
+    sleep 1
   fi
 }
 
@@ -26,19 +38,33 @@ start_backend() {
   echo "启动 ${env} 环境后端..."
   cd "$ROOT/backend"
   if [ "$env" = "prod" ]; then
-    APP_ENV=prod nohup python3 run.py > "$LOG" 2>&1 &
+    APP_ENV=prod nohup python3 run.py > "$BACKEND_LOG" 2>&1 &
   else
-    APP_ENV=dev nohup python3 run.py > "$LOG" 2>&1 &
+    APP_ENV=dev nohup python3 run.py > "$BACKEND_LOG" 2>&1 &
   fi
-  echo "$env" > "$ENV_FILE"
   for i in $(seq 1 25); do
     sleep 1
-    if curl -sf http://localhost:$PORT/api/v1/health >/dev/null 2>&1; then
-      echo "✅ 后端已就绪: http://localhost:$PORT/api/v1/health"
+    if curl -sf http://localhost:$BACKEND_PORT/api/v1/health >/dev/null 2>&1; then
+      echo "✅ 后端已就绪: http://localhost:$BACKEND_PORT/api/v1/health"
       return 0
     fi
   done
-  echo "❌ 后端启动超时，查看日志: $LOG"
+  echo "❌ 后端启动超时，查看日志: $BACKEND_LOG"
+  return 1
+}
+
+start_frontend() {
+  echo "启动前端 (Vite)..."
+  cd "$ROOT/frontend"
+  nohup npm run dev -- --port $FRONTEND_PORT > "$FRONTEND_LOG" 2>&1 &
+  for i in $(seq 1 20); do
+    sleep 1
+    if curl -sf http://localhost:$FRONTEND_PORT >/dev/null 2>&1; then
+      echo "✅ 前端已就绪: http://localhost:$FRONTEND_PORT"
+      return 0
+    fi
+  done
+  echo "❌ 前端启动超时，查看日志: $FRONTEND_LOG"
   return 1
 }
 
@@ -58,31 +84,37 @@ show_status() {
     echo "  当前环境 : 未知（尚未用本脚本启动）"
   fi
   echo "  ─────────────────────────────────────────"
-  echo "  后端 :8000  : $([ -n "$(lsof -ti:$PORT 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
+  echo "  后端 :$BACKEND_PORT  : $([ -n "$(lsof -ti:$BACKEND_PORT 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
   echo "  PostgreSQL :5432 : $([ -n "$(lsof -ti:5432 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
   echo "  Redis :6379 : $([ -n "$(lsof -ti:6379 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
-  echo "  前端 :5173  : $([ -n "$(lsof -ti:5173 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
+  echo "  前端 :$FRONTEND_PORT  : $([ -n "$(lsof -ti:$FRONTEND_PORT 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
   echo "  ─────────────────────────────────────────"
   echo "  提示: 开发环境数据库=SQLite, 生产环境数据库=PostgreSQL"
   echo "  切换: ./switch_env.sh dev  /  ./switch_env.sh prod"
+  echo "  日志: tail -f /tmp/testplatform_backend.log  /  tail -f /tmp/testplatform_frontend.log"
 }
 
 case "$1" in
   dev|prod)
+    stop_frontend
     stop_backend
     start_backend "$1"
+    start_frontend
+    echo "$1" > "$ENV_FILE"
     echo ""
     show_status
     ;;
   ""|-t|--toggle)
-    # 直接运行 = 来回切换：生产↔开发轮换；从未启动过则默认切到生产
     if [ -f "$ENV_FILE" ] && [ "$(cat "$ENV_FILE")" = "prod" ]; then
       target=dev
     else
       target=prod
     fi
+    stop_frontend
     stop_backend
     start_backend "$target"
+    start_frontend
+    echo "$target" > "$ENV_FILE"
     echo ""
     show_status
     ;;

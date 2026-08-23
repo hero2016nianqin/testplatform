@@ -46,6 +46,8 @@ class TestExecutor:
             raise NotFoundError("槽位不存在")
         if slot.status == SLOT_STATUS_TESTING:
             raise BusinessException(400, "槽位正在测试中")
+        if slot.status != SLOT_STATUS_IDLE:
+            raise BusinessException(400, "槽位当前状态不允许测试，请等待空闲后再试")
 
         # 2. 获取 Redis 分布式锁（非阻塞，失败则拒绝）
         acquired, lock_token = await acquire_slot_lock(slot_id, ttl=10)

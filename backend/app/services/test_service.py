@@ -160,6 +160,14 @@ class TestService:
         slot_id = data.get("slot_id")
         serial_number = data.get("serial_number", "")
 
+        if slot_id:
+            r = await db.execute(select(TestSlot).where(TestSlot.id == slot_id))
+            slot = r.scalar_one_or_none()
+            if not slot:
+                raise NotFoundError("槽位不存在")
+            if slot.status != SLOT_STATUS_IDLE:
+                raise BusinessException(400, "槽位当前状态不允许测试，请等待空闲后再试")
+
         run = TestRun(
             batch_id=generate_batch_id(),
             product_type=data.get("product_type", ""),
@@ -190,6 +198,15 @@ class TestService:
     @staticmethod
     async def create_pending_run(db: AsyncSession, data: dict) -> TestRun:
         """创建待执行的测试批次（PENDING 状态），槽位状态由 Celery 任务更新"""
+        slot_id = data.get("slot_id")
+        if slot_id:
+            r = await db.execute(select(TestSlot).where(TestSlot.id == slot_id))
+            slot = r.scalar_one_or_none()
+            if not slot:
+                raise NotFoundError("槽位不存在")
+            if slot.status != SLOT_STATUS_IDLE:
+                raise BusinessException(400, "槽位当前状态不允许测试，请等待空闲后再试")
+
         run = TestRun(
             batch_id=generate_batch_id(),
             product_type=data.get("product_type", ""),

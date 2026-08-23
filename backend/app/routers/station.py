@@ -437,6 +437,11 @@ async def get_station_deployed_archives(station_id: int, db: AsyncSession = Depe
 
 
 # ── Force Restart ──
+@router.post("/slots/{slot_id}/restart", dependencies=[Depends(require_process)])
+async def force_restart_slot(slot_id: int, db: AsyncSession = Depends(get_db)):
+    info = await svc.force_restart_slot(db, slot_id)
+    return success(data=info, message=f"槽位 {info['slot_name']} 已重置")
+
 @router.post("/chassis/{chassis_id}/restart", dependencies=[Depends(require_process)])
 async def force_restart_chassis(chassis_id: int, db: AsyncSession = Depends(get_db)):
     info = await svc.force_restart_chassis(db, chassis_id)

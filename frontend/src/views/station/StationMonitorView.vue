@@ -821,6 +821,9 @@ function showSlotMenu(event: MouseEvent, slot: any, ch: any) {
   const items: any[] = [
     { label: '开始测试', fn: () => { closeCtx(); openScanDialog(slot) } },
   ]
+  if (slot.status !== 'idle') {
+    items.push({ label: '强制重启', fn: () => forceRestartSlot(slot) })
+  }
   if (slot.status === 'idle' || slot.status === 'fail') {
     items.push({ label: '标记通过', fn: () => updateSlotStatus(slot.id, 'pass') })
     items.push({ label: '标记失败', fn: () => updateSlotStatus(slot.id, 'fail') })
@@ -1182,10 +1185,26 @@ async function forceRestartStation(id: number) {
   ElMessage.success('重启指令已发送（需后端接口支持）')
 }
 
+async function forceRestartSlot(slot: any) {
+  try {
+    const res = await stationApi.forceRestartSlot(slot.id)
+    const info = res.data
+    if (info?.reset) {
+      addLog('warn', `强制重启槽位 ${info?.slot_name || slot.name}，状态 ${info?.old_status} → idle`)
+    } else {
+      addLog('info', `槽位 ${info?.slot_name || slot.name} 已是空闲，无需重置`)
+    }
+    ElMessage.success('槽位已重置')
+    await loadFullDetail()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '重启失败')
+  }
+}
+
 async function forceRestartCabinet(id: number) {
   try {
     const res = await stationApi.forceRestartCabinet(id)
-    const info = res.data?.data
+    const info = res.data
     const count = info?.reset_count ?? 0
     const details = (info?.chassis || []).map((ch: any) =>
       `${ch.chassis_name}(${ch.slot_names.join(',')})`
@@ -1201,7 +1220,7 @@ async function forceRestartCabinet(id: number) {
 async function forceRestartChassis(id: number) {
   try {
     const res = await stationApi.forceRestartChassis(id)
-    const info = res.data?.data
+    const info = res.data
     const count = info?.reset_count ?? 0
     const slotNames = (info?.slot_names || []).join(',')
     addLog('warn', `强制重启机框 ${info?.chassis_name || id}，已重置 ${count} 个槽位: ${slotNames}`)
@@ -1214,6 +1233,10 @@ async function forceRestartChassis(id: number) {
 
 // ── Scan ──
 function openScanDialog(slot: any) {
+  if (slot.status !== 'idle') {
+    ElMessage.warning('该槽位正在测试中，不允许再次输入条码')
+    return
+  }
   scanSelectedSlot.value = slot
   scanBarcode.value = ''
   scanProgress.value = 0
@@ -1225,6 +1248,10 @@ function openScanDialog(slot: any) {
 
 async function submitScan() {
   if (!scanBarcode.value.trim()) { ElMessage.warning('请输入条码'); return }
+  if (scanSelectedSlot.value?.status !== 'idle') {
+    ElMessage.warning('该槽位正在测试中，不允许再次输入条码')
+    return
+  }
   scanTesting.value = true
   scanStatusText.value = '启动中...'
   try {
@@ -1382,12 +1409,16 @@ onUnmounted(() => {
   justify-content: center;
 }
 .equipment-view.single-cab .cabinet-unit {
-  max-width: 320px;
+  max-width: 380px;
+  min-height: 360px;
 }
 .equipment-view.single-cab .slot-grid {
   display: grid;
   gap: 8px;
   flex: 1;
+}
+.equipment-view.single-cab .slot-cell {
+  height: 82px;
 }
 
 .empty-cabinets { text-align: center; padding: 40px 0; color: #546e7a; }
@@ -1400,7 +1431,7 @@ onUnmounted(() => {
   border-radius: 6px;
   min-width: 200px;
   max-width: 320px;
-  min-height: 300px;
+  min-height: 320px;
   flex: 1 1 auto;
 }
 .cabinet-unit-header {

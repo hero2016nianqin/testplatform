@@ -142,6 +142,9 @@ export const stationApi = {
     return api.delete(`/stations/chassis-params/${paramId}`)
   },
   // Force Restart
+  forceRestartSlot(slotId: number) {
+    return api.post(`/stations/slots/${slotId}/restart`)
+  },
   forceRestartChassis(chassisId: number) {
     return api.post(`/stations/chassis/${chassisId}/restart`)
   },
