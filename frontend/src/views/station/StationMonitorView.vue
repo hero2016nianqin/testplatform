@@ -1233,7 +1233,7 @@ async function forceRestartChassis(id: number) {
 
 // ── Scan ──
 function openScanDialog(slot: any) {
-  if (slot.status !== 'idle') {
+  if (slot.status === 'testing') {
     ElMessage.warning('该槽位正在测试中，不允许再次输入条码')
     return
   }
@@ -1248,7 +1248,7 @@ function openScanDialog(slot: any) {
 
 async function submitScan() {
   if (!scanBarcode.value.trim()) { ElMessage.warning('请输入条码'); return }
-  if (scanSelectedSlot.value?.status !== 'idle') {
+  if (scanSelectedSlot.value?.status === 'testing') {
     ElMessage.warning('该槽位正在测试中，不允许再次输入条码')
     return
   }
