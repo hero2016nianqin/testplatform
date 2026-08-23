@@ -519,19 +519,15 @@ class StationService:
         if not cab:
             raise NotFoundError("机柜不存在")
 
-        # 优先用 relationship 获取归属机柜的机框
+        # 查询该机柜下所有机框
+        r = await db.execute(
+            select(TestChassis).where(TestChassis.cabinet_id == cabinet_id)
+        )
+        chassis_list = list(r.scalars().all())
+
         total = 0
-        if cab.chassis_list:
-            for ch in cab.chassis_list:
-                total += await StationService.force_restart_chassis(db, ch.id)
-        else:
-            # fallback: 查 cabinet_id 匹配的机框
-            r = await db.execute(
-                select(TestChassis).where(TestChassis.cabinet_id == cabinet_id)
-            )
-            chassis_list = list(r.scalars().all())
-            for ch in chassis_list:
-                total += await StationService.force_restart_chassis(db, ch.id)
+        for ch in chassis_list:
+            total += await StationService.force_restart_chassis(db, ch.id)
         return total
 
     # ── Cabinet Params ──
