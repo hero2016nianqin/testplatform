@@ -141,4 +141,11 @@ export const stationApi = {
   deleteChassisParam(paramId: number) {
     return api.delete(`/stations/chassis-params/${paramId}`)
   },
+  // Force Restart
+  forceRestartChassis(chassisId: number) {
+    return api.post(`/stations/chassis/${chassisId}/restart`)
+  },
+  forceRestartCabinet(cabinetId: number) {
+    return api.post(`/stations/cabinets/${cabinetId}/restart`)
+  },
 }

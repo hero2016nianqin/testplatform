@@ -434,3 +434,16 @@ async def get_station_deployed_archives(station_id: int, db: AsyncSession = Depe
     from app.services.version_service import VersionService
     result = await VersionService.get_station_deployed_archives(db, station_id)
     return success(data=result)
+
+
+# ── Force Restart ──
+@router.post("/chassis/{chassis_id}/restart", dependencies=[Depends(require_process)])
+async def force_restart_chassis(chassis_id: int, db: AsyncSession = Depends(get_db)):
+    count = await svc.force_restart_chassis(db, chassis_id)
+    return success(data={"reset_count": count}, message=f"已重置 {count} 个槽位")
+
+
+@router.post("/cabinets/{cabinet_id}/restart", dependencies=[Depends(require_process)])
+async def force_restart_cabinet(cabinet_id: int, db: AsyncSession = Depends(get_db)):
+    count = await svc.force_restart_cabinet(db, cabinet_id)
+    return success(data={"reset_count": count}, message=f"已重置 {count} 个槽位")

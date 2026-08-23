@@ -478,6 +478,58 @@ class StationService:
         await db.flush()
         return s
 
+    @staticmethod
+    async def force_restart_chassis(db, chassis_id: int) -> int:
+        """强制重启机框 — 重置所有槽位状态为 idle，释放 Redis 锁"""
+        r = await db.execute(select(TestChassis).where(TestChassis.id == chassis_id))
+        ch = r.scalar_one_or_none()
+        if not ch:
+            raise NotFoundError("机框不存在")
+
+        r = await db.execute(select(TestSlot).where(TestSlot.chassis_id == chassis_id))
+        slots = list(r.scalars().all())
+        count = 0
+        for slot in slots:
+            if slot.status not in ("idle", "disabled"):
+                slot.status = "idle"
+                slot.current_batch_id = None
+                slot.serial_number = None
+                count += 1
+        await db.flush()
+
+        # 释放 Redis 锁
+        from app.utils.slot_lock import release_slot_lock
+        for slot in slots:
+            try:
+                from app.core.redis import get_redis_pool
+                from redis.asyncio import Redis
+                pool = get_redis_pool()
+                async with Redis(connection_pool=pool) as redis:
+                    await redis.delete(f"slot_lock:{slot.id}")
+            except Exception:
+                pass
+
+        return count
+
+    @staticmethod
+    async def force_restart_cabinet(db, cabinet_id: int) -> int:
+        """强制重启机柜 — 重置该机柜下所有机框的槽位状态为 idle"""
+        from app.models.station import Cabinet
+        r = await db.execute(select(Cabinet).where(Cabinet.id == cabinet_id))
+        cab = r.scalar_one_or_none()
+        if not cab:
+            raise NotFoundError("机柜不存在")
+
+        r = await db.execute(
+            select(TestChassis).where(TestChassis.cabinet_id == cabinet_id)
+        )
+        chassis_list = list(r.scalars().all())
+
+        total = 0
+        for ch in chassis_list:
+            total += await StationService.force_restart_chassis(db, ch.id)
+        return total
+
     # ── Cabinet Params ──
     @staticmethod
     async def list_cabinet_params(db, cabinet_id: int):

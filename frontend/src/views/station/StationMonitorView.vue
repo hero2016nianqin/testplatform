@@ -1182,13 +1182,27 @@ async function forceRestartStation(id: number) {
 }
 
 async function forceRestartCabinet(id: number) {
-  addLog('warn', `强制重启机柜 ${id}`)
-  ElMessage.success('重启指令已发送（需后端接口支持）')
+  try {
+    const res = await stationApi.forceRestartCabinet(id)
+    const count = res.data?.data?.reset_count ?? 0
+    addLog('warn', `强制重启机柜 ${id}，已重置 ${count} 个槽位`)
+    ElMessage.success(`已重置 ${count} 个槽位`)
+    if (stationId.value) await fetchDetail(stationId.value)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '重启失败')
+  }
 }
 
 async function forceRestartChassis(id: number) {
-  addLog('warn', `强制重启机框 ${id}`)
-  ElMessage.success('重启指令已发送（需后端接口支持）')
+  try {
+    const res = await stationApi.forceRestartChassis(id)
+    const count = res.data?.data?.reset_count ?? 0
+    addLog('warn', `强制重启机框 ${id}，已重置 ${count} 个槽位`)
+    ElMessage.success(`已重置 ${count} 个槽位`)
+    if (stationId.value) await fetchDetail(stationId.value)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '重启失败')
+  }
 }
 
 // ── Scan ──
