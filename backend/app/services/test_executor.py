@@ -3,6 +3,7 @@
 对应 design.md §7.2 (Fig. 传统模式 + 序列模式), §12 WebSocket 事件
 """
 import asyncio
+import os
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.config import (
     RUN_STATUS_RUNNING, RUN_STATUS_COMPLETED, RUN_STATUS_FAILED,
 )
 from app.ws.handlers import notify_run_started, notify_item_tested, notify_run_completed, notify_run_failed
+from app.services.run_log_saver import save_run_log
 
 
 class TestExecutor:
@@ -106,6 +108,7 @@ class TestExecutor:
         if slot:
             slot.status = SLOT_STATUS_TESTING
             slot.current_batch_id = run.batch_id
+            slot.serial_number = serial_number
         await db.flush()
 
         # Notify run_started
@@ -114,6 +117,7 @@ class TestExecutor:
             "operator": operator,
             "serial_number": serial_number,
             "run_id": run.id,
+            "slot_id": slot_id,
         })
 
         # Execute each step
@@ -121,6 +125,7 @@ class TestExecutor:
         passed_count = 0
         failed_count = 0
         stopped = False
+        log_items = []
 
         for step in steps:
             if stopped:
@@ -150,6 +155,12 @@ class TestExecutor:
                 duration_ms=500,
             )
             db.add(result)
+            log_items.append({
+                "name": template.name,
+                "expected": getattr(step, 'expected_value', "-"),
+                "actual": actual_value,
+                "passed": passed,
+            })
 
             if passed:
                 passed_count += 1
@@ -176,11 +187,30 @@ class TestExecutor:
                 if slot:
                     slot.status = SLOT_STATUS_FAIL
                     slot.current_batch_id = None
+                    slot.serial_number = None
                 await db.flush()
+
+                # Save log on critical failure
+                try:
+                    from app.config import get_settings
+                    settings = get_settings()
+                    base_dir = settings.LOG_FOLDER
+                    if not os.path.isabs(base_dir):
+                        base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), base_dir)
+                    slot_info = slot.name if slot else ""
+                    save_run_log(
+                        base_dir=base_dir, station_id=station_id,
+                        serial_number=serial_number, batch_id=run.batch_id,
+                        status="failed", total=total, passed=passed_count, failed=failed_count,
+                        items=log_items, slot_info=slot_info,
+                    )
+                except Exception:
+                    pass
 
                 await notify_run_failed(station_id, {
                     "batch_id": run.batch_id,
                     "error": f"关键项失败: {template.name}",
+                    "slot_id": slot_id,
                 })
                 break
 
@@ -194,7 +224,25 @@ class TestExecutor:
             if slot:
                 slot.status = SLOT_STATUS_PASS if run.status == RUN_STATUS_COMPLETED else SLOT_STATUS_IDLE
                 slot.current_batch_id = None
+                slot.serial_number = None
             await db.flush()
+
+            # Save log file to disk
+            try:
+                from app.config import get_settings
+                settings = get_settings()
+                base_dir = settings.LOG_FOLDER
+                if not os.path.isabs(base_dir):
+                    base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), base_dir)
+                slot_info = slot.name if slot else ""
+                save_run_log(
+                    base_dir=base_dir, station_id=station_id,
+                    serial_number=serial_number, batch_id=run.batch_id,
+                    status=run.status, total=total, passed=passed_count, failed=failed_count,
+                    items=log_items, slot_info=slot_info,
+                )
+            except Exception:
+                pass
 
             if run.status == RUN_STATUS_COMPLETED:
                 await notify_run_completed(station_id, {
@@ -202,11 +250,13 @@ class TestExecutor:
                     "total": total,
                     "passed": passed_count,
                     "failed": failed_count,
+                    "slot_id": slot_id,
                 })
             else:
                 await notify_run_failed(station_id, {
                     "batch_id": run.batch_id,
                     "error": f"{failed_count}/{total} 项失败",
+                    "slot_id": slot_id,
                 })
 
         return {"run_id": run.id, "batch_id": run.batch_id, "status": run.status}
@@ -256,6 +306,7 @@ class TestExecutor:
         if slot:
             slot.status = SLOT_STATUS_TESTING
             slot.current_batch_id = run.batch_id
+            slot.serial_number = serial_number
         await db.flush()
 
         await notify_run_started(station_id, {
@@ -263,11 +314,13 @@ class TestExecutor:
             "operator": operator,
             "serial_number": serial_number,
             "run_id": run.id,
+            "slot_id": slot_id,
         })
 
         total = len(items)
         passed_count = 0
         failed_count = 0
+        log_items = []
 
         for item in items:
             await asyncio.sleep(0.3)
@@ -288,6 +341,12 @@ class TestExecutor:
                 duration_ms=300,
             )
             db.add(result)
+            log_items.append({
+                "name": item.name,
+                "expected": item.expected_value,
+                "actual": actual_value,
+                "passed": passed,
+            })
 
             if passed:
                 passed_count += 1
@@ -313,7 +372,25 @@ class TestExecutor:
         if slot:
             slot.status = SLOT_STATUS_PASS if run.status == RUN_STATUS_COMPLETED else SLOT_STATUS_IDLE
             slot.current_batch_id = None
+            slot.serial_number = None
         await db.flush()
+
+        # Save log file to disk
+        try:
+            from app.config import get_settings
+            settings = get_settings()
+            base_dir = settings.LOG_FOLDER
+            if not os.path.isabs(base_dir):
+                base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), base_dir)
+            slot_info = slot.name if slot else ""
+            save_run_log(
+                base_dir=base_dir, station_id=station_id,
+                serial_number=serial_number, batch_id=run.batch_id,
+                status=run.status, total=total, passed=passed_count, failed=failed_count,
+                items=log_items, slot_info=slot_info,
+            )
+        except Exception:
+            pass
 
         if run.status == RUN_STATUS_COMPLETED:
             await notify_run_completed(station_id, {
@@ -321,11 +398,13 @@ class TestExecutor:
                 "total": total,
                 "passed": passed_count,
                 "failed": failed_count,
+                "slot_id": slot_id,
             })
         else:
             await notify_run_failed(station_id, {
                 "batch_id": run.batch_id,
                 "error": f"{failed_count}/{total} 项失败",
+                "slot_id": slot_id,
             })
 
         return {"run_id": run.id, "batch_id": run.batch_id, "status": run.status}

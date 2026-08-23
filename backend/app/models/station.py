@@ -149,6 +149,7 @@ class TestSlot(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="idle", index=True)
     current_batch_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    serial_number: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -158,6 +159,7 @@ class TestSlot(Base):
         return {
             "id": self.id, "chassis_id": self.chassis_id, "name": self.name,
             "status": self.status, "current_batch_id": self.current_batch_id,
+            "serial_number": self.serial_number,
             "sort_order": self.sort_order,
         }
 

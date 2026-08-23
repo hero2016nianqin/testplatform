@@ -102,8 +102,8 @@
                   >
                     <div class="slot-led" :class="'led-' + slot.status" />
                     <div class="slot-name">{{ slot.name.replace('槽位 ', 'S') }}</div>
+                    <div v-if="slot.serial_number" class="slot-sn" :title="slot.serial_number">{{ slot.serial_number }}</div>
                     <div class="slot-status">{{ slotStatusLabel(slot.status) }}</div>
-                    <div v-if="slot.current_batch_id" class="slot-batch" :title="slot.current_batch_id">#{{ slot.current_batch_id.slice(-6) }}</div>
                     <div class="slot-progress" :class="{ active: slot.status === 'testing' }">
                       <div class="slot-progress-bar" :style="{ width: slot.status === 'pass' ? '100%' : slot.status === 'fail' ? '100%' : slot.status === 'testing' ? '60%' : '0%' }" />
                     </div>
@@ -467,7 +467,7 @@
         <div class="log-panel-header">
           <span><span class="log-led" /> 运行日志</span>
           <div class="log-header-actions">
-            <span class="log-header-btn" @click="logs = []">清空</span>
+            <span class="log-header-btn" @click="logs = []; localStorage.removeItem(LOG_STORAGE_KEY)">清空</span>
             <span class="log-header-btn" @click="showLogPanel = false">隐藏</span>
           </div>
         </div>
@@ -516,7 +516,12 @@ const detailError = ref('')
 const station = ref<any>(null)
 const cabinets = ref<any[]>([])
 const equipIP = ref('-')
-const logs = ref<Array<{ time: string; level: string; message: string }>>([])
+const LOG_STORAGE_KEY = `station_logs_${stationId}`
+const logs = ref<Array<{ time: string; level: string; message: string }>>(
+  JSON.parse(localStorage.getItem(LOG_STORAGE_KEY) || '[]')
+)
+const currentBarcode = ref('')
+const currentSlotInfo = ref('')
 const showLogPanel = ref(true)
 const logBodyRef = ref<HTMLElement | null>(null)
 const logFilter = ref('all')
@@ -729,12 +734,39 @@ watch(showLogPanel, (v) => {
 
 function addLog(level: string, message: string) {
   const now = new Date()
-  const time = now.toLocaleTimeString('zh-CN', { hour12: false })
+  const time = now.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   logs.value.push({ time, level, message })
   if (logs.value.length > 500) logs.value.shift()
+  localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs.value))
   nextTick(() => {
     if (logBodyRef.value) logBodyRef.value.scrollTop = logBodyRef.value.scrollHeight
   })
+}
+
+function findSlotLocation(slotId: number): string {
+  for (const cab of cabinets.value) {
+    for (const ch of (cab.chassis_list || [])) {
+      for (const sl of (ch.slots || [])) {
+        if (sl.id === slotId) {
+          return `${cab.name || '柜'}/${ch.name || '框'}/S${sl.sort_order + 1}`
+        }
+      }
+    }
+  }
+  return ''
+}
+
+function updateLocalSlot(slotId: number, updates: Record<string, any>) {
+  for (const cab of cabinets.value) {
+    for (const ch of (cab.chassis_list || [])) {
+      for (const sl of (ch.slots || [])) {
+        if (sl.id === slotId) {
+          Object.assign(sl, updates)
+          return
+        }
+      }
+    }
+  }
 }
 
 async function loadFullDetail() {
@@ -1217,7 +1249,12 @@ async function submitScan() {
       version_id: selectedVersionId.value,
       sub_scenario_id: selectedSubScenarioId.value,
     })
-    addLog('info', `测试批次创建成功 - batch_id: ${run.data?.batch_id || '-'}`)
+    updateLocalSlot(scanSelectedSlot.value.id, {
+      status: 'testing',
+      current_batch_id: run.data?.batch_id || null,
+      serial_number: scanBarcode.value.trim(),
+    })
+    addLog('info', `[创建] 条码: ${scanBarcode.value.trim()} | 批次: ${run.data?.batch_id || '-'} | 槽位: ${findSlotLocation(scanSelectedSlot.value.id) || '-'}`)
     scanVisible.value = false
   } catch (e: any) {
     addLog('error', `测试启动失败: ${e?.message || ''}`)
@@ -1238,13 +1275,39 @@ const wsHandlers: Array<{ event: string; handler: (msg: any) => void }> = []
 onMounted(() => {
   loadFullDetail()
   wsConnect()
-  const h1 = (msg: any) => addLog('info', `测试开始：批次 ${msg.data?.batch_id || '-'}`)
+  const h1 = (msg: any) => {
+    const d = msg.data || {}
+    currentBarcode.value = d.serial_number || ''
+    currentSlotInfo.value = d.slot_id ? findSlotLocation(d.slot_id) : ''
+    if (d.slot_id) {
+      updateLocalSlot(d.slot_id, { status: 'testing', current_batch_id: d.batch_id, serial_number: d.serial_number })
+    }
+    addLog('info', `[开始] 条码: ${d.serial_number || '-'} | 批次: ${d.batch_id || '-'} | 槽位: ${currentSlotInfo.value || '-'}`)
+  }
   const h2 = (msg: any) => {
     const d = msg.data
-    addLog(d.passed ? 'info' : 'error', `${d.passed ? '✓' : '✗'} ${d.item_name || ''}: ${d.actual_value}${d.passed ? '' : ' (期望: ' + d.expected_value + ')'}`)
+    const barcode = currentBarcode.value
+    const loc = currentSlotInfo.value
+    addLog(d.passed ? 'info' : 'error', `[测试] 条码: ${barcode || '-'} | ${loc || '-'} | ${d.item_name || ''}: ${d.actual_value}${d.passed ? ' ✓' : ' ✗ (期望: ' + d.expected_value + ')'}`)
   }
-  const h3 = () => addLog('info', '测试完成')
-  const h4 = (msg: any) => addLog('error', `测试失败: ${msg.data?.error || '未知错误'}`)
+  const h3 = (msg: any) => {
+    const d = msg.data || {}
+    if (d.slot_id) {
+      updateLocalSlot(d.slot_id, { status: 'pass', current_batch_id: null, serial_number: null })
+    }
+    addLog('info', `[完成] 条码: ${currentBarcode.value || '-'} | 总计: ${d.total || '-'} | 通过: ${d.passed || 0} | 失败: ${d.failed || 0}`)
+    currentBarcode.value = ''
+    currentSlotInfo.value = ''
+  }
+  const h4 = (msg: any) => {
+    const d = msg.data || {}
+    if (d.slot_id) {
+      updateLocalSlot(d.slot_id, { status: 'fail', current_batch_id: null, serial_number: null })
+    }
+    addLog('error', `[失败] 条码: ${currentBarcode.value || '-'} | 错误: ${d.error || '未知错误'}`)
+    currentBarcode.value = ''
+    currentSlotInfo.value = ''
+  }
   wsOn('run_started', h1); wsHandlers.push({ event: 'run_started', handler: h1 })
   wsOn('item_tested', h2); wsHandlers.push({ event: 'item_tested', handler: h2 })
   wsOn('run_completed', h3); wsHandlers.push({ event: 'run_completed', handler: h3 })
@@ -1417,6 +1480,7 @@ onUnmounted(() => {
 }
 .slot-name { font-weight: 600; font-size: 0.85rem; line-height: 1.2; }
 .slot-status { font-size: 0.65rem; line-height: 1; }
+.slot-sn { font-size: 0.6rem; color: #64b5f6; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .slot-batch {
   font-size: 0.55rem; color: #546e7a; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

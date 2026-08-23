@@ -136,6 +136,7 @@ class SlotResp(BaseModel):
     name: str
     status: str
     current_batch_id: Optional[str]
+    serial_number: Optional[str] = None
     sort_order: int
 
 

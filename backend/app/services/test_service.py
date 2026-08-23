@@ -182,6 +182,7 @@ class TestService:
         if slot:
             slot.status = SLOT_STATUS_TESTING
             slot.current_batch_id = run.batch_id
+            slot.serial_number = serial_number
 
         await db.flush()
         return run

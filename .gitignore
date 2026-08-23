@@ -47,3 +47,8 @@ logs/
 *.pem
 *.key
 *.crt
+
+# Uploads
+backend/uploads/
+# Dev DB
+backend/test_platform.db

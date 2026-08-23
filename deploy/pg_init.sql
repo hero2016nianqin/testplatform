@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS test_slots (
     name VARCHAR(100) NOT NULL,
     status VARCHAR(20) DEFAULT 'idle',
     current_batch_id VARCHAR(50),
+    serial_number VARCHAR(200),
     sort_order INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
