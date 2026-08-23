@@ -697,41 +697,6 @@ function stopResize() {
   document.removeEventListener('mouseup', stopResize)
 }
 
-function applyLogLayout(open: boolean) {
-  const app = document.getElementById('app') as HTMLElement | null
-  if (!app) return
-  if (open) {
-    app.style.setProperty('height', 'auto', 'important')
-    app.style.setProperty('overflow', 'auto', 'important')
-    const hScreen = app.querySelector('.h-screen') as HTMLElement | null
-    if (hScreen) hScreen.style.setProperty('height', 'auto', 'important')
-    const inner = hScreen?.children[1] as HTMLElement | null
-    if (inner) { inner.style.setProperty('height', 'auto', 'important'); inner.style.setProperty('flex', 'none', 'important') }
-    const elMain = inner?.querySelector('.el-main') as HTMLElement | null
-    if (elMain) {
-      elMain.style.setProperty('flex', 'none', 'important')
-      elMain.style.setProperty('height', 'auto', 'important')
-      elMain.style.setProperty('overflow', 'visible', 'important')
-    }
-    const mon = app.querySelector('.station-monitor') as HTMLElement | null
-    if (mon) mon.style.setProperty('height', 'auto', 'important')
-  } else {
-    app.style.removeProperty('height'); app.style.removeProperty('overflow')
-    const hScreen = app.querySelector('.h-screen') as HTMLElement | null
-    if (hScreen) hScreen.style.removeProperty('height')
-    const inner = hScreen?.children[1] as HTMLElement | null
-    if (inner) { inner.style.removeProperty('height'); inner.style.removeProperty('flex') }
-    const elMain = inner?.querySelector('.el-main') as HTMLElement | null
-    if (elMain) { elMain.style.removeProperty('flex'); elMain.style.removeProperty('height'); elMain.style.removeProperty('overflow') }
-    const mon = app.querySelector('.station-monitor') as HTMLElement | null
-    if (mon) mon.style.removeProperty('height')
-  }
-}
-
-watch(showLogPanel, (v) => {
-  nextTick(() => applyLogLayout(v))
-})
-
 function addLog(level: string, message: string) {
   const now = new Date()
   const time = now.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -1319,7 +1284,6 @@ onUnmounted(() => {
   for (const { event, handler } of wsHandlers) wsOff(event, handler)
   document.removeEventListener('click', closeCtx)
   stopResize()
-  applyLogLayout(false)
 })
 </script>
 
@@ -1379,7 +1343,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 .equipment-view.single-cab .cabinet-unit {
-  max-width: none;
+  max-width: 320px;
 }
 .equipment-view.single-cab .slot-grid {
   display: grid;
@@ -1395,8 +1359,9 @@ onUnmounted(() => {
   background: #112233;
   border: 1px solid #1e3350;
   border-radius: 6px;
-  min-width: 320px;
-  max-width: 480px;
+  min-width: 200px;
+  max-width: 320px;
+  min-height: 300px;
   flex: 1 1 auto;
 }
 .cabinet-unit-header {
