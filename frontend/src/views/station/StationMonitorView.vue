@@ -497,7 +497,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, reactive, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { stationApi } from '@/api/station'
 import { versionApi } from '@/api/version'
@@ -509,7 +509,7 @@ import { Setting, Memo, FolderOpened, Loading, Refresh, Delete, Close } from '@e
 
 const route = useRoute()
 const router = useRouter()
-const stationId = Number(route.params.id)
+let stationId = Number(route.params.id)
 
 const loading = ref(true)
 const detailError = ref('')
@@ -657,7 +657,7 @@ const ctxTitle = ref('')
 const ctxStyle = ref({ left: '0px', top: '0px' })
 let ctxCallback: (() => void) | null = null
 
-const { connected: wsConnected, connect: wsConnect, on: wsOn, off: wsOff } = useWebSocket(stationId)
+const { connected: wsConnected, connect: wsConnect, disconnect: wsDisconnect, on: wsOn, off: wsOff } = useWebSocket(stationId)
 
 const filteredLogs = computed(() => {
   if (logFilter.value === 'all') return logs.value
@@ -988,6 +988,7 @@ async function saveEquipParams() {
   paramsSaving.value = true
   try {
     await stationApi.updateEquipment(stationId, equipForm.value)
+    equipIP.value = equipForm.value?.equipment_ip || '-'
     ElMessage.success('装备参数保存成功')
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
@@ -1187,7 +1188,7 @@ async function forceRestartCabinet(id: number) {
     const count = res.data?.data?.reset_count ?? 0
     addLog('warn', `强制重启机柜 ${id}，已重置 ${count} 个槽位`)
     ElMessage.success(`已重置 ${count} 个槽位`)
-    if (stationId.value) await fetchDetail(stationId.value)
+    await loadFullDetail()
   } catch (e: any) {
     ElMessage.error(e?.message || '重启失败')
   }
@@ -1199,7 +1200,7 @@ async function forceRestartChassis(id: number) {
     const count = res.data?.data?.reset_count ?? 0
     addLog('warn', `强制重启机框 ${id}，已重置 ${count} 个槽位`)
     ElMessage.success(`已重置 ${count} 个槽位`)
-    if (stationId.value) await fetchDetail(stationId.value)
+    await loadFullDetail()
   } catch (e: any) {
     ElMessage.error(e?.message || '重启失败')
   }
@@ -1292,6 +1293,24 @@ onMounted(() => {
   wsOn('run_completed', h3); wsHandlers.push({ event: 'run_completed', handler: h3 })
   wsOn('run_failed', h4); wsHandlers.push({ event: 'run_failed', handler: h4 })
   document.addEventListener('click', closeCtx)
+})
+
+onActivated(() => {
+  const newId = Number(route.params.id)
+  if (newId !== stationId) {
+    stationId = newId
+    wsDisconnect()
+    wsHandlers.length = 0
+  }
+  loadFullDetail()
+  if (!wsConnected.value) wsConnect()
+})
+
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    stationId = Number(newId)
+    loadFullDetail()
+  }
 })
 
 onUnmounted(() => {
