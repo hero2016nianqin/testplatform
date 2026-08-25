@@ -20,7 +20,7 @@ from app.models.test_result import TestResult
 from app.models.station import TestSlot
 from app.models.station_config import SoftwareConfig
 from app.config import (
-    SLOT_STATUS_TESTING, SLOT_STATUS_PASS, SLOT_STATUS_FAIL,
+    SLOT_STATUS_TESTING, SLOT_STATUS_PASS, SLOT_STATUS_FAIL, SLOT_STATUS_IDLE,
     RUN_STATUS_RUNNING, RUN_STATUS_COMPLETED, RUN_STATUS_FAILED,
 )
 from app.services.run_log_saver import save_run_log

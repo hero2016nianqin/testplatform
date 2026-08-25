@@ -1330,12 +1330,10 @@ async function submitScan() {
   scanTesting.value = true
   scanStatusText.value = '启动中...'
   try {
-    const run = await testApi.createRun({
+    const run = await testApi.scanTest({
       serial_number: scanBarcode.value.trim(),
       slot_id: scanSelectedSlot.value.id,
       station_id: stationId,
-      version_id: selectedVersionId.value,
-      sub_scenario_id: selectedSubScenarioId.value,
     })
     updateLocalSlot(scanSelectedSlot.value.id, {
       status: 'testing',
