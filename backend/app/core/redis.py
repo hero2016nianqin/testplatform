@@ -21,6 +21,12 @@ def get_redis_pool() -> ConnectionPool:
     return _pool
 
 
+def reset_redis_pool():
+    """Celery fork 子进程重置连接池，避免使用父进程的已关闭 event loop 连接"""
+    global _pool
+    _pool = None
+
+
 async def get_redis() -> AsyncIterator[Redis]:
     pool = get_redis_pool()
     r = Redis(connection_pool=pool)
