@@ -4,14 +4,17 @@
 """
 import asyncio
 import os
+import json
 from typing import Optional
+import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.test_run import TestRun
 from app.models.test_item import TestItem
 from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
-from app.models.station_config import SoftwareConfig
+from app.models.station_config import SoftwareConfig, EquipmentConfig
 from app.models.station import TestSlot
 from app.core.exceptions import NotFoundError, BusinessException
 from app.core.database import AsyncSessionLocal
@@ -23,6 +26,40 @@ from app.config import (
 from app.ws.handlers import notify_run_started, notify_item_tested, notify_run_completed, notify_run_failed
 from app.services.run_log_saver import save_run_log
 from app.utils.slot_lock import acquire_slot_lock, release_slot_lock, is_slot_locked
+
+
+def _build_service_url(base_url: str, relative_path: str) -> str:
+    """拼接基础 URL 和相对路径"""
+    if not base_url or not relative_path:
+        return ""
+    base = base_url.rstrip("/")
+    path = relative_path.lstrip("/")
+    return f"{base}/{path}"
+
+
+async def _call_test_service(url: str, payload: dict, timeout: float = 30.0) -> dict:
+    """调用测试微服务，返回标准化结果"""
+    if not url:
+        return {"passed": False, "actual_value": 0.0, "error": "未配置服务地址"}
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            # 标准化响应格式
+            return {
+                "passed": data.get("passed", False),
+                "actual_value": data.get("actual_value", 0.0),
+                "deviation": data.get("deviation", 0.0),
+                "duration_ms": data.get("duration_ms", 0),
+                "error": data.get("error"),
+            }
+    except httpx.TimeoutException:
+        return {"passed": False, "actual_value": 0.0, "error": f"请求超时 ({timeout}s)"}
+    except httpx.HTTPStatusError as e:
+        return {"passed": False, "actual_value": 0.0, "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+    except Exception as e:
+        return {"passed": False, "actual_value": 0.0, "error": f"调用异常: {type(e).__name__}: {e}"}
 
 
 class TestExecutor:
@@ -92,13 +129,14 @@ class TestExecutor:
     @staticmethod
     async def _execute_sequence_mode(
         db: AsyncSession,
+        run: TestRun,
         station_id: int,
         slot_id: int,
         serial_number: str,
         operator: str,
         sequence_id: int,
     ) -> dict:
-        """序列模式 — 按 TestSequence + TestItemTemplate 执行"""
+        """序列模式 — 按 TestSequence + TestItemTemplate 执行，调用真实服务"""
         from sqlalchemy import select
 
         r = await db.execute(select(TestSequence).where(TestSequence.id == sequence_id))
@@ -112,19 +150,29 @@ class TestExecutor:
         )
         steps = list(r.scalars().all())
 
-        # Create TestRun
-        run = TestRun(
-            batch_id=generate_batch_id(),
-            serial_number=serial_number,
-            operator=operator,
-            status=RUN_STATUS_RUNNING,
-            station_id=station_id,
-            slot_id=slot_id,
-            sequence_id=sequence_id,
-            sequence_name=seq.name,
-            started_at=__import__('datetime').datetime.utcnow(),
-        )
-        db.add(run)
+        # Get equipment base URL
+        r = await db.execute(select(EquipmentConfig).where(EquipmentConfig.station_id == station_id))
+        equip_cfg = r.scalar_one_or_none()
+        base_url = equip_cfg.equipment_service_address if equip_cfg else ""
+
+        # Get SoftwareConfig for sequence_data (BOM-based sequence)
+        r = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == station_id))
+        sw_cfg = r.scalar_one_or_none()
+        sequence_data = sw_cfg.sequence_data if sw_cfg else []
+
+        # Build test item lookup from sequence_data (keyed by test_item_id)
+        seq_item_map = {}
+        if sequence_data and isinstance(sequence_data, list):
+            for item in sequence_data:
+                tid = item.get("test_item_id")
+                if tid:
+                    seq_item_map[tid] = item
+
+        # Update existing TestRun to RUNNING
+        run.status = RUN_STATUS_RUNNING
+        run.sequence_id = sequence_id
+        run.sequence_name = seq.name
+        run.started_at = __import__('datetime').datetime.utcnow()
         await db.flush()
 
         # Update slot
@@ -161,23 +209,47 @@ class TestExecutor:
             if not template:
                 continue
 
-            await asyncio.sleep(0.5)  # Simulate test execution delay
+            # Get service address: priority sequence_data > template
+            test_item_id = template.id
+            seq_item = seq_item_map.get(test_item_id)
+            relative_path = ""
+            if seq_item:
+                relative_path = seq_item.get("service_address", "") or ""
+            if not relative_path:
+                relative_path = template.service_address or ""
 
-            # Simulate result (in production, call actual service)
-            actual_value = 0.0
-            import random
-            passed = random.random() > 0.1  # 90% pass rate
+            service_url = _build_service_url(base_url, relative_path)
+
+            # Prepare payload
+            payload = {
+                "serial_number": serial_number,
+                "station_id": station_id,
+                "slot_id": slot_id,
+                "test_item_id": test_item_id,
+                "test_item_name": template.name,
+                "params": getattr(step, 'params', {}) or {},
+            }
+
+            # Call actual service
+            svc_result = await _call_test_service(service_url, payload, timeout=float(step.timeout_seconds or 30))
+
+            passed = svc_result.get("passed", False)
+            actual_value = svc_result.get("actual_value", 0.0)
+            deviation = svc_result.get("deviation", 0.0)
+            duration_ms = svc_result.get("duration_ms", 0)
+            error_msg = svc_result.get("error")
 
             from app.models.test_result import TestResult
             result = TestResult(
-                test_item_id=template.id,
+                test_item_id=test_item_id,
                 test_run_id=run.id,
                 operator=operator,
                 serial_number=serial_number,
                 actual_value=actual_value,
                 passed=passed,
-                deviation=0.0,
-                duration_ms=500,
+                deviation=deviation,
+                duration_ms=duration_ms,
+                remark=error_msg or "",
             )
             db.add(result)
             log_items.append({
@@ -185,6 +257,7 @@ class TestExecutor:
                 "expected": getattr(step, 'expected_value', "-"),
                 "actual": actual_value,
                 "passed": passed,
+                "error": error_msg,
             })
 
             if passed:
@@ -289,13 +362,14 @@ class TestExecutor:
     @staticmethod
     async def _execute_traditional_mode(
         db: AsyncSession,
+        run: TestRun,
         station_id: int,
         slot_id: int,
         serial_number: str,
         operator: str,
         sw_cfg: Optional[SoftwareConfig],
     ) -> dict:
-        """传统模式 — 基于 SoftwareConfig.selected_test_item_ids"""
+        """传统模式 — 基于 SoftwareConfig.selected_test_item_ids，调用真实服务"""
         from sqlalchemy import select
 
         selected_ids = []
@@ -314,16 +388,14 @@ class TestExecutor:
         if not items:
             raise BusinessException(400, "选中的测试项均已禁用")
 
-        run = TestRun(
-            batch_id=generate_batch_id(),
-            serial_number=serial_number,
-            operator=operator,
-            status=RUN_STATUS_RUNNING,
-            station_id=station_id,
-            slot_id=slot_id,
-            started_at=__import__('datetime').datetime.utcnow(),
-        )
-        db.add(run)
+        # Get equipment base URL
+        r = await db.execute(select(EquipmentConfig).where(EquipmentConfig.station_id == station_id))
+        equip_cfg = r.scalar_one_or_none()
+        base_url = equip_cfg.equipment_service_address if equip_cfg else ""
+
+        # Update existing TestRun to RUNNING
+        run.status = RUN_STATUS_RUNNING
+        run.started_at = __import__('datetime').datetime.utcnow()
         await db.flush()
 
         r = await db.execute(select(TestSlot).where(TestSlot.id == slot_id))
@@ -348,11 +420,28 @@ class TestExecutor:
         log_items = []
 
         for item in items:
-            await asyncio.sleep(0.3)
+            # Get service address
+            relative_path = item.service_address or ""
+            service_url = _build_service_url(base_url, relative_path)
 
-            actual_value = item.expected_value
-            import random
-            passed = random.random() > 0.1
+            # Prepare payload
+            payload = {
+                "serial_number": serial_number,
+                "station_id": station_id,
+                "slot_id": slot_id,
+                "test_item_id": item.id,
+                "test_item_name": item.name,
+                "params": item.params or {},
+            }
+
+            # Call actual service
+            svc_result = await _call_test_service(service_url, payload, timeout=30.0)
+
+            passed = svc_result.get("passed", False)
+            actual_value = svc_result.get("actual_value", 0.0)
+            deviation = svc_result.get("deviation", 0.0)
+            duration_ms = svc_result.get("duration_ms", 0)
+            error_msg = svc_result.get("error")
 
             from app.models.test_result import TestResult
             result = TestResult(
@@ -362,8 +451,9 @@ class TestExecutor:
                 serial_number=serial_number,
                 actual_value=actual_value,
                 passed=passed,
-                deviation=actual_value - item.expected_value if passed else 999.0,
-                duration_ms=300,
+                deviation=deviation,
+                duration_ms=duration_ms,
+                remark=error_msg or "",
             )
             db.add(result)
             log_items.append({

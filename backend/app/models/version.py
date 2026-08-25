@@ -23,6 +23,7 @@ class TestVersion(Base):
     codes_config = mapped_column(JSONField, default=list)
     type: Mapped[str] = mapped_column(String(30), default="standard")
     bom_code: Mapped[str] = mapped_column(String(200), default="")
+    bom_config_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bom_config.id"), nullable=True)
     tps_name: Mapped[str] = mapped_column(String(200), default="")
     domain_tags: Mapped[str] = mapped_column(String(500), default="")
     inherit_from_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("test_versions.id"), nullable=True)
@@ -48,6 +49,7 @@ class TestVersion(Base):
             "codes_config": self.codes_config or [],
             "type": self.type or "standard",
             "bom_code": self.bom_code or "",
+            "bom_config_id": self.bom_config_id,
             "tps_name": self.tps_name or "",
             "domain_tags": self.domain_tags or "",
             "inherit_from_id": self.inherit_from_id,
@@ -73,6 +75,7 @@ class SubScenario(Base):
     property_page = mapped_column(JSONField, default=dict)
     metrics_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
     metrics_ini: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    bom_snapshot = mapped_column(JSONField, default=list, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     version = relationship("TestVersion", back_populates="sub_scenarios")
@@ -90,6 +93,7 @@ class SubScenario(Base):
             "property_page": self.property_page or {},
             "metrics_json": self.metrics_json or "",
             "metrics_ini": self.metrics_ini or "",
+            "bom_snapshot": self.bom_snapshot or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

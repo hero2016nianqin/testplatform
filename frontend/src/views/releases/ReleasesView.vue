@@ -161,13 +161,34 @@
               </el-form-item>
               <el-row :gutter="20" v-if="createForm.type !== 'standard'">
                 <el-col :span="12">
+                  <el-form-item label="BOM 选择">
+                    <el-select
+                      v-model="createForm.bom_config_id"
+                      filterable clearable
+                      placeholder="选择已归档的BOM配置（自动填充编码）"
+                      class="w-full"
+                      @change="(val: number | null) => {
+                        if (val) {
+                          const cfg = selectableBomConfigs.find((c: any) => c.id === val)
+                          if (cfg) { createForm.bom_code = cfg.bom_code }
+                        }
+                      }"
+                    >
+                      <el-option v-for="cfg in selectableBomConfigs" :key="cfg.id" :value="cfg.id"
+                        :label="`${cfg.bom_code} - ${cfg.bom_name || '未命名'} (v${cfg.version}, ${cfg.indicator_count}项)`" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
                   <el-form-item label="BOM 编码" required>
                     <el-input
                       v-model="createForm.bom_code"
-                      placeholder="多个用逗号或分号分隔，如 BOM1,BOM2"
+                      placeholder="可手动输入或从上方选择自动填充"
                     />
                   </el-form-item>
                 </el-col>
+              </el-row>
+              <el-row :gutter="20" v-if="createForm.type !== 'standard'">
                 <el-col :span="12">
                   <el-form-item label="TPS 名称" v-if="createForm.type === 'multi_process'">
                     <el-input v-model="createForm.tps_name" />
@@ -625,6 +646,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { versionApi } from '@/api/version'
 import { testApi } from '@/api/test'
 import { stationApi } from '@/api/station'
+import { metricsApi } from '@/api/metrics'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadInstance } from 'element-plus'
@@ -750,11 +772,20 @@ const releaseDetailLoading = ref(false)
 const createForm = reactive({
   version: '', project_name: '', description: '', type: 'standard',
   process_type: '', workstation: '', codes_config: [] as any[], bom_code: '',
+  bom_config_id: null as number | null,
   tps_name: '', sequence_id: 0, inherit_from_id: null as number | null,
   auto_inherit: false, domain_tags: '',
   sub_scenarios: [] as any[],
   approval_steps: [] as any[],
 })
+
+const selectableBomConfigs = ref<any[]>([])
+async function loadSelectableBomConfigs() {
+  try {
+    const res = await metricsApi.listSelectableBomConfigs()
+    selectableBomConfigs.value = res.data || []
+  } catch { selectableBomConfigs.value = [] }
+}
 const currentEditingId = ref<number | null>(null)
 
 function newSubScenario(): any {
@@ -824,6 +855,7 @@ function applyInheritConfig(src: any) {
   if (!src) return
   createForm.type = src.type
   if (!createForm.bom_code) createForm.bom_code = src.bom_code || ''
+  if (!createForm.bom_config_id) createForm.bom_config_id = src.bom_config_id || null
   if (!createForm.tps_name) createForm.tps_name = src.tps_name || ''
   if (!createForm.description) createForm.description = src.description || ''
   createForm.domain_tags = (src.domain_tags || '')
@@ -882,6 +914,7 @@ function resetCreateForm() {
   Object.assign(createForm, {
     version: '', project_name: '', description: '', type: 'standard',
     process_type: '', workstation: '', codes_config: [], bom_code: '',
+    bom_config_id: null,
     tps_name: '', sequence_id: 0, inherit_from_id: null, auto_inherit: false,
     domain_tags: '', sub_scenarios: [], approval_steps: [],
   })
@@ -1440,6 +1473,7 @@ onMounted(async () => {
     fetchVersions(),
     fetchDeployVersions(),
     loadPendingApprovals(),
+    loadSelectableBomConfigs(),
     versionApi.list({ page: 1, page_size: 100 }).then(r => { existingVersions.value = r.data?.items || [] }).catch(() => {}),
     testApi.listSequences().then(r => { sequences.value = r.data || [] }).catch(() => {}),
     versionApi.allUsers().then(r => { allUsers.value = r.data || [] }).catch(() => {}),

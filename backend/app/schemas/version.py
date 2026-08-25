@@ -13,6 +13,7 @@ class VersionCreateReq(BaseModel):
     workstation: str = ""
     codes_config: list = []
     bom_code: str = ""
+    bom_config_id: Optional[int] = None
     tps_name: str = ""
     domain_tags: str = ""
     inherit_from_id: Optional[int] = None
@@ -28,6 +29,7 @@ class VersionUpdateReq(BaseModel):
     workstation: Optional[str] = None
     codes_config: Optional[list] = None
     bom_code: Optional[str] = None
+    bom_config_id: Optional[int] = None
     tps_name: Optional[str] = None
     domain_tags: Optional[str] = None
     sub_scenarios: Optional[list] = None
@@ -48,6 +50,7 @@ class VersionResp(BaseModel):
     codes_config: list
     type: str
     bom_code: str
+    bom_config_id: Optional[int] = None
     tps_name: str
     domain_tags: str
     inherit_from_id: Optional[int]
@@ -67,6 +70,7 @@ class SubScenarioCreateReq(BaseModel):
     property_page: Any = {}
     metrics_json: str = ""
     metrics_ini: str = ""
+    bom_snapshot: list = []
 
 
 class SubScenarioUpdateReq(BaseModel):
@@ -81,6 +85,7 @@ class SubScenarioUpdateReq(BaseModel):
     property_page: Optional[Any] = None
     metrics_json: Optional[str] = None
     metrics_ini: Optional[str] = None
+    bom_snapshot: Optional[list] = None
 
 
 class SubScenarioResp(BaseModel):
@@ -97,6 +102,7 @@ class SubScenarioResp(BaseModel):
     property_page: Any
     metrics_json: str = ""
     metrics_ini: str = ""
+    bom_snapshot: list = []
     created_at: Optional[datetime]
 
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, func, JSON
+from sqlalchemy import String, Text, Integer, Boolean, DateTime, ForeignKey, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -188,7 +188,7 @@ class BomConfig(Base):
     # 指定审批人（为空则任意 developer+ 可审）
     approver_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     approver_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    archived: Mapped[bool] = mapped_column(Integer, default=0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     domain_owners: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

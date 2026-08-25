@@ -4,6 +4,7 @@
 """
 import os
 from datetime import datetime
+from typing import Optional
 
 
 def save_run_log(
@@ -15,7 +16,7 @@ def save_run_log(
     total: int,
     passed: int,
     failed: int,
-    items: list[dict] | None = None,
+    items: Optional[list[dict]] = None,
     slot_info: str = "",
 ):
     folder = "success" if status == "completed" else "fail"

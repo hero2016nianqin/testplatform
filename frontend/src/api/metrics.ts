@@ -189,4 +189,9 @@ export const metricsApi = {
   getChangeLogs(configId: number, params?: any) {
     return api.get(`/metrics/bom-configs/${configId}/change-logs`, { params })
   },
+
+  // ── 版本创建选择器：获取已归档的 BOM 列表 ──
+  listSelectableBomConfigs() {
+    return api.get('/metrics/bom-configs/selectable')
+  },
 }

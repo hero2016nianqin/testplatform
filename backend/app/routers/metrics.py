@@ -527,6 +527,36 @@ async def list_bom_codes(keyword: str = Query(""), db: AsyncSession = Depends(ge
     return success(data=codes)
 
 
+@router.get("/bom-configs/selectable")
+async def list_selectable_bom_configs(db: AsyncSession = Depends(get_db)):
+    """获取可选的已归档 BOM 配置列表（供版本创建选择器使用）"""
+    from app.models.metrics import BomConfig
+    r = await db.execute(
+        select(BomConfig).where(BomConfig.archived == True)
+        .order_by(BomConfig.bom_code, BomConfig.version.desc()))
+    configs = list(r.scalars().all())
+    # Deduplicate by bom_code, keep latest version
+    seen = set()
+    result = []
+    for cfg in configs:
+        if cfg.bom_code not in seen:
+            seen.add(cfg.bom_code)
+            result.append({
+                "id": cfg.id,
+                "bom_code": cfg.bom_code,
+                "bom_name": cfg.bom_name or "",
+                "version": cfg.version,
+                "indicator_count": 0,
+            })
+    # Count indicators per config
+    for item in result:
+        r2 = await db.execute(
+            select(func.count()).select_from(BomIndicator)
+            .where(BomIndicator.bom_config_id == item["id"]))
+        item["indicator_count"] = r2.scalar() or 0
+    return success(data=result)
+
+
 async def _enrich_bom_configs(db: AsyncSession, items):
     data = []
     for i in items:

@@ -15,7 +15,7 @@ from app.utils.batch_id import generate_batch_id
 from app.utils.dates import parse_datetime
 from app.config import (
     SLOT_STATUS_TESTING, SLOT_STATUS_PASS, SLOT_STATUS_FAIL, SLOT_STATUS_IDLE,
-    RUN_STATUS_RUNNING, RUN_STATUS_COMPLETED, RUN_STATUS_FAILED,
+    RUN_STATUS_PENDING, RUN_STATUS_RUNNING, RUN_STATUS_COMPLETED, RUN_STATUS_FAILED,
 )
 
 

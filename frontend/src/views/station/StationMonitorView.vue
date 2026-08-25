@@ -132,7 +132,10 @@
                     <el-input v-model="equipForm.equipment_ip" placeholder="192.168.1.100" size="small" />
                   </el-form-item>
                   <el-form-item label="服务地址">
-                    <el-input v-model="equipForm.equipment_service_address" placeholder="http://..." size="small" />
+                    <el-input v-model="equipForm.equipment_service_address" placeholder="http://192.168.1.100:8080/api" size="small" />
+                    <div class="el-form-item__hint" style="margin-top:4px;color:#909399;font-size:0.7rem;">
+                      基础 URL，测试项只需填相对路径（如 /test/tx-power），运行时自动拼接
+                    </div>
                   </el-form-item>
                 </el-form>
               </div>
@@ -249,25 +252,35 @@
                 </el-form>
               </div>
               <div v-if="softForm">
-                <div class="param-section-title" style="margin-bottom:8px;">测试项</div>
-                <div v-if="sequenceSteps.length > 0" class="mb-2" style="max-height:200px;overflow-y:auto;">
+                <div class="param-section-title">测试项</div>
+                <div v-if="sequenceSteps.length > 0" class="test-items-list" style="max-height:280px;">
                   <div
                     v-for="s in sequenceSteps"
-                    :key="s.id"
-                    class="flex items-center gap-2 py-1 px-1 rounded hover:bg-gray-50"
-                    style="border-bottom:1px solid #f0f0f0"
+                    :key="s.test_item_id || s.id"
+                    class="test-item-row"
                   >
-                    <el-checkbox v-model="stepCheckMap[s.id]" size="small" />
-                    <span class="text-xs" :class="s.template_is_critical ? 'font-bold text-red-500' : ''">
-                      {{ s.step_order }}. {{ s.template_name }}
-                    </span>
-                    <el-tag v-if="s.template_category" size="small" type="info">{{ s.template_category }}</el-tag>
-                    <el-tag v-if="s.template_is_critical" size="small" type="danger">关键</el-tag>
-                    <span class="text-xs text-gray-400 ml-auto">{{ s.timeout_seconds }}s</span>
+                    <div class="test-item-name" :class="{ critical: s.is_critical || s.template_is_critical }">
+                      {{ s.test_item_name || s.template_name || '未知测试项' }}
+                    </div>
+                    <div class="test-item-tags">
+                      <el-tag v-if="s.test_type || s.template_category" class="test-item-tag type">
+                        {{ s.test_type || s.template_category }}
+                      </el-tag>
+                      <el-tag v-if="s.is_critical || s.template_is_critical" class="test-item-tag critical">关键</el-tag>
+                      <el-tag v-if="s.block_type && s.block_type !== 'normal'" class="test-item-tag block">
+                        {{ s.block_type }}
+                      </el-tag>
+                    </div>
+                    <div v-if="s.service_address || s.template_service_address" class="test-item-service" :title="s.service_address || s.template_service_address">
+                      {{ s.service_address || s.template_service_address }}
+                    </div>
+                    <el-checkbox v-model="stepCheckMap[s.test_item_id || s.id]" size="small" class="test-item-checkbox" />
                   </div>
                 </div>
-                <div v-else-if="selectedSubScenario" class="text-gray-400 text-sm mb-2">该子场景未配置测试序列</div>
-                <el-button type="primary" size="small" :loading="paramsSaving" @click="saveSoftParams" class="mt-1">保存软件参数</el-button>
+                <div v-else-if="selectedSubScenario" class="text-gray-400 text-sm mb-2" style="padding: 8px 4px;">该子场景未配置测试序列</div>
+                <div class="text-right mt-2">
+                  <el-button type="primary" size="small" :loading="paramsSaving" @click="saveSoftParams">保存软件参数</el-button>
+                </div>
               </div>
               <div v-else class="text-center text-gray-400 py-4">加载中...</div>
             </el-tab-pane>
@@ -609,14 +622,37 @@ function onVersionChange(versionId: number) {
   selectedBoms.value = ''
   selectedVersionTps.value = ''
   subScenarios.value = []
+  selectedVersionId.value = versionId
+  localStorage.setItem(`station_${stationId}_version_id`, String(versionId))
+  localStorage.removeItem(`station_${stationId}_sub_scenario_id`)
   const ver = deployedVersions.value.find((v) => v.version_id === versionId)
   if (ver) {
     selectedVersionBom.value = ver.bom_code || ''
     selectedBoms.value = bomOptions.value[0] || ''
     selectedVersionTps.value = ver.tps_name || ''
-    subScenarios.value = ver.sub_scenarios || []
+    let subs = ver.sub_scenarios || []
+    // standard 类型版本无子场景时，从 sequence_data 生成默认子场景
+    if (!subs.length && softForm.value?.sequence_data && Array.isArray(softForm.value.sequence_data) && softForm.value.sequence_data.length) {
+      subs = [{
+        id: 0,
+        name: '默认测试流程',
+        process_type: softForm.value.process_type || '',
+        workstation: softForm.value.workstation || '',
+        sequence_id: softForm.value.sequence_id || 0,
+        bom_snapshot: []
+      }]
+    }
+    subScenarios.value = subs
     softForm.value.project_name = ver.project_name || softForm.value?.project_name || ''
     softForm.value.dut_version = ver.version || softForm.value?.dut_version || ''
+    localStorage.setItem(`station_${stationId}_version_context`, JSON.stringify({
+      version_id: ver.version_id,
+      version: ver.version,
+      project_name: ver.project_name,
+      bom_code: ver.bom_code,
+      tps_name: ver.tps_name,
+      sub_scenarios: subs
+    }))
   }
 }
 
@@ -627,11 +663,37 @@ function loadSubScenarios() {
 function onSubScenarioChange(ssId: number) {
   const ss = subScenarios.value.find((s) => s.id === ssId)
   selectedSubScenario.value = ss
+  selectedSubScenarioId.value = ssId
+  localStorage.setItem(`station_${stationId}_sub_scenario_id`, String(ssId))
+  const ver = deployedVersions.value.find((v) => v.version_id === selectedVersionId.value)
+  if (ss && ver) {
+    localStorage.setItem(`station_${stationId}_sub_scenario_context`, JSON.stringify({
+      sub_scenario_id: ss.id,
+      sub_scenario_name: ss.name,
+      process_type: ss.process_type,
+      workstation: ss.workstation,
+      sequence_id: ss.sequence_id,
+      version_id: ver.version_id,
+      version: ver.version,
+      project_name: ver.project_name,
+      bom_code: ver.bom_code,
+      tps_name: ver.tps_name,
+      test_items: sequenceSteps.value.map(s => ({
+        test_item_id: s.test_item_id || s.id,
+        test_item_name: s.test_item_name || s.template_name,
+        step_order: s.step_order,
+        is_critical: s.is_critical || s.template_is_critical,
+        block_type: s.block_type,
+        test_type: s.test_type || s.template_category,
+        service_address: s.service_address
+      }))
+    }))
+  }
   sequenceSteps.value = []
   stepCheckMap.value = {}
   if (ss) {
     softForm.value.sequence_id = ss.sequence_id || softForm.value?.sequence_id
-    if (ss.sequence_id) {
+    if (ss.sequence_id && ss.id !== 0) {
       testApi.getSequence(ss.sequence_id).then((res: any) => {
         const steps = res.data?.steps || []
         sequenceSteps.value = steps
@@ -639,6 +701,19 @@ function onSubScenarioChange(ssId: number) {
         steps.forEach((s: any) => { map[s.id] = true })
         stepCheckMap.value = map
       }).catch(() => {})
+    } else if (softForm.value?.sequence_data && Array.isArray(softForm.value.sequence_data)) {
+      // 默认子场景(id=0)或无 process_name 过滤时，显示全部 sequence_data
+      let filtered = softForm.value.sequence_data
+      if (ss.process_type || ss.workstation) {
+        filtered = filtered.filter((step: any) =>
+          (!ss.process_type || step.process_name === ss.process_type) &&
+          (!ss.workstation || step.station_name === ss.workstation)
+        )
+      }
+      sequenceSteps.value = filtered
+      const map: Record<number, boolean> = {}
+      filtered.forEach((s: any) => { map[s.test_item_id || s.template_id] = true })
+      stepCheckMap.value = map
     }
   }
 }
@@ -1285,8 +1360,45 @@ function downloadFile(file: any) {
 
 // ── Lifecycle ──
 const wsHandlers: Array<{ event: string; handler: (msg: any) => void }> = []
+
+function restoreSelections() {
+  const versionCtx = localStorage.getItem(`station_${stationId}_version_context`)
+  const subScenarioCtx = localStorage.getItem(`station_${stationId}_sub_scenario_context`)
+  if (versionCtx) {
+    try {
+      const ctx = JSON.parse(versionCtx)
+      const ver = deployedVersions.value.find((v) => v.version_id === ctx.version_id)
+      if (ver) {
+        selectedVersionId.value = ctx.version_id
+        onVersionChange(ctx.version_id)
+        if (subScenarioCtx) {
+          try {
+            const ssCtx = JSON.parse(subScenarioCtx)
+            if (ssCtx.version_id === ctx.version_id) {
+              // 先从 ver.sub_scenarios 找，再从 subScenarios.value 找（含默认子场景）
+              let ss = ver.sub_scenarios?.find((s: any) => s.id === ssCtx.sub_scenario_id)
+              if (!ss) ss = subScenarios.value.find((s: any) => s.id === ssCtx.sub_scenario_id)
+              if (ss) {
+                selectedSubScenarioId.value = ssCtx.sub_scenario_id
+                selectedSubScenario.value = ss
+                onSubScenarioChange(ssCtx.sub_scenario_id)
+                if (ssCtx.test_items && ssCtx.test_items.length) {
+                  ssCtx.test_items.forEach((ti: any) => {
+                    stepCheckMap.value[ti.test_item_id] = true
+                  })
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+}
+
 onMounted(() => {
   loadFullDetail()
+  loadDeployedVersions().then(restoreSelections)
   wsConnect()
   const h1 = (msg: any) => {
     const d = msg.data || {}
@@ -1336,6 +1448,7 @@ onActivated(() => {
     wsHandlers.length = 0
   }
   loadFullDetail()
+  loadDeployedVersions().then(restoreSelections)
   if (!wsConnected.value) wsConnect()
 })
 
@@ -1634,16 +1747,18 @@ onUnmounted(() => {
 .param-section-card {
   background: #ffffff;
   border: 1px solid #e0ecf7;
-  border-radius: 6px;
-  padding: 10px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 .param-section-title {
-  font-weight: 700; font-size: 0.78rem; color: #1976d2;
-  margin-bottom: 6px;
-  padding-bottom: 4px;
+  font-weight: 600; font-size: 0.78rem; color: #1976d2;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
   border-bottom: 1px solid #e8f0fe;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
 }
 
 /* Property page key text (static, no border) */
@@ -1653,36 +1768,90 @@ onUnmounted(() => {
   background: transparent; border: none;
 }
 
+/* Test items list - custom styling */
+.params-panel-body .test-items-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 280px; overflow-y: auto;
+}
+.params-panel-body .test-item-row {
+  background: #ffffff;
+  border: 1px solid #e0ecf7;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+  transition: all 0.15s ease;
+}
+.params-panel-body .test-item-row:hover {
+  border-color: #b3d4fc;
+  box-shadow: 0 1px 4px rgba(25,118,210,0.08);
+  background: #fafbfc;
+}
+.params-panel-body .test-item-name {
+  flex: 1; min-width: 0;
+  font-size: 0.82rem; font-weight: 500; color: #263238;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.params-panel-body .test-item-name.critical {
+  font-weight: 600; color: #c62828;
+}
+.params-panel-body .test-item-tags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-left: auto;
+}
+.params-panel-body .test-item-tag {
+  font-size: 0.65rem; height: 20px; line-height: 16px;
+  padding: 0 6px; border-radius: 3px;
+  font-weight: 500;
+}
+.params-panel-body .test-item-tag.type { background: #e3f2fd; color: #1565c0; }
+.params-panel-body .test-item-tag.critical { background: #fdeaea; color: #c62828; }
+.params-panel-body .test-item-tag.block { background: #fff8e1; color: #f57f17; }
+.params-panel-body .test-item-service {
+  font-size: 0.7rem; color: #78909c;
+  max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-left: 8px; flex-shrink: 0;
+}
+.params-panel-body .test-item-checkbox { flex-shrink: 0; }
+
 /* Override form controls for light panel theme */
-.params-panel-body .el-form-item { margin-bottom: 10px; }
-.params-panel-body .el-form-item__label { font-size: 0.78rem; color: #546e7a; font-weight: 500; }
+.params-panel-body .el-form-item { margin-bottom: 12px; }
+.params-panel-body .el-form-item__label { 
+  font-size: 0.8rem; color: #455a64; font-weight: 500; 
+  line-height: 1.4;
+}
 .params-panel-body .el-input__inner,
 .params-panel-body .el-select .el-input__inner {
-  background: #ffffff; border-color: #d0dbe8; color: #333;
-  font-size: 0.8rem;
+  background: #ffffff; border-color: #cfd8e0; color: #263238;
+  font-size: 0.82rem; height: 32px;
+  border-radius: 4px;
 }
 .params-panel-body .el-input__inner:focus {
   border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.12);
 }
 .params-panel-body .el-input.is-disabled .el-input__inner {
   background: #f0f2f5; color: #909399;
 }
-.params-panel-body .el-switch__label { color: #78909c; font-size: 0.75rem; }
+.params-panel-body .el-switch__label { color: #546e7a; font-size: 0.78rem; }
 .params-panel-body .el-table { background: #ffffff; color: #333; font-size: 0.78rem; }
-.params-panel-body .el-table th.el-table__cell { background: #f0f5ff; color: #1976d2; font-size: 0.78rem; }
+.params-panel-body .el-table th.el-table__cell { background: #eef4fb; color: #1565c0; font-size: 0.75rem; font-weight: 600; }
 .params-panel-body .el-table tr { background: #ffffff; }
 .params-panel-body .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #f8faff; }
 .params-panel-body .el-table td.el-table__cell { border-bottom-color: #e8eef5; }
-.params-panel-body .el-checkbox__label { font-size: 0.78rem; color: #555; }
+.params-panel-body .el-checkbox__label { font-size: 0.78rem; color: #455a64; }
 .params-panel-body .el-tag { font-size: 0.7rem; }
 .params-panel-body .el-select .el-select__tags-text { font-size: 0.78rem; }
 .params-panel-body .el-form-item--small.el-form-item { margin-bottom: 8px; }
 
+/* Form grid improvements */
+.params-panel-body .el-row { margin-bottom: 4px; }
+.params-panel-body .el-col { padding: 0 6px; }
+
 /* Tabs light theme overrides */
 .params-tabs.el-tabs { background: transparent; }
-.params-tabs.el-tabs--top > .el-tabs__header { background: #ffffff; margin-bottom: 10px; border-radius: 6px 6px 0 0; }
-.params-tabs .el-tabs__item { height: 32px; line-height: 32px; font-size: 0.8rem; }
-.params-tabs .el-tabs__active-bar { background: #1976d2; }
+.params-tabs.el-tabs--top > .el-tabs__header { background: #ffffff; margin-bottom: 12px; border-radius: 6px 6px 0 0; border-bottom: 1px solid #e0ecf7; padding: 0 4px; }
+.params-tabs .el-tabs__item { height: 34px; line-height: 34px; font-size: 0.8rem; padding: 0 14px; font-weight: 500; }
+.params-tabs .el-tabs__active-bar { background: #1976d2; height: 3px; }
 </style>
 
 <style>

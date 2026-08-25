@@ -168,6 +168,7 @@ class VersionService:
         codes_config = data.get("codes_config", [])
 
         bom_code = data.get("bom_code", "")
+        bom_config_id = data.get("bom_config_id")
         tps_name = data.get("tps_name", "")
         domain_tags = data.get("domain_tags", "")
         inherit_from_id = data.get("inherit_from_id")
@@ -176,6 +177,30 @@ class VersionService:
         if vtype in (VERSION_TYPE_MULTI_PROCESS, VERSION_TYPE_PRODUCT_FAMILY):
             if not bom_code:
                 raise BusinessException(400, "必须填写BOM编码")
+
+        # Validate bom_config_id if provided, and snapshot full BOM indicator tree
+        bom_snapshot = []  # Full tree: test_items -> indicators
+        if bom_config_id:
+            from app.models.metrics import BomConfig
+            from app.services.bom_config_service import BomConfigService
+            r = await db.execute(select(BomConfig).where(BomConfig.id == bom_config_id))
+            bom_cfg = r.scalar_one_or_none()
+            if not bom_cfg:
+                raise BusinessException(400, "BOM配置不存在")
+            if not bom_code:
+                bom_code = bom_cfg.bom_code
+            bom_snapshot = await BomConfigService.get_full_indicators_by_config(db, bom_config_id)
+        elif bom_code and not bom_config_id:
+            # Try to find BomConfig by bom_code (latest archived version)
+            from app.models.metrics import BomConfig
+            from app.services.bom_config_service import BomConfigService
+            r = await db.execute(
+                select(BomConfig).where(BomConfig.bom_code == bom_code, BomConfig.archived == True)
+                .order_by(BomConfig.version.desc()))
+            bom_cfg = r.scalar_one_or_none()
+            if bom_cfg:
+                bom_config_id = bom_cfg.id
+                bom_snapshot = await BomConfigService.get_full_indicators_by_config(db, bom_cfg.id)
         if vtype == VERSION_TYPE_MULTI_PROCESS and not tps_name:
             raise BusinessException(400, "多工序版本必须填写TPS名称")
 
@@ -186,7 +211,8 @@ class VersionService:
             created_by=created_by,
             process_type=process_type, workstation=workstation,
             codes_config=codes_config,
-            bom_code=bom_code, tps_name=tps_name, domain_tags=domain_tags,
+            bom_code=bom_code, bom_config_id=bom_config_id,
+            tps_name=tps_name, domain_tags=domain_tags,
             inherit_from_id=inherit_from_id,
         )
         db.add(v)
@@ -264,6 +290,7 @@ class VersionService:
                     property_page=ss_data.get("property_page", {}),
                     metrics_json=ss_data.get("metrics_json") or None,
                     metrics_ini=ss_data.get("metrics_ini") or None,
+                    bom_snapshot=ss_data.get("bom_snapshot", bom_snapshot),
                 )
                 db.add(ss)
                 created_subs.append(ss)
@@ -858,6 +885,153 @@ class VersionService:
                     eqpp.page_json = {**eqpp.page_json, **merged_pp}
                 else:
                     eqpp.page_json = merged_pp
+
+        # 5. BOM indicators → SoftwareConfig.bom_indicator_data (JSON)
+        if all_sub_scenarios:
+            merged_bom = []
+            for ss in all_sub_scenarios:
+                bom_snap = ss.bom_snapshot or []
+                if isinstance(bom_snap, list):
+                    merged_bom.extend(bom_snap)
+
+            if merged_bom:
+                # Full tree: store in bom_indicator_data
+                sw.bom_indicator_data = merged_bom
+
+                # Generate EquipmentMetrics from test items + indicators
+                metrics_list = []
+                for test_item in merged_bom:
+                    for ind in test_item.get("indicators", []):
+                        params = ind.get("params", [])
+                        first_param_value = ""
+                        if params and isinstance(params, list):
+                            first_param_value = params[0].get("value", "")
+                        metrics_list.append({
+                            "name": ind.get("indicator_name", ""),
+                            "expected_value": first_param_value,
+                            "min_value": "",
+                            "max_value": "",
+                            "unit": ind.get("unit", ""),
+                            "category": ind.get("category", ""),
+                            "sort_order": test_item.get("sort_order", 0),
+                            "item_id": test_item.get("id", 0),
+                            "indicator_id": ind.get("indicator_id", 0),
+                            "block_type": test_item.get("block_type", "normal"),
+                            "service_address": test_item.get("service_address", ""),
+                            "test_item_name": test_item.get("name", ""),
+                        })
+                if metrics_list:
+                    r = await db.execute(select(EquipmentMetrics).where(EquipmentMetrics.station_id == station_id))
+                    eqm = r.scalar_one_or_none()
+                    if not eqm:
+                        eqm = EquipmentMetrics(station_id=station_id)
+                        db.add(eqm)
+                    eqm.metrics_json = metrics_list
+
+                # Generate sequence_data from unique test items (de-duplicate by test_item id)
+                seen_items = set()
+                unique_items = []
+                for test_item in merged_bom:
+                    tid = test_item.get("id")
+                    if tid and tid not in seen_items:
+                        seen_items.add(tid)
+                        unique_items.append(test_item)
+                
+                sorted_items = sorted(unique_items, key=lambda x: x.get("sort_order", 0))
+                seq_data = []
+                for idx, test_item in enumerate(sorted_items):
+                    seq_data.append({
+                        "step_order": idx + 1,
+                        "test_item_id": test_item.get("id", 0),
+                        "test_item_name": test_item.get("name", ""),
+                        "service_address": test_item.get("service_address", ""),
+                        "timeout_seconds": test_item.get("timeout_seconds"),
+                        "is_critical": test_item.get("block_type") in ("must_test", "critical"),
+                        "block_type": test_item.get("block_type", "normal"),
+                        "process_name": test_item.get("process_name", ""),
+                        "station_name": test_item.get("station_name", ""),
+                        "test_type": test_item.get("test_type", ""),
+                        "parallel_enabled": test_item.get("parallel_enabled", False),
+                        "indicators": [
+                            {
+                                "indicator_id": ind.get("indicator_id", 0),
+                                "indicator_name": ind.get("indicator_name", ""),
+                                "indicator_code": ind.get("indicator_code", ""),
+                                "params": ind.get("params", []),
+                            }
+                            for ind in test_item.get("indicators", [])
+                        ],
+                    })
+                if seq_data:
+                    sw.sequence_data = seq_data
+
+            elif v.bom_code:
+                # Fallback: pull from BomConfig if no snapshot
+                from app.services.bom_config_service import BomConfigService
+                from app.models.metrics import BomConfig
+                r = await db.execute(
+                    select(BomConfig).where(BomConfig.bom_code == v.bom_code, BomConfig.archived == True)
+                    .order_by(BomConfig.version.desc()))
+                bom_cfg = r.scalar_one_or_none()
+                if bom_cfg:
+                    tree = await BomConfigService.get_full_indicators_by_config(db, bom_cfg.id)
+                    if tree:
+                        sw.bom_indicator_data = tree
+                        # Also generate metrics and sequence
+                        metrics_list = []
+                        for test_item in tree:
+                            for ind in test_item.get("indicators", []):
+                                params = ind.get("params", [])
+                                first_param_value = ""
+                                if params and isinstance(params, list):
+                                    first_param_value = params[0].get("value", "")
+                                metrics_list.append({
+                                    "name": ind.get("indicator_name", ""),
+                                    "expected_value": first_param_value,
+                                    "min_value": "", "max_value": "",
+                                    "unit": ind.get("unit", ""),
+                                    "category": ind.get("category", ""),
+                                    "sort_order": test_item.get("sort_order", 0),
+                                    "item_id": test_item.get("id", 0),
+                                    "indicator_id": ind.get("indicator_id", 0),
+                                    "block_type": test_item.get("block_type", "normal"),
+                                    "service_address": test_item.get("service_address", ""),
+                                    "test_item_name": test_item.get("name", ""),
+                                })
+                        if metrics_list:
+                            r = await db.execute(select(EquipmentMetrics).where(EquipmentMetrics.station_id == station_id))
+                            eqm = r.scalar_one_or_none()
+                            if not eqm:
+                                eqm = EquipmentMetrics(station_id=station_id)
+                                db.add(eqm)
+                            eqm.metrics_json = metrics_list
+                        sorted_items = sorted(tree, key=lambda x: x.get("sort_order", 0))
+                        seq_data = []
+                        for idx, test_item in enumerate(sorted_items):
+                            seq_data.append({
+                                "step_order": idx + 1,
+                                "test_item_id": test_item.get("id", 0),
+                                "test_item_name": test_item.get("name", ""),
+                                "service_address": test_item.get("service_address", ""),
+                                "timeout_seconds": test_item.get("timeout_seconds"),
+                                "is_critical": test_item.get("block_type") in ("must_test", "critical"),
+                                "block_type": test_item.get("block_type", "normal"),
+                                "process_name": test_item.get("process_name", ""),
+                                "station_name": test_item.get("station_name", ""),
+                                "test_type": test_item.get("test_type", ""),
+                                "parallel_enabled": test_item.get("parallel_enabled", False),
+                                "indicators": [
+                                    {
+                                        "indicator_id": ind.get("indicator_id", 0),
+                                        "indicator_name": ind.get("indicator_name", ""),
+                                        "indicator_code": ind.get("indicator_code", ""),
+                                        "params": ind.get("params", []),
+                                    }
+                                    for ind in test_item.get("indicators", [])
+                                ],
+                            })
+                        if seq_data:
+                            sw.sequence_data = seq_data
 
         await db.flush()
 

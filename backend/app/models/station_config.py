@@ -81,6 +81,7 @@ class SoftwareConfig(Base):
     workstation: Mapped[str] = mapped_column(String(50), default="")
     selected_code: Mapped[str] = mapped_column(String(100), default="")
     bom_code: Mapped[str] = mapped_column(String(200), default="")
+    bom_indicator_data = mapped_column(JSONField, default=list, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -101,6 +102,7 @@ class SoftwareConfig(Base):
             "workstation": self.workstation or "",
             "selected_code": self.selected_code or "",
             "bom_code": self.bom_code or "",
+            "bom_indicator_data": self.bom_indicator_data or [],
         }
 
 
