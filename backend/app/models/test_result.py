@@ -12,7 +12,7 @@ class TestResult(Base):
     __table_args__ = {}
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    test_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("test_items.id"), nullable=False, index=True)
+    test_item_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("test_items.id"), nullable=True, index=True)
     test_run_id: Mapped[int] = mapped_column(Integer, ForeignKey("test_runs.id"), nullable=False, index=True)
     operator: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     serial_number: Mapped[str] = mapped_column(String(200), default="", index=True)

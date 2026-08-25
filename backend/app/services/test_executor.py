@@ -136,42 +136,46 @@ class TestExecutor:
         operator: str,
         sequence_id: int,
     ) -> dict:
-        """序列模式 — 按 TestSequence + TestItemTemplate 执行，调用真实服务"""
+        """序列模式 — 优先使用 BOM 部署的 sequence_data，回退到全局 TestSequence"""
         from sqlalchemy import select
-
-        r = await db.execute(select(TestSequence).where(TestSequence.id == sequence_id))
-        seq = r.scalar_one_or_none()
-        if not seq:
-            raise NotFoundError("测试序列不存在")
-
-        r = await db.execute(
-            select(TestSequenceStep).where(TestSequenceStep.sequence_id == sequence_id)
-            .order_by(TestSequenceStep.step_order)
-        )
-        steps = list(r.scalars().all())
 
         # Get equipment base URL
         r = await db.execute(select(EquipmentConfig).where(EquipmentConfig.station_id == station_id))
         equip_cfg = r.scalar_one_or_none()
         base_url = equip_cfg.equipment_service_address if equip_cfg else ""
 
-        # Get SoftwareConfig for sequence_data (BOM-based sequence)
+        # Get SoftwareConfig
         r = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == station_id))
         sw_cfg = r.scalar_one_or_none()
-        sequence_data = sw_cfg.sequence_data if sw_cfg else []
+        sequence_data = sw_cfg.sequence_data if sw_cfg and sw_cfg.sequence_data else []
 
-        # Build test item lookup from sequence_data (keyed by test_item_id)
-        seq_item_map = {}
-        if sequence_data and isinstance(sequence_data, list):
-            for item in sequence_data:
-                tid = item.get("test_item_id")
-                if tid:
-                    seq_item_map[tid] = item
+        # Priority: use BOM-deployed sequence_data if available
+        if sequence_data and isinstance(sequence_data, list) and len(sequence_data) > 0:
+            steps_to_run = sequence_data
+            seq_name = "BOM测试序列"
+            is_bom_sequence = True
+        else:
+            # Fallback: global TestSequence
+            r = await db.execute(select(TestSequence).where(TestSequence.id == sequence_id))
+            seq = r.scalar_one_or_none()
+            if not seq:
+                raise NotFoundError("测试序列不存在")
+            seq_name = seq.name
+
+            r = await db.execute(
+                select(TestSequenceStep).where(TestSequenceStep.sequence_id == sequence_id)
+                .order_by(TestSequenceStep.step_order)
+            )
+            db_steps = list(r.scalars().all())
+            if not db_steps:
+                raise BusinessException(400, "测试序列无步骤")
+            steps_to_run = [{"_db_step": s} for s in db_steps]
+            is_bom_sequence = False
 
         # Update existing TestRun to RUNNING
         run.status = RUN_STATUS_RUNNING
         run.sequence_id = sequence_id
-        run.sequence_name = seq.name
+        run.sequence_name = seq_name
         run.started_at = __import__('datetime').datetime.utcnow()
         await db.flush()
 
@@ -184,7 +188,6 @@ class TestExecutor:
             slot.serial_number = serial_number
         await db.flush()
 
-        # Notify run_started
         await notify_run_started(station_id, {
             "batch_id": run.batch_id,
             "operator": operator,
@@ -194,44 +197,52 @@ class TestExecutor:
         })
 
         # Execute each step
-        total = len(steps)
+        total = len(steps_to_run)
         passed_count = 0
         failed_count = 0
         stopped = False
         log_items = []
 
-        for step in steps:
+        for idx, step_data in enumerate(steps_to_run):
             if stopped:
                 break
 
-            r = await db.execute(select(TestItemTemplate).where(TestItemTemplate.id == step.template_id))
-            template = r.scalar_one_or_none()
-            if not template:
-                continue
-
-            # Get service address: priority sequence_data > template
-            test_item_id = template.id
-            seq_item = seq_item_map.get(test_item_id)
-            relative_path = ""
-            if seq_item:
-                relative_path = seq_item.get("service_address", "") or ""
-            if not relative_path:
+            if is_bom_sequence:
+                # BOM sequence: step_data is a dict from sequence_data
+                test_item_id = step_data.get("test_item_id", 0)
+                test_item_name = step_data.get("test_item_name", step_data.get("template_name", f"测试项{idx+1}"))
+                relative_path = step_data.get("service_address", "") or step_data.get("template_service_address", "")
+                timeout = float(step_data.get("timeout_seconds") or 30)
+                is_critical = step_data.get("is_critical", step_data.get("template_is_critical", False))
+                block_type = step_data.get("block_type", "must_test" if is_critical else "normal")
+                params = step_data.get("params", {})
+            else:
+                # Global sequence fallback
+                db_step = step_data["_db_step"]
+                r = await db.execute(select(TestItemTemplate).where(TestItemTemplate.id == db_step.template_id))
+                template = r.scalar_one_or_none()
+                if not template:
+                    continue
+                test_item_id = template.id
+                test_item_name = template.name
                 relative_path = template.service_address or ""
+                timeout = float(db_step.timeout_seconds or 30)
+                is_critical = template.is_critical
+                block_type = "must_test" if template.is_critical else "normal"
+                params = getattr(db_step, 'params', {}) or {}
 
             service_url = _build_service_url(base_url, relative_path)
 
-            # Prepare payload
             payload = {
                 "serial_number": serial_number,
                 "station_id": station_id,
                 "slot_id": slot_id,
                 "test_item_id": test_item_id,
-                "test_item_name": template.name,
-                "params": getattr(step, 'params', {}) or {},
+                "test_item_name": test_item_name,
+                "params": params,
             }
 
-            # Call actual service
-            svc_result = await _call_test_service(service_url, payload, timeout=float(step.timeout_seconds or 30))
+            svc_result = await _call_test_service(service_url, payload, timeout=timeout)
 
             passed = svc_result.get("passed", False)
             actual_value = svc_result.get("actual_value", 0.0)
@@ -253,8 +264,7 @@ class TestExecutor:
             )
             db.add(result)
             log_items.append({
-                "name": template.name,
-                "expected": getattr(step, 'expected_value', "-"),
+                "name": test_item_name,
                 "actual": actual_value,
                 "passed": passed,
                 "error": error_msg,
@@ -267,9 +277,8 @@ class TestExecutor:
 
             await db.flush()
 
-            is_critical = template.is_critical
             await notify_item_tested(station_id, {
-                "item_name": template.name,
+                "item_name": test_item_name,
                 "passed": passed,
                 "actual_value": actual_value,
                 "slot_id": slot_id,
@@ -277,7 +286,6 @@ class TestExecutor:
                 "is_critical": is_critical,
             })
 
-            # Critical item failure → stop
             if is_critical and not passed:
                 stopped = True
                 run.status = RUN_STATUS_FAILED
@@ -288,7 +296,6 @@ class TestExecutor:
                     slot.serial_number = None
                 await db.flush()
 
-                # Save log on critical failure
                 try:
                     from app.config import get_settings
                     settings = get_settings()
@@ -307,7 +314,7 @@ class TestExecutor:
 
                 await notify_run_failed(station_id, {
                     "batch_id": run.batch_id,
-                    "error": f"关键项失败: {template.name}",
+                    "error": f"关键项失败: {test_item_name}",
                     "slot_id": slot_id,
                 })
                 break
@@ -325,7 +332,6 @@ class TestExecutor:
                 slot.serial_number = None
             await db.flush()
 
-            # Save log file to disk
             try:
                 from app.config import get_settings
                 settings = get_settings()

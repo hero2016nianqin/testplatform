@@ -965,73 +965,79 @@ class VersionService:
                 if seq_data:
                     sw.sequence_data = seq_data
 
-            elif v.bom_code:
-                # Fallback: pull from BomConfig if no snapshot
-                from app.services.bom_config_service import BomConfigService
-                from app.models.metrics import BomConfig
+        # 5b. No sub_scenarios but has bom_config_id → pull from BomConfig directly
+        if not all_sub_scenarios and (v.bom_config_id or v.bom_code):
+            from app.services.bom_config_service import BomConfigService
+            from app.models.metrics import BomConfig
+            bom_cfg = None
+            if v.bom_config_id:
+                r = await db.execute(select(BomConfig).where(BomConfig.id == v.bom_config_id))
+                bom_cfg = r.scalar_one_or_none()
+            if not bom_cfg and v.bom_code:
                 r = await db.execute(
                     select(BomConfig).where(BomConfig.bom_code == v.bom_code, BomConfig.archived == True)
                     .order_by(BomConfig.version.desc()))
                 bom_cfg = r.scalar_one_or_none()
-                if bom_cfg:
-                    tree = await BomConfigService.get_full_indicators_by_config(db, bom_cfg.id)
-                    if tree:
-                        sw.bom_indicator_data = tree
-                        # Also generate metrics and sequence
-                        metrics_list = []
-                        for test_item in tree:
-                            for ind in test_item.get("indicators", []):
-                                params = ind.get("params", [])
-                                first_param_value = ""
-                                if params and isinstance(params, list):
-                                    first_param_value = params[0].get("value", "")
-                                metrics_list.append({
-                                    "name": ind.get("indicator_name", ""),
-                                    "expected_value": first_param_value,
-                                    "min_value": "", "max_value": "",
-                                    "unit": ind.get("unit", ""),
-                                    "category": ind.get("category", ""),
-                                    "sort_order": test_item.get("sort_order", 0),
-                                    "item_id": test_item.get("id", 0),
-                                    "indicator_id": ind.get("indicator_id", 0),
-                                    "block_type": test_item.get("block_type", "normal"),
-                                    "service_address": test_item.get("service_address", ""),
-                                    "test_item_name": test_item.get("name", ""),
-                                })
-                        if metrics_list:
-                            r = await db.execute(select(EquipmentMetrics).where(EquipmentMetrics.station_id == station_id))
-                            eqm = r.scalar_one_or_none()
-                            if not eqm:
-                                eqm = EquipmentMetrics(station_id=station_id)
-                                db.add(eqm)
-                            eqm.metrics_json = metrics_list
-                        sorted_items = sorted(tree, key=lambda x: x.get("sort_order", 0))
-                        seq_data = []
-                        for idx, test_item in enumerate(sorted_items):
-                            seq_data.append({
-                                "step_order": idx + 1,
-                                "test_item_id": test_item.get("id", 0),
-                                "test_item_name": test_item.get("name", ""),
-                                "service_address": test_item.get("service_address", ""),
-                                "timeout_seconds": test_item.get("timeout_seconds"),
-                                "is_critical": test_item.get("block_type") in ("must_test", "critical"),
+            if bom_cfg:
+                tree = await BomConfigService.get_full_indicators_by_config(db, bom_cfg.id)
+                if tree:
+                    sw.bom_indicator_data = tree
+                    # Generate metrics
+                    metrics_list = []
+                    for test_item in tree:
+                        for ind in test_item.get("indicators", []):
+                            params = ind.get("params", [])
+                            first_param_value = ""
+                            if params and isinstance(params, list):
+                                first_param_value = params[0].get("value", "")
+                            metrics_list.append({
+                                "name": ind.get("indicator_name", ""),
+                                "expected_value": first_param_value,
+                                "min_value": "", "max_value": "",
+                                "unit": ind.get("unit", ""),
+                                "category": ind.get("category", ""),
+                                "sort_order": test_item.get("sort_order", 0),
+                                "item_id": test_item.get("id", 0),
+                                "indicator_id": ind.get("indicator_id", 0),
                                 "block_type": test_item.get("block_type", "normal"),
-                                "process_name": test_item.get("process_name", ""),
-                                "station_name": test_item.get("station_name", ""),
-                                "test_type": test_item.get("test_type", ""),
-                                "parallel_enabled": test_item.get("parallel_enabled", False),
-                                "indicators": [
-                                    {
-                                        "indicator_id": ind.get("indicator_id", 0),
-                                        "indicator_name": ind.get("indicator_name", ""),
-                                        "indicator_code": ind.get("indicator_code", ""),
-                                        "params": ind.get("params", []),
-                                    }
-                                    for ind in test_item.get("indicators", [])
-                                ],
+                                "service_address": test_item.get("service_address", ""),
+                                "test_item_name": test_item.get("name", ""),
                             })
-                        if seq_data:
-                            sw.sequence_data = seq_data
+                    if metrics_list:
+                        r = await db.execute(select(EquipmentMetrics).where(EquipmentMetrics.station_id == station_id))
+                        eqm = r.scalar_one_or_none()
+                        if not eqm:
+                            eqm = EquipmentMetrics(station_id=station_id)
+                            db.add(eqm)
+                        eqm.metrics_json = metrics_list
+                    # Generate sequence_data from BOM indicators
+                    sorted_items = sorted(tree, key=lambda x: x.get("sort_order", 0))
+                    seq_data = []
+                    for idx, test_item in enumerate(sorted_items):
+                        seq_data.append({
+                            "step_order": idx + 1,
+                            "test_item_id": test_item.get("id", 0),
+                            "test_item_name": test_item.get("name", ""),
+                            "service_address": test_item.get("service_address", ""),
+                            "timeout_seconds": test_item.get("timeout_seconds"),
+                            "is_critical": test_item.get("block_type") in ("must_test", "critical"),
+                            "block_type": test_item.get("block_type", "normal"),
+                            "process_name": test_item.get("process_name", ""),
+                            "station_name": test_item.get("station_name", ""),
+                            "test_type": test_item.get("test_type", ""),
+                            "parallel_enabled": test_item.get("parallel_enabled", False),
+                            "indicators": [
+                                {
+                                    "indicator_id": ind.get("indicator_id", 0),
+                                    "indicator_name": ind.get("indicator_name", ""),
+                                    "indicator_code": ind.get("indicator_code", ""),
+                                    "params": ind.get("params", []),
+                                }
+                                for ind in test_item.get("indicators", [])
+                            ],
+                        })
+                    if seq_data:
+                        sw.sequence_data = seq_data
 
         await db.flush()
 
