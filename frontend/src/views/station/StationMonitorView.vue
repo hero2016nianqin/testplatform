@@ -701,6 +701,26 @@ function onSubScenarioChange(ssId: number) {
         steps.forEach((s: any) => { map[s.id] = true })
         stepCheckMap.value = map
       }).catch(() => {})
+    } else if (ss.bom_snapshot && Array.isArray(ss.bom_snapshot) && ss.bom_snapshot.length) {
+      // 子场景有BOM快照数据，直接使用（多工序版本）
+      const steps = ss.bom_snapshot.map((item: any, idx: number) => ({
+        test_item_id: item.id,
+        test_item_name: item.name,
+        step_order: idx + 1,
+        service_address: item.service_address || '',
+        timeout_seconds: item.timeout_seconds || 30,
+        is_critical: item.block_type === 'must_test' || item.block_type === 'critical',
+        block_type: item.block_type || 'normal',
+        process_name: item.process_name || '',
+        station_name: item.station_name || '',
+        test_type: item.test_type || '',
+        parallel_enabled: item.parallel_enabled || false,
+        indicators: item.indicators || [],
+      }))
+      sequenceSteps.value = steps
+      const map: Record<number, boolean> = {}
+      steps.forEach((s: any) => { map[s.test_item_id] = true })
+      stepCheckMap.value = map
     } else if (softForm.value?.sequence_data && Array.isArray(softForm.value.sequence_data)) {
       // 默认子场景(id=0)或无 process_name 过滤时，显示全部 sequence_data
       let filtered = softForm.value.sequence_data
