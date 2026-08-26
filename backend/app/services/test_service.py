@@ -218,6 +218,7 @@ class TestService:
             slot_id=data.get("slot_id"),
             sequence_id=data.get("sequence_id", 0),
             sequence_name=data.get("sequence_name", ""),
+            selected_item_ids=data.get("selected_item_ids", []),
         )
         db.add(run)
         await db.flush()

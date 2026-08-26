@@ -1350,10 +1350,14 @@ async function submitScan() {
   scanTesting.value = true
   scanStatusText.value = '启动中...'
   try {
+    const checkedIds = sequenceSteps.value
+      .filter((s: any) => stepCheckMap.value[s.test_item_id || s.id])
+      .map((s: any) => s.test_item_id || s.id)
     const run = await testApi.scanTest({
       serial_number: scanBarcode.value.trim(),
       slot_id: scanSelectedSlot.value.id,
       station_id: stationId,
+      selected_item_ids: checkedIds.length ? checkedIds.join(',') : '',
     })
     updateLocalSlot(scanSelectedSlot.value.id, {
       status: 'testing',

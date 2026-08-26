@@ -167,12 +167,14 @@ async def scan_test(
     serial_number: str = Query(""),
     operator: str = Query(""),
     sequence_id: int = Query(None),
+    selected_item_ids: str = Query("", description="逗号分隔的勾选测试项ID，为空则全部执行"),
     db: AsyncSession = Depends(get_db),
 ):
     """扫码即测 — 单个槽位扫码立即启动测试"""
     from app.services.test_executor import TestExecutor
+    id_list = [int(x) for x in selected_item_ids.split(",") if x.strip().isdigit()] if selected_item_ids else []
     result = await TestExecutor.execute_slot_scan(
-        db, station_id, slot_id, serial_number, operator, sequence_id,
+        db, station_id, slot_id, serial_number, operator, sequence_id, id_list,
     )
     return success(data=result, message="测试已启动")
 

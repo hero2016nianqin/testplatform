@@ -70,6 +70,7 @@ class TestExecutor:
         serial_number: str,
         operator: str,
         sequence_id: Optional[int] = None,
+        selected_item_ids: Optional[list] = None,
     ) -> dict:
         """扫码即测入口 — 验证槽位 → 创建 PENDING 批次 → 分发 Celery 任务"""
         from sqlalchemy import select
@@ -96,6 +97,7 @@ class TestExecutor:
                 "serial_number": serial_number,
                 "operator": operator,
                 "sequence_id": sequence_id or 0,
+                "selected_item_ids": selected_item_ids or [],
             })
             await db.commit()
 
@@ -133,6 +135,7 @@ class TestExecutor:
         serial_number: str,
         operator: str,
         sequence_id: int,
+        selected_item_ids: Optional[list] = None,
     ) -> dict:
         """序列模式 — 优先使用 BOM 部署的 sequence_data，回退到全局 TestSequence"""
         from sqlalchemy import select
@@ -151,6 +154,10 @@ class TestExecutor:
             raise BusinessException(400, "该工位未部署BOM测试序列，请先在版本管理中发布部署版本")
 
         steps_to_run = sequence_data
+        if selected_item_ids:
+            steps_to_run = [s for s in sequence_data if (s.get("test_item_id") or s.get("id")) in selected_item_ids]
+            if not steps_to_run:
+                raise BusinessException(400, "勾选的测试项在当前序列中未找到")
         seq_name = "BOM测试序列"
         is_bom_sequence = True
 

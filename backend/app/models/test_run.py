@@ -4,6 +4,7 @@ from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.database import JSONField
 
 
 class TestRun(Base):
@@ -29,6 +30,7 @@ class TestRun(Base):
     sequence_name: Mapped[str] = mapped_column(String(200), default="")
     version_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     sub_scenario_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    selected_item_ids = mapped_column(JSONField, default=list, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
     results = relationship("TestResult", back_populates="test_run", cascade="all, delete-orphan")
@@ -46,5 +48,6 @@ class TestRun(Base):
             "sequence_name": self.sequence_name or "",
             "version_id": self.version_id,
             "sub_scenario_id": self.sub_scenario_id,
+            "selected_item_ids": self.selected_item_ids or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

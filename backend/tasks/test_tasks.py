@@ -114,6 +114,7 @@ def execute_sequence_run(self, run_id: int):
                     serial_number=run.serial_number,
                     operator=run.operator,
                     sequence_id=sequence_id,
+                    selected_item_ids=run.selected_item_ids or [],
                 )
                 await db.commit()
                 return result
