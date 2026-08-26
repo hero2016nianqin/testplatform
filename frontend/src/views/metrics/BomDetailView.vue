@@ -333,6 +333,19 @@
                           </el-tooltip>
                         </div>
                       </div>
+                      <div v-if="item.service_address || item.test_type || item.timeout_seconds" class="flex items-center gap-2 px-1 pb-1 text-xs text-gray-500 flex-wrap">
+                        <span v-if="item.service_address" class="inline-flex items-center gap-1">
+                          <span class="text-gray-400">接口:</span>
+                          <code class="bg-gray-100 px-1 rounded text-gray-700">{{ item.service_address }}</code>
+                        </span>
+                        <span v-if="item.test_type">
+                          <span class="text-gray-400">类型:</span> {{ item.test_type }}
+                        </span>
+                        <span v-if="item.timeout_seconds">
+                          <span class="text-gray-400">超时:</span> {{ item.timeout_seconds }}s
+                        </span>
+                        <el-tag v-if="item.parallel_enabled" size="small" type="info" effect="plain">并行</el-tag>
+                      </div>
                       <div v-if="itemHasParams(item)">
                         <el-table :data="getItemParamRows(item)" stripe size="small" style="width:100%" :row-class-name="paramRowClass" @row-click="(r: any) => startInlineEdit(r)">
                           <el-table-column label="参数" width="120">

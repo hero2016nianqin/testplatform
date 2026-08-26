@@ -1,6 +1,5 @@
 """
-异步测试执行引擎 — 支持传统模式（基于 TestItem）和序列模式（基于 TestSequence）
-对应 design.md §7.2 (Fig. 传统模式 + 序列模式), §12 WebSocket 事件
+异步测试执行引擎 — BOM测试序列执行（基于 SoftwareConfig.sequence_data）
 """
 import asyncio
 import os
@@ -13,7 +12,6 @@ from sqlalchemy import select
 
 from app.models.test_run import TestRun
 from app.models.test_item import TestItem
-from app.models.test_sequence import TestSequence, TestSequenceStep, TestItemTemplate
 from app.models.station_config import SoftwareConfig, EquipmentConfig
 from app.models.station import TestSlot
 from app.core.exceptions import NotFoundError, BusinessException
@@ -144,33 +142,17 @@ class TestExecutor:
         equip_cfg = r.scalar_one_or_none()
         base_url = equip_cfg.equipment_service_address if equip_cfg else ""
 
-        # Get SoftwareConfig
+        # Get SoftwareConfig — BOM-deployed sequence_data is required
         r = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == station_id))
         sw_cfg = r.scalar_one_or_none()
         sequence_data = sw_cfg.sequence_data if sw_cfg and sw_cfg.sequence_data else []
 
-        # Priority: use BOM-deployed sequence_data if available
-        if sequence_data and isinstance(sequence_data, list) and len(sequence_data) > 0:
-            steps_to_run = sequence_data
-            seq_name = "BOM测试序列"
-            is_bom_sequence = True
-        else:
-            # Fallback: global TestSequence
-            r = await db.execute(select(TestSequence).where(TestSequence.id == sequence_id))
-            seq = r.scalar_one_or_none()
-            if not seq:
-                raise NotFoundError("测试序列不存在")
-            seq_name = seq.name
+        if not sequence_data or not isinstance(sequence_data, list) or len(sequence_data) == 0:
+            raise BusinessException(400, "该工位未部署BOM测试序列，请先在版本管理中发布部署版本")
 
-            r = await db.execute(
-                select(TestSequenceStep).where(TestSequenceStep.sequence_id == sequence_id)
-                .order_by(TestSequenceStep.step_order)
-            )
-            db_steps = list(r.scalars().all())
-            if not db_steps:
-                raise BusinessException(400, "测试序列无步骤")
-            steps_to_run = [{"_db_step": s} for s in db_steps]
-            is_bom_sequence = False
+        steps_to_run = sequence_data
+        seq_name = "BOM测试序列"
+        is_bom_sequence = True
 
         # Update existing TestRun to RUNNING
         run.status = RUN_STATUS_RUNNING
@@ -207,29 +189,14 @@ class TestExecutor:
             if stopped:
                 break
 
-            if is_bom_sequence:
-                # BOM sequence: step_data is a dict from sequence_data
-                test_item_id = step_data.get("test_item_id", 0)
-                test_item_name = step_data.get("test_item_name", step_data.get("template_name", f"测试项{idx+1}"))
-                relative_path = step_data.get("service_address", "") or step_data.get("template_service_address", "")
-                timeout = float(step_data.get("timeout_seconds") or 30)
-                is_critical = step_data.get("is_critical", step_data.get("template_is_critical", False))
-                block_type = step_data.get("block_type", "must_test" if is_critical else "normal")
-                params = step_data.get("params", {})
-            else:
-                # Global sequence fallback
-                db_step = step_data["_db_step"]
-                r = await db.execute(select(TestItemTemplate).where(TestItemTemplate.id == db_step.template_id))
-                template = r.scalar_one_or_none()
-                if not template:
-                    continue
-                test_item_id = template.id
-                test_item_name = template.name
-                relative_path = template.service_address or ""
-                timeout = float(db_step.timeout_seconds or 30)
-                is_critical = template.is_critical
-                block_type = "must_test" if template.is_critical else "normal"
-                params = getattr(db_step, 'params', {}) or {}
+            # BOM sequence: step_data is a dict from sequence_data
+            test_item_id = step_data.get("test_item_id", 0)
+            test_item_name = step_data.get("test_item_name", step_data.get("template_name", f"测试项{idx+1}"))
+            relative_path = step_data.get("service_address", "") or step_data.get("template_service_address", "")
+            timeout = float(step_data.get("timeout_seconds") or 30)
+            is_critical = step_data.get("is_critical", step_data.get("template_is_critical", False))
+            block_type = step_data.get("block_type", "must_test" if is_critical else "normal")
+            params = step_data.get("params", {})
 
             service_url = _build_service_url(base_url, relative_path)
 

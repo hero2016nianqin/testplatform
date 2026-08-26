@@ -614,6 +614,34 @@ class BomConfigService:
                     _bom_only["param_cols"] = BomConfigService._build_param_cols(_bom_only)
                     grouped[target_item_id]["indicators"].append(_bom_only)
 
+        # 5b) Auto-fill missing service_address from test_item_templates by name or indicator name
+        from app.models.test_sequence import TestItemTemplate
+        tmpl_r = await db.execute(select(TestItemTemplate.id, TestItemTemplate.name, TestItemTemplate.service_address, TestItemTemplate.is_critical))
+        tmpl_list = tmpl_r.all()
+        tmpl_map = {t.name: (t.service_address or "", t.is_critical) for t in tmpl_list}
+        ind_name_map = {}
+        for t in tmpl_list:
+            if t.service_address:
+                for keyword in ["电压", "电流", "温度", "频率", "绝缘", "噪声"]:
+                    if keyword in t.name:
+                        ind_name_map[keyword] = (t.service_address, t.is_critical)
+        for item_id, item_data in grouped.items():
+            if not item_data["service_address"]:
+                tmpl_info = tmpl_map.get(item_data["name"])
+                if tmpl_info:
+                    item_data["service_address"] = tmpl_info[0]
+                    if item_data["block_type"] == "normal" and tmpl_info[1]:
+                        item_data["block_type"] = "must_test"
+                else:
+                    for ind in item_data.get("indicators", []):
+                        ind_name = ind.get("indicator_name", "")
+                        for keyword, info in ind_name_map.items():
+                            if keyword in ind_name and not item_data["service_address"]:
+                                item_data["service_address"] = info[0]
+                                if item_data["block_type"] == "normal" and info[1]:
+                                    item_data["block_type"] = "must_test"
+                                break
+
         # 6) 每个测试项计算统一参数列（该测试项所有指标的参数并集），
         #    前端矩阵视图 / 列头展示使用；行级渲染仍以 per-indicator param_cols 为准。
         # 转为列表，按 sort_order 排序
