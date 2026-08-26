@@ -70,6 +70,59 @@ async def test_query_version(payload: dict):
     }
 
 
+@app.post("/api/test/power")
+async def test_power(payload: dict):
+    """查询功耗 — 模拟从设备读取功耗值(W)"""
+    time.sleep(0.4)
+    params = payload.get("params", {})
+    threshold_max = float(params.get("threshold_max", 80))
+    channel = params.get("channel", "1")
+    power = round(random.uniform(15.0, 75.0), 1)
+    passed = power <= threshold_max
+    return {
+        "passed": passed,
+        "actual_value": power,
+        "deviation": 0.0,
+        "duration_ms": 400,
+        "params": params,
+    }
+
+
+@app.post("/api/test/version")
+async def test_version(payload: dict):
+    """查询版本 — 校验设备版本号是否匹配期望值"""
+    time.sleep(0.2)
+    params = payload.get("params", {})
+    expected_version = params.get("expected_version", "V2.1.0")
+    actual_version = "V2.1.0-rc3.build.20260827"
+    passed = expected_version in actual_version or actual_version.startswith(expected_version)
+    return {
+        "passed": passed,
+        "actual_value": actual_version,
+        "deviation": 0.0,
+        "duration_ms": 200,
+        "params": params,
+    }
+
+
+@app.post("/api/test/start-work")
+async def test_start_work(payload: dict):
+    """查询开工 — 模拟开工自检流程"""
+    time.sleep(0.3)
+    params = payload.get("params", {})
+    check_items = params.get("check_items", "版本,序列号,时间")
+    items = [s.strip() for s in check_items.split(",")]
+    results = {item: "PASS" for item in items}
+    passed = all(v == "PASS" for v in results.values())
+    return {
+        "passed": passed,
+        "actual_value": str(results),
+        "deviation": 0.0,
+        "duration_ms": 300,
+        "params": params,
+    }
+
+
 @app.post("/api/test/{path:path}")
 async def test_fallback(path: str, payload: dict):
     """通用兜底 — 所有未定义的测试项都返回通过"""

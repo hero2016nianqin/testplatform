@@ -212,10 +212,18 @@ class TestExecutor:
             svc_result = await _call_test_service(service_url, payload, timeout=timeout)
 
             passed = svc_result.get("passed", False)
-            actual_value = svc_result.get("actual_value", 0.0)
+            raw_value = svc_result.get("actual_value", 0.0)
             deviation = svc_result.get("deviation", 0.0)
             duration_ms = svc_result.get("duration_ms", 0)
             error_msg = svc_result.get("error")
+
+            # actual_value must be numeric for DB; store original in remark if non-numeric
+            remark = ""
+            try:
+                actual_value = float(raw_value)
+            except (TypeError, ValueError):
+                actual_value = 1.0 if passed else 0.0
+                remark = str(raw_value)
 
             from app.models.test_result import TestResult
             result = TestResult(
@@ -227,7 +235,7 @@ class TestExecutor:
                 passed=passed,
                 deviation=deviation,
                 duration_ms=duration_ms,
-                remark=error_msg or "",
+                remark=remark + (f" | {error_msg}" if error_msg else ""),
             )
             db.add(result)
             log_items.append({
