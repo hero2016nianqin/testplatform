@@ -693,16 +693,17 @@ function onSubScenarioChange(ssId: number) {
   stepCheckMap.value = {}
   if (ss) {
     softForm.value.sequence_id = ss.sequence_id || softForm.value?.sequence_id
+    const savedIds = softForm.value?.selected_test_item_ids || []
+    const hasSaved = Array.isArray(savedIds) && savedIds.length > 0
     if (ss.sequence_id && ss.id !== 0) {
       testApi.getSequence(ss.sequence_id).then((res: any) => {
         const steps = res.data?.steps || []
         sequenceSteps.value = steps
         const map: Record<number, boolean> = {}
-        steps.forEach((s: any) => { map[s.id] = true })
+        steps.forEach((s: any) => { map[s.id] = hasSaved ? savedIds.includes(s.id) : true })
         stepCheckMap.value = map
       }).catch(() => {})
     } else if (ss.bom_snapshot && Array.isArray(ss.bom_snapshot) && ss.bom_snapshot.length) {
-      // 子场景有BOM快照数据，直接使用（多工序版本）
       const steps = ss.bom_snapshot.map((item: any, idx: number) => ({
         test_item_id: item.id,
         test_item_name: item.name,
@@ -719,10 +720,9 @@ function onSubScenarioChange(ssId: number) {
       }))
       sequenceSteps.value = steps
       const map: Record<number, boolean> = {}
-      steps.forEach((s: any) => { map[s.test_item_id] = true })
+      steps.forEach((s: any) => { map[s.test_item_id] = hasSaved ? savedIds.includes(s.test_item_id) : true })
       stepCheckMap.value = map
     } else if (softForm.value?.sequence_data && Array.isArray(softForm.value.sequence_data)) {
-      // 默认子场景(id=0)或无 process_name 过滤时，显示全部 sequence_data
       let filtered = softForm.value.sequence_data
       if (ss.process_type || ss.workstation) {
         filtered = filtered.filter((step: any) =>
@@ -732,7 +732,7 @@ function onSubScenarioChange(ssId: number) {
       }
       sequenceSteps.value = filtered
       const map: Record<number, boolean> = {}
-      filtered.forEach((s: any) => { map[s.test_item_id || s.template_id] = true })
+      filtered.forEach((s: any) => { map[s.test_item_id || s.template_id] = hasSaved ? savedIds.includes(s.test_item_id || s.template_id) : true })
       stepCheckMap.value = map
     }
   }
@@ -1173,6 +1173,11 @@ async function saveSoftParams() {
       try { data.sequence_data = JSON.parse(seqDataStr.value) }
       catch { data.sequence_data = seqDataStr.value }
     }
+    // 保存勾选的测试项 ID
+    const checkedIds = sequenceSteps.value
+      .filter((s: any) => stepCheckMap.value[s.test_item_id || s.id])
+      .map((s: any) => s.test_item_id || s.id)
+    data.selected_test_item_ids = checkedIds
     await stationApi.updateSoftware(stationId, data)
     // Sync version product properties to station property page
     if (selectedVersionId.value) {
@@ -1383,6 +1388,7 @@ function downloadFile(file: any) {
 // ── Lifecycle ──
 const wsHandlers: Array<{ event: string; handler: (msg: any) => void }> = []
 
+let _activatedOnce = false
 function restoreSelections() {
   const versionCtx = localStorage.getItem(`station_${stationId}_version_context`)
   const subScenarioCtx = localStorage.getItem(`station_${stationId}_sub_scenario_context`)
@@ -1470,7 +1476,11 @@ onActivated(() => {
     wsHandlers.length = 0
   }
   loadFullDetail()
-  loadDeployedVersions().then(restoreSelections)
+  if (!_activatedOnce) {
+    _activatedOnce = true
+  } else {
+    loadDeployedVersions().then(restoreSelections)
+  }
   if (!wsConnected.value) wsConnect()
 })
 
