@@ -810,7 +810,20 @@ function clearLogs() {
   localStorage.removeItem(getLogKey())
 }
 
-function downloadTestLog(barcode: string) {
+let logDirHandle: FileSystemDirectoryHandle | null = null
+
+async function getLogDir(): Promise<FileSystemDirectoryHandle | null> {
+  if (logDirHandle) return logDirHandle
+  try {
+    // 请求用户选择目录
+    logDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
+    return logDirHandle
+  } catch {
+    return null
+  }
+}
+
+async function downloadTestLog(barcode: string) {
   if (!logs.value.length) return
 
   const now = new Date()
@@ -835,11 +848,29 @@ function downloadTestLog(barcode: string) {
   ]
 
   const content = [...header, ...lines, ...footer].join('\n')
+  const fileName = `${barcode || 'unknown'}_${date}_${time}.log`
+
+  // 尝试使用 File System Access API 自动保存
+  const dir = await getLogDir()
+  if (dir) {
+    try {
+      const fileHandle = await dir.getFileHandle(fileName, { create: true })
+      const writable = await fileHandle.createWritable()
+      await writable.write(content)
+      await writable.close()
+      addLog('info', `日志已保存: ${fileName}`)
+      return
+    } catch (e) {
+      // 降级到下载
+    }
+  }
+
+  // 降级：触发下载
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${barcode || 'unknown'}_${date}_${time}.log`
+  a.download = fileName
   a.click()
   URL.revokeObjectURL(url)
 }
