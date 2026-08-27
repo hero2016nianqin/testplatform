@@ -21,18 +21,26 @@ from app.ws.handlers import notify_run_failed
 
 async def _release_slot_lock_by_slot(slot_id: int):
     """从 Redis 取出 lock_token 并释放槽位锁"""
+    import logging
+    logger = logging.getLogger("celery.slot_lock")
     try:
         from app.utils.slot_lock import release_slot_lock
         from redis.asyncio import Redis
         from app.core.redis import get_redis_pool
         pool = get_redis_pool()
         async with Redis(connection_pool=pool) as r:
-            lock_token = await r.get(f"slot_lock_token:{slot_id}")
+            lock_key = f"slot_lock_token:{slot_id}"
+            lock_token = await r.get(lock_key)
+            logger.info(f"[slot_lock] slot={slot_id}, token={lock_token}")
             if lock_token:
-                await release_slot_lock(slot_id, lock_token.decode())
-                await r.delete(f"slot_lock_token:{slot_id}")
-    except Exception:
-        pass
+                token_str = lock_token if isinstance(lock_token, str) else lock_token.decode()
+                released = await release_slot_lock(slot_id, token_str)
+                await r.delete(lock_key)
+                logger.info(f"[slot_lock] released={released}")
+            else:
+                logger.warning(f"[slot_lock] no token found for slot {slot_id}")
+    except Exception as e:
+        logger.error(f"[slot_lock] release failed: {e}")
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=5)
