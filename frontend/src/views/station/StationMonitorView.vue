@@ -841,6 +841,7 @@ async function loadFullDetail() {
     if (!detail) { detailError.value = '装备不存在'; return }
     station.value = detail.station
     cabinets.value = detail.cabinets || []
+    softForm.value = softRes.data || {}
 
     const cfg = await stationApi.getEquipment(stationId).catch(() => null)
     if (cfg?.data) {

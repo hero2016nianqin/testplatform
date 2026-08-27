@@ -205,6 +205,17 @@ class TestExecutor:
             block_type = step_data.get("block_type", "must_test" if is_critical else "normal")
             params = step_data.get("params", {})
 
+            # 跳过已有结果的测试项（防止重试时重复）
+            from app.models.test_result import TestResult
+            existing = await db.execute(
+                select(TestResult.id).where(
+                    TestResult.test_run_id == run.id,
+                    TestResult.test_item_id == test_item_id,
+                )
+            )
+            if existing.scalar_one_or_none():
+                continue
+
             service_url = _build_service_url(base_url, relative_path)
 
             payload = {
