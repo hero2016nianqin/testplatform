@@ -79,5 +79,17 @@ def get_settings() -> Settings:
         app_env = (vals or {}).get("APP_ENV", "dev")
     env_file = _resolve_env_file(app_env)
     if env_file:
-        return Settings(_env_file=env_file)
-    return Settings()
+        settings = Settings(_env_file=env_file)
+    else:
+        settings = Settings()
+
+    # Warn if using default SECRET_KEY in production
+    if app_env == "prod" and settings.SECRET_KEY == "dev-secret-key-change-in-prod":
+        import warnings
+        warnings.warn(
+            "⚠️ 使用默认 SECRET_KEY，生产环境请设置 SECRET_KEY 环境变量！",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return settings
