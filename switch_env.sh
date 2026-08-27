@@ -9,6 +9,7 @@
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE=/tmp/testplatform_env
 BACKEND_LOG=/tmp/testplatform_backend.log
+CELERY_LOG=/tmp/testplatform_celery.log
 FRONTEND_LOG=/tmp/testplatform_frontend.log
 BACKEND_PORT=8000
 FRONTEND_PORT=5173
@@ -20,6 +21,16 @@ stop_backend() {
     echo "停止后端 (PID: $pids)..."
     kill $pids 2>/dev/null
     sleep 1
+  fi
+}
+
+stop_celery() {
+  local pids
+  pids=$(pgrep -f "celery.*tasks.celery_app" 2>/dev/null)
+  if [ -n "$pids" ]; then
+    echo "停止 Celery worker (PID: $pids)..."
+    kill $pids 2>/dev/null
+    sleep 2
   fi
 }
 
@@ -51,6 +62,24 @@ start_backend() {
   done
   echo "❌ 后端启动超时，查看日志: $BACKEND_LOG"
   return 1
+}
+
+start_celery() {
+  local env="$1"
+  echo "启动 Celery worker..."
+  cd "$ROOT/backend"
+  if [ "$env" = "prod" ]; then
+    APP_ENV=prod nohup python3 -m celery -A tasks.celery_app worker -l info -I tasks.test_tasks > "$CELERY_LOG" 2>&1 &
+  else
+    APP_ENV=dev nohup python3 -m celery -A tasks.celery_app worker -l info -I tasks.test_tasks > "$CELERY_LOG" 2>&1 &
+  fi
+  sleep 3
+  if pgrep -f "celery.*tasks.celery_app" >/dev/null 2>&1; then
+    echo "✅ Celery worker 已启动"
+  else
+    echo "❌ Celery worker 启动失败，查看日志: $CELERY_LOG"
+    return 1
+  fi
 }
 
 start_frontend() {
@@ -85,6 +114,7 @@ show_status() {
   fi
   echo "  ─────────────────────────────────────────"
   echo "  后端 :$BACKEND_PORT  : $([ -n "$(lsof -ti:$BACKEND_PORT 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
+  echo "  Celery worker   : $(pgrep -f 'celery.*tasks.celery_app' >/dev/null 2>&1 && echo '运行中' || echo '未运行')"
   echo "  PostgreSQL :5432 : $([ -n "$(lsof -ti:5432 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
   echo "  Redis :6379 : $([ -n "$(lsof -ti:6379 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
   echo "  前端 :$FRONTEND_PORT  : $([ -n "$(lsof -ti:$FRONTEND_PORT 2>/dev/null)" ] && echo '运行中' || echo '未运行')"
@@ -97,8 +127,10 @@ show_status() {
 case "$1" in
   dev|prod)
     stop_frontend
+    stop_celery
     stop_backend
     start_backend "$1"
+    start_celery "$1"
     start_frontend
     echo "$1" > "$ENV_FILE"
     echo ""
@@ -111,8 +143,10 @@ case "$1" in
       target=prod
     fi
     stop_frontend
+    stop_celery
     stop_backend
     start_backend "$target"
+    start_celery "$target"
     start_frontend
     echo "$target" > "$ENV_FILE"
     echo ""
