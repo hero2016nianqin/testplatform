@@ -480,7 +480,7 @@
         <div class="log-panel-header">
           <span><span class="log-led" /> 运行日志</span>
           <div class="log-header-actions">
-            <span class="log-header-btn" @click="logs = []; localStorage.removeItem(LOG_STORAGE_KEY)">清空</span>
+            <span class="log-header-btn" @click="clearLogs">清空</span>
             <span class="log-header-btn" @click="showLogPanel = false">隐藏</span>
           </div>
         </div>
@@ -510,7 +510,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, reactive, watch, onActivated } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, reactive, watch, onActivated, onDeactivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { stationApi } from '@/api/station'
 import { versionApi } from '@/api/version'
@@ -529,10 +529,8 @@ const detailError = ref('')
 const station = ref<any>(null)
 const cabinets = ref<any[]>([])
 const equipIP = ref('-')
-const LOG_STORAGE_KEY = `station_logs_${stationId}`
-const logs = ref<Array<{ time: string; level: string; message: string }>>(
-  JSON.parse(localStorage.getItem(LOG_STORAGE_KEY) || '[]')
-)
+function getLogKey() { return `station_logs_${stationId}` }
+const logs = ref<Array<{ time: string; level: string; message: string }>>([])
 const currentBarcode = ref('')
 const currentSlotInfo = ref('')
 const showLogPanel = ref(true)
@@ -643,8 +641,10 @@ function onVersionChange(versionId: number) {
       }]
     }
     subScenarios.value = subs
-    softForm.value.project_name = ver.project_name || softForm.value?.project_name || ''
-    softForm.value.dut_version = ver.version || softForm.value?.dut_version || ''
+    if (softForm.value) {
+      softForm.value.project_name = ver.project_name || softForm.value?.project_name || ''
+      softForm.value.dut_version = ver.version || softForm.value?.dut_version || ''
+    }
     localStorage.setItem(`station_${stationId}_version_context`, JSON.stringify({
       version_id: ver.version_id,
       version: ver.version,
@@ -692,7 +692,9 @@ function onSubScenarioChange(ssId: number) {
   sequenceSteps.value = []
   stepCheckMap.value = {}
   if (ss) {
-    softForm.value.sequence_id = ss.sequence_id || softForm.value?.sequence_id
+    if (softForm.value) {
+      softForm.value.sequence_id = ss.sequence_id || softForm.value?.sequence_id
+    }
     const savedIds = softForm.value?.selected_test_item_ids || []
     const hasSaved = Array.isArray(savedIds) && savedIds.length > 0
     if (ss.sequence_id && ss.id !== 0) {
@@ -797,10 +799,15 @@ function addLog(level: string, message: string) {
   const time = now.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   logs.value.push({ time, level, message })
   if (logs.value.length > 500) logs.value.shift()
-  localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs.value))
+  localStorage.setItem(getLogKey(), JSON.stringify(logs.value))
   nextTick(() => {
     if (logBodyRef.value) logBodyRef.value.scrollTop = logBodyRef.value.scrollHeight
   })
+}
+
+function clearLogs() {
+  logs.value = []
+  localStorage.removeItem(getLogKey())
 }
 
 function findSlotLocation(slotId: number): string {
@@ -860,7 +867,7 @@ async function loadFullDetail() {
 /* Lightweight refresh: only update slot status locally, no full API reload */
 function updateLocalSlotStatus(slotId: number, status: string) {
   for (const cab of cabinets.value) {
-    for (const ch of cab.chassis_list) {
+    for (const ch of (cab.chassis_list || [])) {
       const slot = ch.slots.find((s: any) => s.id === slotId)
       if (slot) { slot.status = status; return }
     }
@@ -1473,7 +1480,9 @@ onActivated(() => {
   if (newId !== stationId) {
     stationId = newId
     wsDisconnect()
+    for (const { event, handler } of wsHandlers) wsOff(event, handler)
     wsHandlers.length = 0
+    logs.value = JSON.parse(localStorage.getItem(getLogKey()) || '[]')
   }
   loadFullDetail()
   if (!_activatedOnce) {
@@ -1487,6 +1496,7 @@ onActivated(() => {
 watch(() => route.params.id, (newId) => {
   if (newId) {
     stationId = Number(newId)
+    logs.value = JSON.parse(localStorage.getItem(getLogKey()) || '[]')
     loadFullDetail()
   }
 })
@@ -1495,6 +1505,11 @@ onUnmounted(() => {
   for (const { event, handler } of wsHandlers) wsOff(event, handler)
   document.removeEventListener('click', closeCtx)
   stopResize()
+})
+
+onDeactivated(() => {
+  stopResize()
+  document.removeEventListener('click', closeCtx)
 })
 </script>
 

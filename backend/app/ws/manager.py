@@ -100,24 +100,30 @@ class ConnectionManager:
             await r.publish(f"{WS_CHANNEL_PREFIX}{channel}", payload)
 
     async def _redis_subscriber(self):
-        """后台任务：订阅 Redis PubSub，转发到本地连接"""
-        pool = get_redis_pool()
-        async with Redis(connection_pool=pool) as r:
-            pubsub = r.pubsub()
-            await pubsub.psubscribe(f"{WS_CHANNEL_PREFIX}*")
+        """后台任务：订阅 Redis PubSub，转发到本地连接（断线自动重连）"""
+        while True:
+            try:
+                pool = get_redis_pool()
+                async with Redis(connection_pool=pool) as r:
+                    pubsub = r.pubsub()
+                    await pubsub.psubscribe(f"{WS_CHANNEL_PREFIX}*")
 
-            async for message in pubsub.listen():
-                if message["type"] != "pmessage":
-                    continue
-                try:
-                    payload = json.loads(message["data"])
-                    event = payload.get("event")
-                    data = payload.get("data")
-                    channel = payload.get("channel", "")
-                    if channel:
-                        await self.broadcast(channel, event, data)
-                except (json.JSONDecodeError, KeyError):
-                    continue
+                    async for message in pubsub.listen():
+                        if message["type"] != "pmessage":
+                            continue
+                        try:
+                            payload = json.loads(message["data"])
+                            event = payload.get("event")
+                            data = payload.get("data")
+                            channel = payload.get("channel", "")
+                            if channel:
+                                await self.broadcast(channel, event, data)
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await asyncio.sleep(3)
 
     async def start_redis_listener(self):
         if self._redis_pubsub_task is None or self._redis_pubsub_task.done():

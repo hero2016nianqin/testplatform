@@ -19,6 +19,22 @@ from app.config import (
 from app.ws.handlers import notify_run_failed
 
 
+async def _release_slot_lock_by_slot(slot_id: int):
+    """从 Redis 取出 lock_token 并释放槽位锁"""
+    try:
+        from app.utils.slot_lock import release_slot_lock
+        from redis.asyncio import Redis
+        from app.core.redis import get_redis_pool
+        pool = get_redis_pool()
+        async with Redis(connection_pool=pool) as r:
+            lock_token = await r.get(f"slot_lock_token:{slot_id}")
+            if lock_token:
+                await release_slot_lock(slot_id, lock_token.decode())
+                await r.delete(f"slot_lock_token:{slot_id}")
+    except Exception:
+        pass
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=5)
 def execute_test_run(self, run_id: int):
     """异步执行测试批次（传统模式）— 委托给 TestExecutor"""
@@ -31,45 +47,45 @@ def execute_test_run(self, run_id: int):
         reset_redis_pool()
         engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
         session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with session_factory() as db:
-            r = await db.execute(select(TestRun).where(TestRun.id == run_id))
-            run = r.scalar_one_or_none()
-            if not run:
-                return {"error": "批次不存在"}
+        try:
+            async with session_factory() as db:
+                r = await db.execute(select(TestRun).where(TestRun.id == run_id))
+                run = r.scalar_one_or_none()
+                if not run:
+                    return {"error": "批次不存在"}
 
-            try:
-                r2 = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == run.station_id))
-                sw_cfg = r2.scalar_one_or_none()
+                try:
+                    r2 = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == run.station_id))
+                    sw_cfg = r2.scalar_one_or_none()
 
-                from app.services.test_executor import TestExecutor
-                result = await TestExecutor._execute_traditional_mode(
-                    db=db,
-                    run=run,
-                    station_id=run.station_id,
-                    slot_id=run.slot_id,
-                    serial_number=run.serial_number,
-                    operator=run.operator,
-                    sw_cfg=sw_cfg,
-                )
-                await db.commit()
-                return result
-            except Exception as e:
-                run.status = RUN_STATUS_FAILED
-                run.ended_at = datetime.utcnow()
-                r = await db.execute(select(TestSlot).where(TestSlot.id == run.slot_id))
-                slot = r.scalar_one_or_none()
-                if slot and slot.status == SLOT_STATUS_TESTING:
-                    slot.status = SLOT_STATUS_IDLE
-                    slot.current_batch_id = None
-                    slot.serial_number = None
-                await db.commit()
-                await notify_run_failed(run.station_id, {
-                    "batch_id": run.batch_id,
-                    "error": str(e)[:200],
-                    "slot_id": run.slot_id,
-                })
-                raise
-        await engine.dispose()
+                    from app.services.test_executor import TestExecutor
+                    result = await TestExecutor._execute_traditional_mode(
+                        db=db, run=run, station_id=run.station_id,
+                        slot_id=run.slot_id, serial_number=run.serial_number,
+                        operator=run.operator, sw_cfg=sw_cfg,
+                    )
+                    await db.commit()
+                    return result
+                except Exception as e:
+                    run.status = RUN_STATUS_FAILED
+                    run.ended_at = datetime.utcnow()
+                    r = await db.execute(select(TestSlot).where(TestSlot.id == run.slot_id))
+                    slot = r.scalar_one_or_none()
+                    if slot and slot.status == SLOT_STATUS_TESTING:
+                        slot.status = SLOT_STATUS_IDLE
+                        slot.current_batch_id = None
+                        slot.serial_number = None
+                    await db.commit()
+                    await notify_run_failed(run.station_id, {
+                        "batch_id": run.batch_id,
+                        "error": str(e)[:200],
+                        "slot_id": run.slot_id,
+                    })
+                    raise
+                finally:
+                    await _release_slot_lock_by_slot(run.slot_id)
+        finally:
+            await engine.dispose()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -91,50 +107,50 @@ def execute_sequence_run(self, run_id: int):
         reset_redis_pool()
         engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
         session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with session_factory() as db:
-            r = await db.execute(select(TestRun).where(TestRun.id == run_id))
-            run = r.scalar_one_or_none()
-            if not run:
-                return {"error": "批次不存在"}
+        try:
+            async with session_factory() as db:
+                r = await db.execute(select(TestRun).where(TestRun.id == run_id))
+                run = r.scalar_one_or_none()
+                if not run:
+                    return {"error": "批次不存在"}
 
-            try:
-                sequence_id = run.sequence_id or 0
-                if not sequence_id:
-                    r2 = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == run.station_id))
-                    sw_cfg = r2.scalar_one_or_none()
-                    if sw_cfg and sw_cfg.sequence_id and sw_cfg.sequence_id > 0:
-                        sequence_id = sw_cfg.sequence_id
+                try:
+                    sequence_id = run.sequence_id or 0
+                    if not sequence_id:
+                        r2 = await db.execute(select(SoftwareConfig).where(SoftwareConfig.station_id == run.station_id))
+                        sw_cfg = r2.scalar_one_or_none()
+                        if sw_cfg and sw_cfg.sequence_id and sw_cfg.sequence_id > 0:
+                            sequence_id = sw_cfg.sequence_id
 
-                from app.services.test_executor import TestExecutor
-                result = await TestExecutor._execute_sequence_mode(
-                    db=db,
-                    run=run,
-                    station_id=run.station_id,
-                    slot_id=run.slot_id,
-                    serial_number=run.serial_number,
-                    operator=run.operator,
-                    sequence_id=sequence_id,
-                    selected_item_ids=run.selected_item_ids or [],
-                )
-                await db.commit()
-                return result
-            except Exception as e:
-                run.status = RUN_STATUS_FAILED
-                run.ended_at = datetime.utcnow()
-                r = await db.execute(select(TestSlot).where(TestSlot.id == run.slot_id))
-                slot = r.scalar_one_or_none()
-                if slot and slot.status == SLOT_STATUS_TESTING:
-                    slot.status = SLOT_STATUS_IDLE
-                    slot.current_batch_id = None
-                    slot.serial_number = None
-                await db.commit()
-                await notify_run_failed(run.station_id, {
-                    "batch_id": run.batch_id,
-                    "error": str(e)[:200],
-                    "slot_id": run.slot_id,
-                })
-                raise
-        await engine.dispose()
+                    from app.services.test_executor import TestExecutor
+                    result = await TestExecutor._execute_sequence_mode(
+                        db=db, run=run, station_id=run.station_id,
+                        slot_id=run.slot_id, serial_number=run.serial_number,
+                        operator=run.operator, sequence_id=sequence_id,
+                        selected_item_ids=run.selected_item_ids or [],
+                    )
+                    await db.commit()
+                    return result
+                except Exception as e:
+                    run.status = RUN_STATUS_FAILED
+                    run.ended_at = datetime.utcnow()
+                    r = await db.execute(select(TestSlot).where(TestSlot.id == run.slot_id))
+                    slot = r.scalar_one_or_none()
+                    if slot and slot.status == SLOT_STATUS_TESTING:
+                        slot.status = SLOT_STATUS_IDLE
+                        slot.current_batch_id = None
+                        slot.serial_number = None
+                    await db.commit()
+                    await notify_run_failed(run.station_id, {
+                        "batch_id": run.batch_id,
+                        "error": str(e)[:200],
+                        "slot_id": run.slot_id,
+                    })
+                    raise
+                finally:
+                    await _release_slot_lock_by_slot(run.slot_id)
+        finally:
+            await engine.dispose()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

@@ -13,6 +13,7 @@ export function useWebSocket(stationId?: number) {
   const listeners = new Map<string, Set<MessageHandler>>()
   let heartbeatTimer: number | null = null
   let reconnectTimer: number | null = null
+  let intentionalDisconnect = false
 
   function getUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -37,7 +38,9 @@ export function useWebSocket(stationId?: number) {
     ws.value.onclose = () => {
       connected.value = false
       stopHeartbeat()
-      scheduleReconnect()
+      if (!intentionalDisconnect) {
+        scheduleReconnect()
+      }
     }
 
     ws.value.onerror = () => {
@@ -62,6 +65,7 @@ export function useWebSocket(stationId?: number) {
   }
 
   function disconnect() {
+    intentionalDisconnect = true
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
@@ -72,6 +76,7 @@ export function useWebSocket(stationId?: number) {
       ws.value = null
     }
     connected.value = false
+    intentionalDisconnect = false
   }
 
   function on(event: string, handler: MessageHandler) {

@@ -83,10 +83,17 @@ class TestExecutor:
         if slot.status == SLOT_STATUS_TESTING:
             raise BusinessException(400, "槽位正在测试中")
 
-        # 2. 获取 Redis 分布式锁（非阻塞，失败则拒绝）
-        acquired, lock_token = await acquire_slot_lock(slot_id, ttl=10)
+        # 2. 获取 Redis 分布式锁（非阻塞，失败则拒绝；TTL 10分钟覆盖最长测试时间）
+        acquired, lock_token = await acquire_slot_lock(slot_id, ttl=600)
         if not acquired:
             raise BusinessException(409, "槽位正在测试中，请稍后再试")
+
+        # 将 lock_token 存入 Redis 以便 Celery 任务完成后释放
+        from redis.asyncio import Redis
+        from app.core.redis import get_redis_pool
+        pool = get_redis_pool()
+        async with Redis(connection_pool=pool) as r:
+            await r.set(f"slot_lock_token:{slot_id}", lock_token, ex=600)
 
         try:
             # 3. 创建 PENDING 批次
@@ -283,6 +290,9 @@ class TestExecutor:
                 stopped = True
                 run.status = RUN_STATUS_FAILED
                 run.ended_at = __import__('datetime').datetime.utcnow()
+                run.total_items = total
+                run.passed_items = passed_count
+                run.failed_items = failed_count
                 if slot:
                     slot.status = SLOT_STATUS_FAIL
                     slot.current_batch_id = None
@@ -437,10 +447,17 @@ class TestExecutor:
             svc_result = await _call_test_service(service_url, payload, timeout=30.0)
 
             passed = svc_result.get("passed", False)
-            actual_value = svc_result.get("actual_value", 0.0)
+            raw_value = svc_result.get("actual_value", 0.0)
             deviation = svc_result.get("deviation", 0.0)
             duration_ms = svc_result.get("duration_ms", 0)
             error_msg = svc_result.get("error")
+
+            remark = ""
+            try:
+                actual_value = float(raw_value)
+            except (TypeError, ValueError):
+                actual_value = 1.0 if passed else 0.0
+                remark = str(raw_value)
 
             from app.models.test_result import TestResult
             result = TestResult(
@@ -452,7 +469,7 @@ class TestExecutor:
                 passed=passed,
                 deviation=deviation,
                 duration_ms=duration_ms,
-                remark=error_msg or "",
+                remark=remark + (f" | {error_msg}" if error_msg else ""),
             )
             db.add(result)
             log_items.append({
