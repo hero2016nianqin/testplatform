@@ -1179,6 +1179,7 @@ async function saveSoftParams() {
       .filter((s: any) => stepCheckMap.value[s.test_item_id || s.id])
       .map((s: any) => s.test_item_id || s.id)
     data.selected_test_item_ids = checkedIds
+    softForm.value.selected_test_item_ids = checkedIds
     await stationApi.updateSoftware(stationId, data)
     // Sync version product properties to station property page
     if (selectedVersionId.value) {
