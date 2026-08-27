@@ -24,7 +24,7 @@ export function useWebSocket(stationId?: number) {
   }
 
   function connect() {
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) return
+    if (ws.value && (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING)) return
 
     const url = getUrl()
     ws.value = new WebSocket(url)
