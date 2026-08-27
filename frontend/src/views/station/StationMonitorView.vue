@@ -810,6 +810,40 @@ function clearLogs() {
   localStorage.removeItem(getLogKey())
 }
 
+function downloadTestLog(barcode: string) {
+  if (!logs.value.length) return
+
+  const now = new Date()
+  const date = now.toISOString().slice(0, 10)
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, '')
+  const stationName = station.value?.name || 'unknown'
+
+  const header = [
+    '===== 测试报告 =====',
+    `条码: ${barcode || '-'}`,
+    `工位: ${stationName}`,
+    `时间: ${date} ${time}`,
+    `操作员: ${scanOperator.value || '-'}`,
+    '',
+    '----- 测试日志 -----',
+  ]
+
+  const lines = logs.value.map((l: any) => `[${l.time}] [${l.level}] ${l.message}`)
+  const footer = [
+    '',
+    '===== 结束 =====',
+  ]
+
+  const content = [...header, ...lines, ...footer].join('\n')
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${barcode || 'unknown'}_${date}_${time}.log`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function findSlotLocation(slotId: number): string {
   for (const cab of cabinets.value) {
     for (const ch of (cab.chassis_list || [])) {
@@ -1456,6 +1490,7 @@ onMounted(() => {
       updateLocalSlot(d.slot_id, { status: 'pass', current_batch_id: null, serial_number: null })
     }
     addLog('info', `[完成] 条码: ${currentBarcode.value || '-'} | 总计: ${d.total || '-'} | 通过: ${d.passed || 0} | 失败: ${d.failed || 0}`)
+    downloadTestLog(currentBarcode.value)
     currentBarcode.value = ''
     currentSlotInfo.value = ''
   }
@@ -1465,6 +1500,7 @@ onMounted(() => {
       updateLocalSlot(d.slot_id, { status: 'fail', current_batch_id: null, serial_number: null })
     }
     addLog('error', `[失败] 条码: ${currentBarcode.value || '-'} | 错误: ${d.error || '未知错误'}`)
+    downloadTestLog(currentBarcode.value)
     currentBarcode.value = ''
     currentSlotInfo.value = ''
   }
