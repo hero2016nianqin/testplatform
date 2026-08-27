@@ -30,6 +30,25 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # ── HTTPS enforcement (production only, behind reverse proxy) ──
+    if not settings.DEBUG:
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        class HTTPSRedirectMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                forwarded_proto = request.headers.get("x-forwarded-proto")
+                if forwarded_proto and forwarded_proto != "https":
+                    from starlette.responses import RedirectResponse
+                    url = request.url.replace(scheme="https")
+                    return RedirectResponse(url, status_code=301)
+                return await call_next(request)
+
+        app.add_middleware(HTTPSRedirectMiddleware)
+
+    # ── CSRF protection ──
+    from app.core.csrf import CSRFMiddleware
+    app.add_middleware(CSRFMiddleware)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

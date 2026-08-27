@@ -32,6 +32,23 @@ api.defaults.adapter = (config) => {
   return _defaultAdapter(config)
 }
 
+// ── CSRF token injection ──
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+api.interceptors.request.use((config) => {
+  const method = config.method?.toLowerCase()
+  if (method && ['post', 'put', 'delete', 'patch'].includes(method)) {
+    const token = getCsrfToken()
+    if (token) {
+      config.headers.set('X-CSRF-Token', token)
+    }
+  }
+  return config
+})
+
 api.interceptors.response.use(
   (response) => {
     // Skip JSON parsing for blob/arraybuffer downloads (e.g., file export)
@@ -49,9 +66,11 @@ api.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response
       if (status === 403) {
-        ElMessage.error('权限不足')
+        ElMessage.error(data?.message || '权限不足')
       } else if (status === 404) {
         ElMessage.error('资源不存在')
+      } else if (status === 429) {
+        ElMessage.error(data?.message || '请求过于频繁，请稍后重试')
       } else {
         ElMessage.error(data?.message || `请求失败 (${status})`)
       }

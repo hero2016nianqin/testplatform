@@ -10,6 +10,7 @@ from app.deps.db_deps import get_db
 from app.deps.redis_deps import get_redis
 from app.deps.auth_deps import get_current_user, require_developer, require_super_admin
 from app.core.response import success, paginated
+from app.core.security import generate_csrf_token
 from app.schemas.auth import (
     ResetPasswordReq,
     LoginReq, UserCreateReq, UserUpdateReq, LoginResp, UserResp,
@@ -18,6 +19,10 @@ from app.schemas.auth import (
 from app.services.auth_service import AuthService
 
 router = APIRouter(tags=["认证"])
+
+LOGIN_RATE_LIMIT_KEY = "login_attempts:{username}"
+LOGIN_RATE_LIMIT_MAX = 5
+LOGIN_RATE_LIMIT_WINDOW = 300
 
 
 @router.get("/roles")
@@ -34,8 +39,43 @@ async def login(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ):
-    """登录 — 验证密码，创建 Redis Session"""
-    user_data, session_id = await AuthService.login(db, redis, req.username, req.password)
+    """登录 — 验证密码，创建 Redis Session，返回 CSRF Token"""
+    # ── Per-account rate limiting ──
+    rate_key = LOGIN_RATE_LIMIT_KEY.format(username=req.username)
+    try:
+        attempts = await redis.get(rate_key)
+        if attempts and int(attempts) >= LOGIN_RATE_LIMIT_MAX:
+            from app.core.exceptions import BusinessException
+            raise BusinessException(
+                code=429,
+                message=f"登录尝试次数过多，请在 {LOGIN_RATE_LIMIT_WINDOW // 60} 分钟后重试"
+            )
+    except BusinessException:
+        raise
+    except Exception:
+        pass
+
+    try:
+        user_data, session_id = await AuthService.login(db, redis, req.username, req.password)
+    except Exception:
+        # ── Increment rate limit on failure ──
+        try:
+            await redis.incr(rate_key)
+            await redis.expire(rate_key, LOGIN_RATE_LIMIT_WINDOW)
+        except Exception:
+            pass
+        raise
+
+    # ── Reset rate limit on success ──
+    try:
+        await redis.delete(rate_key)
+    except Exception:
+        pass
+
+    # ── Generate CSRF token ──
+    csrf_token = generate_csrf_token()
+
+    # Set session cookie
     response.set_cookie(
         key="session_id",
         value=session_id,
@@ -43,6 +83,17 @@ async def login(
         httponly=True,
         samesite="lax",
     )
+
+    # Set CSRF cookie (non-httponly, readable by JS)
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        max_age=86400,
+        httponly=False,
+        samesite="lax",
+    )
+
+    user_data["csrf_token"] = csrf_token
     return success(data=user_data, message="登录成功")
 
 
