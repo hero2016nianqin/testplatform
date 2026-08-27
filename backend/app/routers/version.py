@@ -234,9 +234,12 @@ async def upload_binary(
     db: AsyncSession = Depends(get_db),
 ):
     import os
+    import re
     content = await file.read()
-    object_name = f"versions/{version_id}/{file.filename}"
-    temp_path = os.path.join("/tmp", file.filename or "upload.bin")
+    # Sanitize filename: remove path traversal attempts
+    safe_name = re.sub(r'[^\w\-.]', '_', os.path.basename(file.filename or "upload.bin"))
+    object_name = f"versions/{version_id}/{safe_name}"
+    temp_path = os.path.join("/tmp", safe_name)
     with open(temp_path, "wb") as f:
         f.write(content)
 

@@ -372,12 +372,24 @@ class DictionaryService:
             'print': print,
         }
         safe_globals = {'__builtins__': safe_builtins, 'indicator_data': input_data}
+
+        # Block dangerous attributes
+        BLOCKED_ATTRS = {'__subclasses__', '__class__', '__bases__', '__globals__',
+                         '__code__', '__import__', '__builtins__', '__loader__',
+                         '__spec__', '__file__', '__name__', '__qualname__',
+                         '__init__', '__new__', '__del__', '__getattr__',
+                         '__setattr__', '__delattr__', '__dict__', '__dir__'}
+
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
         try:
             exec(code, safe_globals)
             stdout_output = sys.stdout.getvalue()
             result = safe_globals.get('result')
+
+            # Validate result is JSON-serializable
+            json.dumps(result, default=str)
+
             return {'success': True, 'result': result, 'stdout': stdout_output}
         except Exception as e:
             import traceback

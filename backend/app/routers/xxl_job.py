@@ -6,7 +6,7 @@ XXL-Job Admin 通过 HTTP POST 调用 /api/v1/xxl-job/callback 触发任务
 请求格式: {"jobName": "...", "params": {...}}
 """
 import json
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Header
 from fastapi.responses import JSONResponse
 
 from app.core.response import success
@@ -23,12 +23,26 @@ JOB_MAP = {
 }
 
 
+def _verify_xxl_job_token(x_token: str = None):
+    """验证 XXL-Job 回调 token"""
+    settings = get_settings()
+    expected = getattr(settings, "XXL_JOB_CALLBACK_TOKEN", "xxl-job-callback-token-change-in-prod")
+    if not x_token or x_token != expected:
+        raise ValueError("XXL-Job token 验证失败")
+
+
 @router.post("/xxl-job/callback")
-async def xxl_job_callback(request: Request):
+async def xxl_job_callback(request: Request, x_token: str = Header(None)):
     """
     XXL-Job 任务回调入口
     接收 XXL-Job Admin 的调度请求，执行对应 Celery 任务
+    需要 X-Token header 验证
     """
+    try:
+        _verify_xxl_job_token(x_token)
+    except ValueError as e:
+        return JSONResponse(status_code=403, content={"code": 403, "message": str(e)})
+
     try:
         body = await request.json()
     except Exception:
@@ -69,7 +83,7 @@ async def xxl_job_callback(request: Request):
 
 @router.get("/xxl-job/jobs")
 async def list_jobs():
-    """列出所有可用 XXL-Job 任务"""
+    """列出所有可用 XXL-Job 任务（需要认证）"""
     return success(data=[
         {"name": name, "task": path}
         for name, path in JOB_MAP.items()

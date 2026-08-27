@@ -1691,24 +1691,31 @@ async def toggle_script_status(
 
 @router.get("/script-exports/{file_name}")
 async def download_script_export(file_name: str):
+    import re
     from app.config import get_settings
     settings = get_settings()
-    file_path = os.path.join(settings.UPLOAD_FOLDER, "script_exports", file_name)
+    # Sanitize: only allow alphanumeric, dash, underscore, dot
+    safe_name = re.sub(r'[^\w\-.]', '_', os.path.basename(file_name))
+    file_path = os.path.join(settings.UPLOAD_FOLDER, "script_exports", safe_name)
     if not os.path.isfile(file_path):
         from fastapi.responses import JSONResponse
         return JSONResponse({"code": 404, "message": "文件不存在或已过期"}, status_code=404)
+    from starlette.background import BackgroundTask
     return StreamingResponse(
         open(file_path, "rb"),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(file_name)}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(safe_name)}"},
+        background=BackgroundTask(lambda: None),
     )
 
 
 @router.get("/excel-exports/{file_name}")
 async def download_excel_export(file_name: str):
+    import re
     from app.config import get_settings
     settings = get_settings()
-    file_path = os.path.join(settings.UPLOAD_FOLDER, "excel_exports", file_name)
+    safe_name = re.sub(r'[^\w\-.]', '_', os.path.basename(file_name))
+    file_path = os.path.join(settings.UPLOAD_FOLDER, "excel_exports", safe_name)
     if not os.path.isfile(file_path):
         from fastapi.responses import JSONResponse
         return JSONResponse({"code": 404, "message": "文件不存在或已过期"}, status_code=404)

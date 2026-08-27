@@ -32,8 +32,6 @@ async def bom_collaborative_websocket(
     websocket: WebSocket,
     bom_code: str,
     version: int,
-    user_id: int = Query(...),
-    user_name: str = Query(...),
 ):
     """
     BOM 协同编辑 WebSocket 连接（新版：支持编辑状态同步）
@@ -41,7 +39,28 @@ async def bom_collaborative_websocket(
     - 同步实时编辑状态（谁在改哪个参数）
     - 广播用户加入/离开
     - 心跳保活
+    - 用户身份从 session 中获取，不接受 query 参数
     """
+    # Verify session and get user info from Redis
+    session_id = websocket.cookies.get("session_id")
+    if not session_id:
+        await websocket.close(code=1008, reason="未登录")
+        return
+
+    from app.services.auth_service import AuthService
+    from app.core.redis import get_redis_pool
+    from redis.asyncio import Redis
+    r = Redis(connection_pool=get_redis_pool())
+    try:
+        user = await AuthService.get_current_user(r, session_id)
+        user_id = user.get("id")
+        user_name = user.get("display_name") or user.get("username")
+    except Exception:
+        await websocket.close(code=1008, reason="会话已过期")
+        return
+    finally:
+        await r.aclose()
+
     from app.websockets.bom_ws import bom_websocket
     await bom_websocket(websocket, bom_code, version, user_id, user_name)
 
@@ -51,7 +70,7 @@ async def get_bom_online_users_http(bom_code: str, version: int):
     """获取 BOM 协同编辑在线用户列表（HTTP 接口）"""
     from app.websockets.bom_ws import get_online_users
     room_key = f"{bom_code}:{version}"
-    users = get_online_users(room_key)
+    users = await get_online_users(room_key)
     return {"users": users, "count": len(users)}
 
 
