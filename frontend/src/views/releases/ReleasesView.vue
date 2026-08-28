@@ -170,7 +170,12 @@
                       @change="(val: number | null) => {
                         if (val) {
                           const cfg = selectableBomConfigs.find((c: any) => c.id === val)
-                          if (cfg) { createForm.bom_code = cfg.bom_code }
+                          if (cfg) {
+                            createForm.bom_code = cfg.bom_code
+                            selectedBomConfig = cfg
+                          }
+                        } else {
+                          selectedBomConfig = null
                         }
                       }"
                     >
@@ -184,10 +189,42 @@
                     <el-input
                       v-model="createForm.bom_code"
                       placeholder="可手动输入或从上方选择自动填充"
+                      @blur="onBomCodeBlur"
                     />
                   </el-form-item>
                 </el-col>
               </el-row>
+
+              <!-- BOM关联状态提示 -->
+              <el-alert
+                v-if="createForm.type !== 'standard' && createForm.bom_code && !createForm.bom_config_id && !selectedBomConfig"
+                title="未找到匹配的BOM配置"
+                description="当前BOM编码未关联到BOM管理系统中的配置，版本将不包含BOM指标快照"
+                type="warning"
+                show-icon
+                :closable="false"
+                class="mb-4"
+              />
+
+              <!-- BOM配置详情 -->
+              <el-card v-if="selectedBomConfig" class="mb-4" shadow="never">
+                <template #header>
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-sm">BOM配置详情</span>
+                    <el-button link type="primary" size="small" @click="selectedBomConfig = null">清除选择</el-button>
+                  </div>
+                </template>
+                <el-descriptions :column="2" border size="small">
+                  <el-descriptions-item label="BOM编码">{{ selectedBomConfig.bom_code }}</el-descriptions-item>
+                  <el-descriptions-item label="BOM名称">{{ selectedBomConfig.bom_name || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="版本">v{{ selectedBomConfig.version }}</el-descriptions-item>
+                  <el-descriptions-item label="指标数量">{{ selectedBomConfig.indicator_count }} 项</el-descriptions-item>
+                  <el-descriptions-item label="归档状态">
+                    <el-tag type="success" size="small">已归档</el-tag>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="审核状态">{{ selectedBomConfig.review_status || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </el-card>
               <el-row :gutter="20" v-if="createForm.type !== 'standard'">
                 <el-col :span="12">
                   <el-form-item label="TPS 名称" v-if="createForm.type === 'multi_process'">
@@ -774,11 +811,31 @@ const createForm = reactive({
 })
 
 const selectableBomConfigs = ref<any[]>([])
+const selectedBomConfig = ref<any>(null)
+
 async function loadSelectableBomConfigs() {
   try {
     const res = await metricsApi.listSelectableBomConfigs()
     selectableBomConfigs.value = res.data || []
   } catch { selectableBomConfigs.value = [] }
+}
+
+function onBomCodeBlur() {
+  // When user manually types a BOM code, try to find matching config
+  if (!createForm.bom_code || createForm.bom_config_id) return
+
+  const match = selectableBomConfigs.value.find(
+    (c: any) => c.bom_code === createForm.bom_code
+  )
+  if (match) {
+    // Auto-associate with matching config
+    createForm.bom_config_id = match.id
+    selectedBomConfig.value = match
+    ElMessage.success(`已自动关联BOM配置: ${match.bom_code}`)
+  } else {
+    // No match found
+    selectedBomConfig.value = null
+  }
 }
 const currentEditingId = ref<number | null>(null)
 
