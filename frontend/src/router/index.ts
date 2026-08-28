@@ -75,6 +75,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '版本管理', icon: 'Upload', roles: ['operator', 'process', 'developer', 'super_admin'] },
       },
       {
+        path: 'releases/:id',
+        name: 'VersionDetail',
+        component: () => import('@/views/releases/VersionDetailView.vue'),
+        meta: { title: '版本详情', roles: ['operator', 'process', 'developer', 'super_admin'], hidden: true },
+      },
+      {
         path: 'init',
         name: 'Init',
         component: () => import('@/views/init/InitView.vue'),

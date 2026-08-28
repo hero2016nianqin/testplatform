@@ -743,14 +743,8 @@ const detailData = ref<any>(null)
 const detailLoading = ref(false)
 
 async function viewVersion(row: any) {
-  detailLoading.value = true
-  detailVisible.value = true
-  try {
-    const res = await versionApi.get(row.id)
-    detailData.value = res.data || {}
-  } finally {
-    detailLoading.value = false
-  }
+  // Navigate to the new version detail page
+  window.open(`/releases/${row.id}`, '_blank')
 }
 
 // ── Create / Edit Version (版本发布 create mode) ──
