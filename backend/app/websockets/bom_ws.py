@@ -183,11 +183,12 @@ async def clear_user_editing(room_key: str, user_id: int):
 
 async def broadcast_to_room(room_key: str, message: dict, exclude: int = None):
     """向房间内所有用户广播消息 — 通过 Redis PubSub 实现跨实例"""
-    # 1. 发布到 Redis PubSub，所有 worker 都能收到
+    # 1. 发布到 Redis PubSub，所有 worker 都能收到（携带 exclude 供订阅者过滤）
     r = await _redis()
     try:
         channel = _channel_name(room_key)
-        payload = json.dumps(message, ensure_ascii=False)
+        envelope = {"_exclude": exclude, "_msg": message} if exclude else {"_msg": message}
+        payload = json.dumps(envelope, ensure_ascii=False)
         await r.publish(channel, payload)
     finally:
         await r.aclose()
@@ -230,13 +231,27 @@ async def _subscribe_room(room_key: str):
     try:
         async for msg in pubsub.listen():
             if msg["type"] == "message":
-                data = msg["data"]
-                if isinstance(data, bytes):
-                    data = data.decode()
-                # 转发给本进程的本地连接
+                raw = msg["data"]
+                if isinstance(raw, bytes):
+                    raw = raw.decode()
+                # 解析信封：broadcast_to_room 可能发送带 _exclude 的信封
+                try:
+                    envelope = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    envelope = None
+                if isinstance(envelope, dict) and "_msg" in envelope:
+                    message = envelope["_msg"]
+                    exclude_uid = envelope.get("_exclude")
+                else:
+                    message = envelope if envelope else raw
+                    exclude_uid = None
+                # 转发给本进程的本地连接（排除指定用户）
+                payload = json.dumps(message, ensure_ascii=False) if isinstance(message, dict) else message
                 for uid, ws in _local_connections.get(room_key, {}).items():
+                    if exclude_uid and uid == exclude_uid:
+                        continue
                     try:
-                        await ws.send_text(data)
+                        await ws.send_text(payload)
                     except Exception:
                         pass
     except Exception:

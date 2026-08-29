@@ -1156,7 +1156,8 @@ try {
           }
         } else if (msg.type === 'editing_rejected') {
           // 后端确认该测试项被他人占用：更新占用者显示，若正编辑该测试项则退出编辑
-          if (msg.occupied_by && msg.cell_key) {
+          // 过滤自己：不应将自己显示为"他人编辑"
+          if (msg.occupied_by && msg.cell_key && msg.occupied_by.user_id !== getCurrentUserId()) {
             editingCells.value = { ...editingCells.value, [msg.cell_key]: msg.occupied_by }
           }
           const occupied = msg.occupied_by
