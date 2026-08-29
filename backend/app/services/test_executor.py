@@ -270,10 +270,13 @@ class TestExecutor:
             duration_ms = svc_result.get("duration_ms", 0)
             error_msg = svc_result.get("error")
 
-            # 提取阈值范围摘要（用于错误信息）
+            # 提取阈值范围摘要（用于日志）
             threshold_str = _extract_thresholds(step_data)
-            if not passed and threshold_str and error_msg:
-                error_msg = f"{error_msg} [阈值: {threshold_str}]"
+            if threshold_str:
+                if error_msg:
+                    error_msg = f"{error_msg} [阈值: {threshold_str}]"
+                else:
+                    error_msg = f"[阈值: {threshold_str}]"
 
             # actual_value must be numeric for DB; store original in remark if non-numeric
             remark = ""
@@ -487,15 +490,18 @@ class TestExecutor:
             error_msg = svc_result.get("error")
 
             # 传统模式：从 TestItem 的 min/max/expected 构建阈值摘要
-            if not passed and error_msg:
-                threshold_parts = []
-                if item.min_value is not None and item.max_value is not None:
-                    threshold_parts.append(f"{item.min_value}~{item.max_value}")
-                elif item.expected_value is not None:
-                    threshold_parts.append(f"期望: {item.expected_value}")
-                unit = getattr(item, 'unit', '') or ''
-                if threshold_parts:
-                    error_msg = f"{error_msg} [阈值: {', '.join(threshold_parts)}{unit}]"
+            threshold_parts = []
+            if item.min_value is not None and item.max_value is not None:
+                threshold_parts.append(f"{item.min_value}~{item.max_value}")
+            elif item.expected_value is not None:
+                threshold_parts.append(f"期望: {item.expected_value}")
+            unit = getattr(item, 'unit', '') or ''
+            if threshold_parts:
+                threshold_str = f"[阈值: {', '.join(threshold_parts)}{unit}]"
+                if error_msg:
+                    error_msg = f"{error_msg} {threshold_str}"
+                else:
+                    error_msg = threshold_str
 
             remark = ""
             try:
