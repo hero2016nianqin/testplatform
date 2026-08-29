@@ -136,7 +136,7 @@ class VersionService:
         d["binary_count"] = len(binaries)
 
         r = await db.execute(select(SubScenario).where(SubScenario.version_id == version_id).order_by(SubScenario.sort_order))
-        d["sub_scenarios"] = [s.to_dict() for s in r.scalars().all()]
+        d["sub_scenarios"] = [s.to_dict_summary() for s in r.scalars().all()]
 
         return d
 

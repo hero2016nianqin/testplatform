@@ -81,4 +81,7 @@ export const versionApi = {
   subScenarioPresets() {
     return api.get('/versions/sub-scenario-presets')
   },
+  getSubScenarioBomSnapshot(versionId: number, ssId: number) {
+    return api.get(`/versions/${versionId}/sub-scenarios/${ssId}/bom-snapshot`)
+  },
 }

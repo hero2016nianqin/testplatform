@@ -165,6 +165,17 @@ async def get_sub_scenario(ss_id: int, db: AsyncSession = Depends(get_db)):
     return success(data=SubScenarioResp(**ss.to_dict()))
 
 
+@router.get("/{version_id}/sub-scenarios/{ss_id}/bom-snapshot")
+async def get_sub_scenario_bom_snapshot(version_id: int, ss_id: int, db: AsyncSession = Depends(get_db)):
+    """获取子场景的完整 BOM 指标快照（懒加载，避免版本详情返回巨大JSON）"""
+    from app.core.exceptions import NotFoundError
+    r = await db.execute(select(SubScenario).where(SubScenario.id == ss_id, SubScenario.version_id == version_id))
+    ss = r.scalar_one_or_none()
+    if not ss:
+        raise NotFoundError("子场景不存在")
+    return success(data=ss.bom_snapshot or [])
+
+
 # ── SubScenario JSON download ──
 @router.get("/{version_id}/sub-scenarios/{ss_id}/{field}/download")
 async def download_sub_scenario_json(version_id: int, ss_id: int, field: str, db: AsyncSession = Depends(get_db)):

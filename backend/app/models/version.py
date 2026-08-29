@@ -97,6 +97,27 @@ class SubScenario(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+    def to_dict_summary(self):
+        """轻量版：bom_snapshot 只返回测试项名称摘要，避免版本详情接口返回巨大JSON"""
+        snapshot = self.bom_snapshot or []
+        summary = [{"id": it.get("id"), "name": it.get("name"), "process_name": it.get("process_name", ""), "station_name": it.get("station_name", "")} for it in snapshot] if isinstance(snapshot, list) else []
+        return {
+            "id": self.id, "version_id": self.version_id,
+            "name": self.name, "description": self.description or "",
+            "sort_order": self.sort_order or 0,
+            "process_type": self.process_type or "",
+            "workstation": self.workstation or "",
+            "sequence_id": self.sequence_id or 0,
+            "hardware_params": self.hardware_params or {},
+            "software_metrics": self.software_metrics or [],
+            "property_page": self.property_page or {},
+            "metrics_json": self.metrics_json or "",
+            "metrics_ini": self.metrics_ini or "",
+            "bom_snapshot_summary": summary,
+            "bom_snapshot_count": len(snapshot) if isinstance(snapshot, list) else 0,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class ReleaseStep(Base):
     """审批步骤"""

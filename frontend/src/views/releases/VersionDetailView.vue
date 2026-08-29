@@ -207,14 +207,28 @@
             </div>
 
             <!-- BOM Snapshot -->
-            <div v-if="ss.bom_snapshot?.length">
-              <h5 class="text-sm font-bold text-gray-600 mb-2">BOM指标快照</h5>
+            <div v-if="ss.bom_snapshot_count > 0">
+              <h5 class="text-sm font-bold text-gray-600 mb-2">BOM指标快照 ({{ ss.bom_snapshot_count }} 项)</h5>
+              <div v-if="ss.bom_snapshot_summary?.length" class="mb-2">
+                <el-table :data="ss.bom_snapshot_summary" size="small" stripe max-height="150">
+                  <el-table-column prop="name" label="测试项" />
+                  <el-table-column prop="process_name" label="工序" width="80" />
+                  <el-table-column prop="station_name" label="工位" width="80" />
+                </el-table>
+              </div>
+              <el-button
+                v-if="!bomSnapshotData[ss.id]"
+                size="small" type="primary" link
+                :loading="bomSnapshotLoading[ss.id]"
+                @click="loadBomSnapshot(ss)"
+              >加载完整指标快照</el-button>
               <el-tree
-                :data="ss.bom_snapshot"
-                :props="{ label: 'name', children: 'children' }"
+                v-else
+                :data="bomSnapshotData[ss.id]"
+                :props="{ label: 'name', children: 'indicators' }"
                 default-expand-all
                 :expand-on-click-node="false"
-                class="max-h-64 overflow-auto"
+                class="max-h-64 overflow-auto mt-2"
               />
             </div>
           </div>
@@ -334,6 +348,8 @@ const route = useRoute()
 const loading = ref(false)
 const version = ref<any>({})
 const activeSubScenario = ref<number[]>([])
+const bomSnapshotData = ref<Record<number, any[]>>({})
+const bomSnapshotLoading = ref<Record<number, boolean>>({})
 
 const versionId = computed(() => Number(route.params.id))
 
@@ -419,6 +435,18 @@ function downloadFile(file: any) {
 }
 
 // Load data
+async function loadBomSnapshot(ss: any) {
+  bomSnapshotLoading.value = { ...bomSnapshotLoading.value, [ss.id]: true }
+  try {
+    const res = await versionApi.getSubScenarioBomSnapshot(ss.version_id, ss.id)
+    bomSnapshotData.value = { ...bomSnapshotData.value, [ss.id]: res.data || [] }
+  } catch (e) {
+    console.error('Failed to load bom snapshot:', e)
+  } finally {
+    bomSnapshotLoading.value = { ...bomSnapshotLoading.value, [ss.id]: false }
+  }
+}
+
 async function loadVersion() {
   loading.value = true
   try {
