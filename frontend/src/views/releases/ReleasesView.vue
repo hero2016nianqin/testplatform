@@ -167,17 +167,7 @@
                       filterable clearable
                       placeholder="选择已归档的BOM配置（自动填充编码）"
                       class="w-full"
-                      @change="(val: number | null) => {
-                        if (val) {
-                          const cfg = selectableBomConfigs.find((c: any) => c.id === val)
-                          if (cfg) {
-                            createForm.bom_code = cfg.bom_code
-                            selectedBomConfig = cfg
-                          }
-                        } else {
-                          selectedBomConfig = null
-                        }
-                      }"
+                      @change="onBomConfigChange"
                     >
                       <el-option v-for="cfg in selectableBomConfigs" :key="cfg.id" :value="cfg.id"
                         :label="`${cfg.bom_code} - ${cfg.bom_name || '未命名'} (v${cfg.version}, ${cfg.indicator_count}项)`" />
@@ -834,6 +824,45 @@ function onBomCodeBlur() {
     ElMessage.success(`已自动关联BOM配置: ${match.bom_code}`)
   } else {
     // No match found
+    selectedBomConfig.value = null
+  }
+}
+
+async function onBomConfigChange(val: number | null) {
+  if (val) {
+    const cfg = selectableBomConfigs.value.find((c: any) => c.id === val)
+    if (cfg) {
+      createForm.bom_code = cfg.bom_code
+      selectedBomConfig.value = cfg
+      // 自动填充子场景：获取 BOM 的工序/工位组合
+      try {
+        const res = await metricsApi.getBomProcessStations(cfg.id)
+        const stations = res.data || []
+        if (stations.length > 0) {
+          // 如果当前没有子场景，或用户确认覆盖，则自动填充
+          const hasExisting = createForm.sub_scenarios.length > 0
+          if (hasExisting) {
+            const confirmed = await ElMessageBox.confirm(
+              `该 BOM 包含 ${stations.length} 个工序/工位组合，是否自动填充子场景？当前子场景将被覆盖。`,
+              '自动填充子场景',
+              { confirmButtonText: '填充', cancelButtonText: '保留当前', type: 'info' }
+            ).catch(() => false)
+            if (!confirmed) return
+          }
+          // 根据工序/工位组合创建子场景
+          createForm.sub_scenarios = stations.map((s: any, idx: number) => ({
+            ...newSubScenario(),
+            name: s.process_name && s.station_name ? `${s.process_name}-${s.station_name}` : s.process_name || s.station_name || `场景${idx + 1}`,
+            process_type: s.process_name || '',
+            workstation: s.station_name || '',
+          }))
+          ElMessage.success(`已自动填充 ${stations.length} 个子场景`)
+        }
+      } catch (e) {
+        console.error('Failed to load BOM process stations', e)
+      }
+    }
+  } else {
     selectedBomConfig.value = null
   }
 }

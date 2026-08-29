@@ -194,4 +194,8 @@ export const metricsApi = {
   listSelectableBomConfigs() {
     return api.get('/metrics/bom-configs/selectable')
   },
+  // ── 获取 BOM 配置的工序/工位组合（供版本创建自动填充子场景）──
+  getBomProcessStations(configId: number) {
+    return api.get(`/metrics/bom-configs/${configId}/process-stations`)
+  },
 }

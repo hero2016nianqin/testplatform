@@ -557,6 +557,22 @@ async def list_selectable_bom_configs(db: AsyncSession = Depends(get_db)):
     return success(data=result)
 
 
+@router.get("/bom-configs/{config_id}/process-stations")
+async def get_bom_process_stations(config_id: int, db: AsyncSession = Depends(get_db)):
+    """获取 BOM 配置中所有测试项的工序/工位组合（供版本创建自动填充子场景）"""
+    from app.services.bom_config_service import BomConfigService
+    snapshot = await BomConfigService.get_full_indicators_by_config(db, config_id)
+    combos = {}
+    for item in snapshot:
+        pn = item.get("process_name") or ""
+        sn = item.get("station_name") or ""
+        key = f"{pn}|{sn}"
+        if key not in combos:
+            combos[key] = {"process_name": pn, "station_name": sn, "count": 0}
+        combos[key]["count"] += 1
+    return success(data=list(combos.values()))
+
+
 async def _enrich_bom_configs(db: AsyncSession, items):
     data = []
     for i in items:

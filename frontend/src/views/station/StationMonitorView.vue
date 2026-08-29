@@ -254,6 +254,10 @@
               <div v-if="softForm">
                 <div class="param-section-title">测试项</div>
                 <div v-if="sequenceSteps.length > 0" class="test-items-list" style="max-height:280px;">
+                  <div class="flex items-center gap-2 mb-2 px-1">
+                    <el-checkbox v-model="allStepsChecked" @change="toggleAllSteps" size="small">全选</el-checkbox>
+                    <span class="text-xs text-gray-400">已选 {{ checkedCount }}/{{ sequenceSteps.length }}</span>
+                  </div>
                   <div
                     v-for="s in sequenceSteps"
                     :key="s.test_item_id || s.id"
@@ -600,6 +604,25 @@ const selectedSubScenario = ref<any>(null)
 const sequenceSteps = ref<any[]>([])
 const stepCheckMap = ref<Record<number, boolean>>({})
 
+// 全选/取消全选测试项
+const allStepsChecked = computed({
+  get() {
+    const keys = sequenceSteps.value.map((s: any) => s.test_item_id || s.id)
+    if (!keys.length) return false
+    return keys.every((k: number) => stepCheckMap.value[k])
+  },
+  set() {}
+})
+const checkedCount = computed(() => {
+  return Object.values(stepCheckMap.value).filter(Boolean).length
+})
+function toggleAllSteps(val: any) {
+  const checked = !!val
+  const map: Record<number, boolean> = {}
+  sequenceSteps.value.forEach((s: any) => { map[s.test_item_id || s.id] = checked })
+  stepCheckMap.value = map
+}
+
 const bomOptions = computed(() => {
   return selectedVersionBom.value
     ? selectedVersionBom.value.split(/[,;，；]/).map((s: string) => s.trim()).filter(Boolean)
@@ -706,7 +729,15 @@ function onSubScenarioChange(ssId: number) {
         stepCheckMap.value = map
       }).catch(() => {})
     } else if (ss.bom_snapshot && Array.isArray(ss.bom_snapshot) && ss.bom_snapshot.length) {
-      const steps = ss.bom_snapshot.map((item: any, idx: number) => ({
+      // 根据子场景的工序/工位过滤测试项
+      let snapshot = ss.bom_snapshot
+      if (ss.process_type || ss.workstation) {
+        snapshot = snapshot.filter((item: any) =>
+          (!ss.process_type || (item.process_name || '') === ss.process_type) &&
+          (!ss.workstation || (item.station_name || '') === ss.workstation)
+        )
+      }
+      const steps = snapshot.map((item: any, idx: number) => ({
         test_item_id: item.id,
         test_item_name: item.name,
         step_order: idx + 1,
