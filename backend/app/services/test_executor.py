@@ -284,6 +284,7 @@ class TestExecutor:
                 "slot_id": slot_id,
                 "run_id": run.id,
                 "is_critical": is_critical,
+                "error_msg": error_msg or "",
             })
 
             if is_critical and not passed:
@@ -492,6 +493,7 @@ class TestExecutor:
                 "actual_value": actual_value,
                 "slot_id": slot_id,
                 "run_id": run.id,
+                "error_msg": error_msg or "",
             })
 
         run.status = RUN_STATUS_COMPLETED if failed_count == 0 else RUN_STATUS_FAILED

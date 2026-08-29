@@ -1544,7 +1544,8 @@ onMounted(() => {
     const d = msg.data
     const barcode = currentBarcode.value
     const loc = currentSlotInfo.value
-    addLog(d.passed ? 'info' : 'error', `[测试] 条码: ${barcode || '-'} | ${loc || '-'} | ${d.item_name || ''}: ${d.actual_value}${d.passed ? ' ✓' : ' ✗ (期望: ' + d.expected_value + ')'}`)
+    const errSuffix = d.error_msg ? ` [${d.error_msg}]` : ''
+    addLog(d.passed ? 'info' : 'error', `[测试] 条码: ${barcode || '-'} | ${loc || '-'} | ${d.item_name || ''}: ${d.actual_value}${d.passed ? ' ✓' : ' ✗' + errSuffix}`)
   }
   const h3 = (msg: any) => {
     const d = msg.data || {}
