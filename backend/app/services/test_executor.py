@@ -35,6 +35,34 @@ def _build_service_url(base_url: str, relative_path: str) -> str:
     return f"{base}/{path}"
 
 
+def _extract_thresholds(step_data: dict) -> str:
+    """从 step_data.indicators 中提取阈值范围摘要，如 '电压: 3.0~3.6V, 电流: 0.5~1.0A'"""
+    indicators = step_data.get("indicators", [])
+    if not indicators:
+        return ""
+    parts = []
+    for ind in indicators:
+        ind_name = ind.get("indicator_name") or ind.get("indicator_code") or ""
+        if not ind_name:
+            continue
+        params = ind.get("params", [])
+        if not isinstance(params, list):
+            continue
+        for p in params:
+            p_name = p.get("param_name") or p.get("key") or ""
+            p_value = p.get("param_value") or p.get("value") or ""
+            p_type = p.get("param_type") or p.get("type") or ""
+            if p_value and p_type in ("range", "number", "percent"):
+                parts.append(f"{ind_name}.{p_name}: {p_value}")
+                break  # 每个指标只取第一个范围参数
+        else:
+            # 没有 range 类型参数，尝试用 judgment_rule
+            judgment = ind.get("judgment_rule") or ""
+            if judgment and judgment != "合格":
+                parts.append(f"{ind_name}: {judgment}")
+    return ", ".join(parts) if parts else ""
+
+
 async def _call_test_service(url: str, payload: dict, timeout: float = 30.0) -> dict:
     """调用测试微服务，返回标准化结果"""
     if not url:
@@ -241,6 +269,11 @@ class TestExecutor:
             deviation = svc_result.get("deviation", 0.0)
             duration_ms = svc_result.get("duration_ms", 0)
             error_msg = svc_result.get("error")
+
+            # 提取阈值范围摘要（用于错误信息）
+            threshold_str = _extract_thresholds(step_data)
+            if not passed and threshold_str and error_msg:
+                error_msg = f"{error_msg} [阈值: {threshold_str}]"
 
             # actual_value must be numeric for DB; store original in remark if non-numeric
             remark = ""
@@ -452,6 +485,17 @@ class TestExecutor:
             deviation = svc_result.get("deviation", 0.0)
             duration_ms = svc_result.get("duration_ms", 0)
             error_msg = svc_result.get("error")
+
+            # 传统模式：从 TestItem 的 min/max/expected 构建阈值摘要
+            if not passed and error_msg:
+                threshold_parts = []
+                if item.min_value is not None and item.max_value is not None:
+                    threshold_parts.append(f"{item.min_value}~{item.max_value}")
+                elif item.expected_value is not None:
+                    threshold_parts.append(f"期望: {item.expected_value}")
+                unit = getattr(item, 'unit', '') or ''
+                if threshold_parts:
+                    error_msg = f"{error_msg} [阈值: {', '.join(threshold_parts)}{unit}]"
 
             remark = ""
             try:
